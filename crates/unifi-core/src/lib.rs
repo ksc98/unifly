@@ -12,7 +12,7 @@ pub mod stream;
 // ── Primary re-exports ──────────────────────────────────────────────
 pub use config::{AuthCredentials, ControllerConfig, TlsVerification};
 pub use error::CoreError;
-pub use controller::Controller;
+pub use controller::{ConnectionState, Controller};
 pub use command::{Command, CommandResult};
 pub use command::requests::*;
 pub use store::DataStore;

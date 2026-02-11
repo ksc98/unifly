@@ -13,7 +13,7 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        AlarmsCommand::List { .. } => util::legacy_stub("Alarm listing"),
+        AlarmsCommand::List { .. } => util::not_yet_implemented("alarm listing"),
 
         AlarmsCommand::Archive { id } => {
             let eid = EntityId::from(id);

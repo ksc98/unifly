@@ -63,9 +63,13 @@ async fn run(cli: Cli) -> Result<(), CliError> {
         cmd => {
             let controller_config = build_controller_config(&cli.global)?;
             let controller = Controller::new(controller_config);
+            controller.connect().await.map_err(CliError::from)?;
 
             tracing::debug!(command = ?cmd, "dispatching command");
-            commands::dispatch(cmd, &controller, &cli.global).await
+            let result = commands::dispatch(cmd, &controller, &cli.global).await;
+
+            controller.disconnect().await;
+            result
         }
     }
 }

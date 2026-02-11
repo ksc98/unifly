@@ -13,6 +13,6 @@ pub async fn handle(
     _global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        WansCommand::List(_) => util::legacy_stub("WAN interfaces"),
+        WansCommand::List(_) => util::not_yet_implemented("WAN interface listing"),
     }
 }

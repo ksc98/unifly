@@ -13,6 +13,6 @@ pub async fn handle(
     _global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        RadiusCommand::Profiles(_) => util::legacy_stub("RADIUS profiles"),
+        RadiusCommand::Profiles(_) => util::not_yet_implemented("RADIUS profile listing"),
     }
 }

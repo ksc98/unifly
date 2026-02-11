@@ -13,10 +13,10 @@ pub async fn handle(
     _global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        StatsCommand::Site(_) => util::legacy_stub("Site statistics"),
-        StatsCommand::Device(_) => util::legacy_stub("Device statistics"),
-        StatsCommand::Client(_) => util::legacy_stub("Client statistics"),
-        StatsCommand::Gateway(_) => util::legacy_stub("Gateway statistics"),
-        StatsCommand::Dpi { .. } => util::legacy_stub("DPI statistics"),
+        StatsCommand::Site(_) => util::not_yet_implemented("site statistics"),
+        StatsCommand::Device(_) => util::not_yet_implemented("device statistics"),
+        StatsCommand::Client(_) => util::not_yet_implemented("client statistics"),
+        StatsCommand::Gateway(_) => util::not_yet_implemented("gateway statistics"),
+        StatsCommand::Dpi { .. } => util::not_yet_implemented("DPI statistics"),
     }
 }

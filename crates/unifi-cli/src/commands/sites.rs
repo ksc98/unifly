@@ -13,7 +13,7 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        SitesCommand::List(_) => util::legacy_stub("Site listing"),
+        SitesCommand::List(_) => util::not_yet_implemented("site listing"),
 
         SitesCommand::Create { name, description } => {
             controller

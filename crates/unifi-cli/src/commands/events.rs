@@ -13,7 +13,7 @@ pub async fn handle(
     _global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        EventsCommand::List { .. } => util::legacy_stub("Event listing"),
-        EventsCommand::Watch { .. } => util::legacy_stub("Event streaming"),
+        EventsCommand::List { .. } => util::not_yet_implemented("event listing"),
+        EventsCommand::Watch { .. } => util::not_yet_implemented("event streaming"),
     }
 }

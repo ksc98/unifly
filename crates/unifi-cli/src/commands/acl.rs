@@ -98,17 +98,16 @@ pub async fn handle(
             rule_type: _,
             action: _,
         } => {
-            // ACL create not yet in Command enum -- would need CreateAclRule
             let _ = from_file;
-            util::legacy_stub("ACL rule creation")
+            util::not_yet_implemented("ACL rule creation")
         }
 
         AclCommand::Update { id: _, from_file: _ } => {
-            util::legacy_stub("ACL rule update")
+            util::not_yet_implemented("ACL rule update")
         }
 
         AclCommand::Delete { id: _ } => {
-            util::legacy_stub("ACL rule deletion")
+            util::not_yet_implemented("ACL rule deletion")
         }
 
         AclCommand::Reorder { get, set } => {
@@ -122,7 +121,7 @@ pub async fn handle(
                 }
             } else {
                 let _ = get;
-                util::legacy_stub("ACL rule ordering query")?;
+                util::not_yet_implemented("ACL rule ordering query")?;
             }
             Ok(())
         }

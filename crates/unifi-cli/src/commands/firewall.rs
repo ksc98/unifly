@@ -258,7 +258,7 @@ async fn handle_policies(
             } else {
                 // Default to --get behavior
                 let _ = get;
-                util::legacy_stub("Firewall policy ordering query")?;
+                util::not_yet_implemented("firewall policy ordering query")?;
             }
             Ok(())
         }

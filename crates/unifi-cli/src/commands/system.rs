@@ -13,9 +13,9 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        SystemCommand::Info => util::legacy_stub("System info"),
-        SystemCommand::Health => util::legacy_stub("Site health"),
-        SystemCommand::Sysinfo => util::legacy_stub("Controller sysinfo"),
+        SystemCommand::Info => util::not_yet_implemented("system info"),
+        SystemCommand::Health => util::not_yet_implemented("site health"),
+        SystemCommand::Sysinfo => util::not_yet_implemented("controller sysinfo"),
 
         SystemCommand::Backup(backup_args) => {
             handle_backup(controller, backup_args.command, global).await
@@ -65,9 +65,9 @@ async fn handle_backup(
             Ok(())
         }
 
-        BackupCommand::List => util::legacy_stub("Backup listing"),
+        BackupCommand::List => util::not_yet_implemented("backup listing"),
 
-        BackupCommand::Download { .. } => util::legacy_stub("Backup download"),
+        BackupCommand::Download { .. } => util::not_yet_implemented("backup download"),
 
         BackupCommand::Delete { filename } => {
             if !util::confirm(&format!("Delete backup '{filename}'?"), global.yes)? {

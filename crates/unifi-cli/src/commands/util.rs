@@ -70,8 +70,9 @@ pub fn read_json_file(path: &Path) -> Result<serde_json::Value, CliError> {
     })
 }
 
-/// Print a "legacy API not yet connected" stub message.
-pub fn legacy_stub(resource: &str) -> Result<(), CliError> {
-    eprintln!("{resource}: requires legacy API connection (not yet wired)");
-    Ok(())
+/// Return a proper error for features that require direct Legacy API access.
+pub fn not_yet_implemented(feature: &str) -> Result<(), CliError> {
+    Err(CliError::NotYetImplemented {
+        feature: feature.into(),
+    })
 }

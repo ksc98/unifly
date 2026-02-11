@@ -114,6 +114,13 @@ pub enum CliError {
     )]
     Unsupported { operation: String, required: String },
 
+    #[error("'{feature}' is not yet implemented")]
+    #[diagnostic(
+        code(unifi::not_implemented),
+        help("This feature requires direct Legacy API access, planned for a future release.")
+    )]
+    NotYetImplemented { feature: String },
+
     // ── Validation ───────────────────────────────────────────────────
 
     #[error("Invalid value for {field}: {reason}")]
@@ -184,7 +191,7 @@ impl CliError {
             Self::Conflict { .. } => exit_code::CONFLICT,
             Self::Timeout { .. } => exit_code::TIMEOUT,
             Self::Validation { .. } | Self::NonInteractiveRequiresYes { .. } => exit_code::USAGE,
-            Self::Unsupported { .. } => exit_code::PERMISSION,
+            Self::Unsupported { .. } | Self::NotYetImplemented { .. } => exit_code::PERMISSION,
             _ => exit_code::GENERAL,
         }
     }

@@ -13,7 +13,7 @@ pub async fn handle(
     _global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        DpiCommand::Apps(_) => util::legacy_stub("DPI applications"),
-        DpiCommand::Categories(_) => util::legacy_stub("DPI categories"),
+        DpiCommand::Apps(_) => util::not_yet_implemented("DPI applications"),
+        DpiCommand::Categories(_) => util::not_yet_implemented("DPI categories"),
     }
 }

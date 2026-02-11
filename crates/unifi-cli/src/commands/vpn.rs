@@ -13,7 +13,7 @@ pub async fn handle(
     _global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        VpnCommand::Servers(_) => util::legacy_stub("VPN servers"),
-        VpnCommand::Tunnels(_) => util::legacy_stub("VPN tunnels"),
+        VpnCommand::Servers(_) => util::not_yet_implemented("VPN server listing"),
+        VpnCommand::Tunnels(_) => util::not_yet_implemented("VPN tunnel listing"),
     }
 }

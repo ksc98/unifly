@@ -166,11 +166,11 @@ pub async fn handle(
         }
 
         DevicesCommand::Stats { device: _ } => {
-            util::legacy_stub("Device real-time stats")
+            util::not_yet_implemented("device real-time stats")
         }
 
         DevicesCommand::Pending(_list) => {
-            util::legacy_stub("Pending devices")
+            util::not_yet_implemented("pending device listing")
         }
 
         DevicesCommand::Upgrade { device, url } => {
@@ -209,7 +209,7 @@ pub async fn handle(
         }
 
         DevicesCommand::Tags(_list) => {
-            util::legacy_stub("Device tags")
+            util::not_yet_implemented("device tags")
         }
     }
 }

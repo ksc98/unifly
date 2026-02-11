@@ -192,7 +192,7 @@ pub async fn handle(
         }
 
         NetworksCommand::Refs { id: _ } => {
-            util::legacy_stub("Network cross-references")
+            util::not_yet_implemented("network cross-references")
         }
     }
 }

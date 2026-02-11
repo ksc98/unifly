@@ -13,7 +13,7 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        AdminCommand::List => util::legacy_stub("Admin listing"),
+        AdminCommand::List => util::not_yet_implemented("admin listing"),
 
         AdminCommand::Invite { name, email, role } => {
             controller

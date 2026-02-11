@@ -11,5 +11,5 @@ pub async fn handle(
     _controller: &Controller,
     _global: &GlobalOpts,
 ) -> Result<(), CliError> {
-    util::legacy_stub("Country codes")
+    util::not_yet_implemented("country code listing")
 }

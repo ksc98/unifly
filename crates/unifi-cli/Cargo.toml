@@ -38,7 +38,9 @@ thiserror   = { workspace = true }
 url         = { workspace = true }
 
 [build-dependencies]
-clap_mangen = { workspace = true }
+clap          = { workspace = true }
+clap_complete = { workspace = true }
+clap_mangen   = { workspace = true }
 
 [dev-dependencies]
 assert_cmd  = { workspace = true }

@@ -94,16 +94,48 @@ pub async fn handle(
 
         AclCommand::Create {
             from_file,
-            name: _,
+            name,
             rule_type: _,
-            action: _,
+            action,
         } => {
-            let _ = from_file;
-            util::not_yet_implemented("ACL rule creation")
+            let req = if let Some(ref path) = from_file {
+                serde_json::from_value(util::read_json_file(path)?)?
+            } else {
+                unifi_core::command::CreateAclRuleRequest {
+                    name: name.unwrap_or_default(),
+                    action: match action {
+                        Some(crate::cli::AclAction::Allow) => unifi_core::model::FirewallAction::Allow,
+                        Some(crate::cli::AclAction::Block) | None => unifi_core::model::FirewallAction::Block,
+                    },
+                    source_zone_id: EntityId::from(""),
+                    destination_zone_id: EntityId::from(""),
+                    protocol: None,
+                    source_port: None,
+                    destination_port: None,
+                    enabled: true,
+                }
+            };
+            controller.execute(CoreCommand::CreateAclRule(req)).await?;
+            if !global.quiet {
+                eprintln!("ACL rule created");
+            }
+            Ok(())
         }
 
-        AclCommand::Update { id: _, from_file: _ } => {
-            util::not_yet_implemented("ACL rule update")
+        AclCommand::Update { id, from_file } => {
+            let update = if let Some(ref path) = from_file {
+                serde_json::from_value(util::read_json_file(path)?)?
+            } else {
+                unifi_core::command::UpdateAclRuleRequest::default()
+            };
+            let eid = EntityId::from(id);
+            controller
+                .execute(CoreCommand::UpdateAclRule { id: eid, update })
+                .await?;
+            if !global.quiet {
+                eprintln!("ACL rule updated");
+            }
+            Ok(())
         }
 
         AclCommand::Delete { id } => {
@@ -129,7 +161,15 @@ pub async fn handle(
                 }
             } else {
                 let _ = get;
-                util::not_yet_implemented("ACL rule ordering query")?;
+                let snap = controller.acl_rules_snapshot();
+                let ids: Vec<String> = snap.iter().map(|r| r.id.to_string()).collect();
+                let out = match &global.output {
+                    crate::cli::OutputFormat::Json | crate::cli::OutputFormat::JsonCompact => {
+                        serde_json::to_string_pretty(&ids).unwrap_or_default()
+                    }
+                    _ => ids.join("\n"),
+                };
+                output::print_output(&out, global.quiet);
             }
             Ok(())
         }

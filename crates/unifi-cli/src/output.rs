@@ -87,14 +87,25 @@ fn render_table<R: Tabled>(rows: &[R]) -> String {
     Table::new(rows).with(Style::rounded()).to_string()
 }
 
+/// Pretty-printed JSON.
+pub(crate) fn render_json_pretty<T: serde::Serialize + ?Sized>(data: &T) -> String {
+    serde_json::to_string_pretty(data).expect("serialization should not fail")
+}
+
+/// Compact single-line JSON.
+pub(crate) fn render_json_compact<T: serde::Serialize + ?Sized>(data: &T) -> String {
+    serde_json::to_string(data).expect("serialization should not fail")
+}
+
 fn render_json<T: serde::Serialize + ?Sized>(data: &T, compact: bool) -> String {
     if compact {
-        serde_json::to_string(data).expect("serialization should not fail")
+        render_json_compact(data)
     } else {
-        serde_json::to_string_pretty(data).expect("serialization should not fail")
+        render_json_pretty(data)
     }
 }
 
-fn render_yaml<T: serde::Serialize + ?Sized>(data: &T) -> String {
+/// YAML output.
+pub(crate) fn render_yaml<T: serde::Serialize + ?Sized>(data: &T) -> String {
     serde_yaml::to_string(data).expect("serialization should not fail")
 }

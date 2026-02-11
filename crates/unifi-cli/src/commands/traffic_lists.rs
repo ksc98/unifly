@@ -95,9 +95,45 @@ pub async fn handle(
             Ok(())
         }
 
-        TrafficListsCommand::Create { .. } => util::not_yet_implemented("traffic list creation"),
+        TrafficListsCommand::Create {
+            from_file,
+            name,
+            list_type: _,
+            items,
+        } => {
+            let req = if let Some(ref path) = from_file {
+                serde_json::from_value(util::read_json_file(path)?)?
+            } else {
+                unifi_core::command::CreateTrafficMatchingListRequest {
+                    name: name.unwrap_or_default(),
+                    entries: items.unwrap_or_default(),
+                    description: None,
+                }
+            };
+            controller
+                .execute(CoreCommand::CreateTrafficMatchingList(req))
+                .await?;
+            if !global.quiet {
+                eprintln!("Traffic matching list created");
+            }
+            Ok(())
+        }
 
-        TrafficListsCommand::Update { .. } => util::not_yet_implemented("traffic list update"),
+        TrafficListsCommand::Update { id, from_file } => {
+            let update = if let Some(ref path) = from_file {
+                serde_json::from_value(util::read_json_file(path)?)?
+            } else {
+                unifi_core::command::UpdateTrafficMatchingListRequest::default()
+            };
+            let eid = EntityId::from(id);
+            controller
+                .execute(CoreCommand::UpdateTrafficMatchingList { id: eid, update })
+                .await?;
+            if !global.quiet {
+                eprintln!("Traffic matching list updated");
+            }
+            Ok(())
+        }
 
         TrafficListsCommand::Delete { id } => {
             let eid = EntityId::from(id.clone());

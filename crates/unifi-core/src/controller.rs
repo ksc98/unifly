@@ -778,6 +778,60 @@ impl Controller {
             })
             .collect())
     }
+    // ── Statistics (Legacy API) ────────────────────────────────────
+
+    /// Fetch site-level historical statistics.
+    pub async fn get_site_stats(
+        &self,
+        interval: &str,
+    ) -> Result<Vec<serde_json::Value>, CoreError> {
+        let guard = self.inner.legacy_client.lock().await;
+        let legacy = require_legacy(&guard)?;
+        Ok(legacy.get_site_stats(interval).await?)
+    }
+
+    /// Fetch per-device historical statistics.
+    pub async fn get_device_stats(
+        &self,
+        interval: &str,
+        macs: Option<&[String]>,
+    ) -> Result<Vec<serde_json::Value>, CoreError> {
+        let guard = self.inner.legacy_client.lock().await;
+        let legacy = require_legacy(&guard)?;
+        Ok(legacy.get_device_stats(interval, macs).await?)
+    }
+
+    /// Fetch per-client historical statistics.
+    pub async fn get_client_stats(
+        &self,
+        interval: &str,
+        macs: Option<&[String]>,
+    ) -> Result<Vec<serde_json::Value>, CoreError> {
+        let guard = self.inner.legacy_client.lock().await;
+        let legacy = require_legacy(&guard)?;
+        Ok(legacy.get_client_stats(interval, macs).await?)
+    }
+
+    /// Fetch gateway historical statistics.
+    pub async fn get_gateway_stats(
+        &self,
+        interval: &str,
+    ) -> Result<Vec<serde_json::Value>, CoreError> {
+        let guard = self.inner.legacy_client.lock().await;
+        let legacy = require_legacy(&guard)?;
+        Ok(legacy.get_gateway_stats(interval).await?)
+    }
+
+    /// Fetch DPI statistics.
+    pub async fn get_dpi_stats(
+        &self,
+        group_by: &str,
+    ) -> Result<Vec<serde_json::Value>, CoreError> {
+        let guard = self.inner.legacy_client.lock().await;
+        let legacy = require_legacy(&guard)?;
+        Ok(legacy.get_dpi_stats(group_by).await?)
+    }
+
     // ── Ad-hoc Legacy API queries ──────────────────────────────────
     //
     // Legacy-only data that doesn't live in the DataStore.
@@ -1338,15 +1392,49 @@ async fn route_command(
 
         // ── ACL Rule CRUD ────────────────────────────────────────
 
-        Command::CreateAclRule(_req) => {
-            let (_ic, _sid) = require_integration(&integration_guard, site_id, "CreateAclRule")?;
-            Err(unsupported("CreateAclRule (API shape mapping not yet implemented)"))
+        Command::CreateAclRule(req) => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "CreateAclRule")?;
+            let action_str = match req.action {
+                FirewallAction::Allow => "ALLOW",
+                FirewallAction::Block => "BLOCK",
+                FirewallAction::Reject => "REJECT",
+            };
+            let body = unifi_api::integration_types::AclRuleCreateUpdate {
+                name: req.name,
+                rule_type: "DEVICE".into(),
+                action: action_str.into(),
+                enabled: req.enabled,
+                description: None,
+                source_filter: None,
+                destination_filter: None,
+                enforcing_device_filter: None,
+            };
+            ic.create_acl_rule(&sid, &body).await?;
+            Ok(CommandResult::Ok)
         }
 
-        Command::UpdateAclRule { id, update: _ } => {
-            let (_ic, _sid) = require_integration(&integration_guard, site_id, "UpdateAclRule")?;
-            let _uuid = require_uuid(&id)?;
-            Err(unsupported("UpdateAclRule (API shape mapping not yet implemented)"))
+        Command::UpdateAclRule { id, update } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "UpdateAclRule")?;
+            let uuid = require_uuid(&id)?;
+            let existing = ic.get_acl_rule(&sid, &uuid).await?;
+            let action_str = match update.action {
+                Some(FirewallAction::Allow) => "ALLOW".into(),
+                Some(FirewallAction::Block) => "BLOCK".into(),
+                Some(FirewallAction::Reject) => "REJECT".into(),
+                None => existing.action,
+            };
+            let body = unifi_api::integration_types::AclRuleCreateUpdate {
+                name: update.name.unwrap_or(existing.name),
+                rule_type: existing.rule_type,
+                action: action_str,
+                enabled: update.enabled.unwrap_or(existing.enabled),
+                description: existing.description,
+                source_filter: existing.source_filter,
+                destination_filter: existing.destination_filter,
+                enforcing_device_filter: existing.enforcing_device_filter,
+            };
+            ic.update_acl_rule(&sid, &uuid, &body).await?;
+            Ok(CommandResult::Ok)
         }
 
         Command::DeleteAclRule { id } => {
@@ -1403,15 +1491,54 @@ async fn route_command(
 
         // ── Traffic Matching List CRUD ───────────────────────────
 
-        Command::CreateTrafficMatchingList(_req) => {
-            let (_ic, _sid) = require_integration(&integration_guard, site_id, "CreateTrafficMatchingList")?;
-            Err(unsupported("CreateTrafficMatchingList (API shape mapping not yet implemented)"))
+        Command::CreateTrafficMatchingList(req) => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "CreateTrafficMatchingList")?;
+            let mut fields = serde_json::Map::new();
+            fields.insert(
+                "entries".into(),
+                serde_json::Value::Array(
+                    req.entries.into_iter().map(serde_json::Value::String).collect(),
+                ),
+            );
+            if let Some(desc) = req.description {
+                fields.insert("description".into(), serde_json::Value::String(desc));
+            }
+            let body = unifi_api::integration_types::TrafficMatchingListCreateUpdate {
+                name: req.name,
+                list_type: "IPV4".into(),
+                fields,
+            };
+            ic.create_traffic_matching_list(&sid, &body).await?;
+            Ok(CommandResult::Ok)
         }
 
-        Command::UpdateTrafficMatchingList { id, update: _ } => {
-            let (_ic, _sid) = require_integration(&integration_guard, site_id, "UpdateTrafficMatchingList")?;
-            let _uuid = require_uuid(&id)?;
-            Err(unsupported("UpdateTrafficMatchingList (API shape mapping not yet implemented)"))
+        Command::UpdateTrafficMatchingList { id, update } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "UpdateTrafficMatchingList")?;
+            let uuid = require_uuid(&id)?;
+            let existing = ic.get_traffic_matching_list(&sid, &uuid).await?;
+            let mut fields = serde_json::Map::new();
+            let entries = if let Some(new_entries) = update.entries {
+                serde_json::Value::Array(
+                    new_entries.into_iter().map(serde_json::Value::String).collect(),
+                )
+            } else if let Some(existing_entries) = existing.extra.get("entries") {
+                existing_entries.clone()
+            } else {
+                serde_json::Value::Array(Vec::new())
+            };
+            fields.insert("entries".into(), entries);
+            if let Some(desc) = update.description {
+                fields.insert("description".into(), serde_json::Value::String(desc));
+            } else if let Some(existing_desc) = existing.extra.get("description") {
+                fields.insert("description".into(), existing_desc.clone());
+            }
+            let body = unifi_api::integration_types::TrafficMatchingListCreateUpdate {
+                name: update.name.unwrap_or(existing.name),
+                list_type: existing.list_type,
+                fields,
+            };
+            ic.update_traffic_matching_list(&sid, &uuid, &body).await?;
+            Ok(CommandResult::Ok)
         }
 
         Command::DeleteTrafficMatchingList { id } => {

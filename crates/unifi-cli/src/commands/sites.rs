@@ -1,11 +1,53 @@
 //! Site command handlers.
 
-use unifi_core::{Command as CoreCommand, Controller};
+use std::sync::Arc;
+
+use tabled::Tabled;
+use unifi_core::{Command as CoreCommand, Controller, Site};
 
 use crate::cli::{GlobalOpts, SitesArgs, SitesCommand};
 use crate::error::CliError;
+use crate::output;
 
 use super::util;
+
+// ── Table row ───────────────────────────────────────────────────────
+
+#[derive(Tabled)]
+struct SiteRow {
+    #[tabled(rename = "ID")]
+    id: String,
+    #[tabled(rename = "Name")]
+    name: String,
+    #[tabled(rename = "Devices")]
+    devices: String,
+    #[tabled(rename = "Clients")]
+    clients: String,
+}
+
+impl From<&Arc<Site>> for SiteRow {
+    fn from(s: &Arc<Site>) -> Self {
+        Self {
+            id: s.id.to_string(),
+            name: s.name.clone(),
+            devices: s.device_count.map(|c| c.to_string()).unwrap_or_default(),
+            clients: s.client_count.map(|c| c.to_string()).unwrap_or_default(),
+        }
+    }
+}
+
+fn detail(s: &Arc<Site>) -> String {
+    vec![
+        format!("ID:            {}", s.id),
+        format!("Name:          {}", s.name),
+        format!("Internal Name: {}", s.internal_name),
+        format!("Devices:       {}", s.device_count.map(|c| c.to_string()).unwrap_or_else(|| "-".into())),
+        format!("Clients:       {}", s.client_count.map(|c| c.to_string()).unwrap_or_else(|| "-".into())),
+    ]
+    .join("\n")
+}
+
+// ── Handler ─────────────────────────────────────────────────────────
 
 pub async fn handle(
     controller: &Controller,
@@ -13,7 +55,17 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        SitesCommand::List(_) => util::not_yet_implemented("site listing"),
+        SitesCommand::List(_) => {
+            let snap = controller.sites_snapshot();
+            let out = output::render_list(
+                &global.output,
+                &snap,
+                |s| SiteRow::from(s),
+                |s| s.id.to_string(),
+            );
+            output::print_output(&out, global.quiet);
+            Ok(())
+        }
 
         SitesCommand::Create { name, description } => {
             controller

@@ -1,11 +1,43 @@
 //! Admin command handlers.
 
-use unifi_core::{Command as CoreCommand, Controller, EntityId};
+use tabled::Tabled;
+use unifi_core::{Admin, Command as CoreCommand, Controller, EntityId};
 
 use crate::cli::{AdminArgs, AdminCommand, GlobalOpts};
 use crate::error::CliError;
+use crate::output;
 
 use super::util;
+
+// ── Table row ───────────────────────────────────────────────────────
+
+#[derive(Tabled)]
+struct AdminRow {
+    #[tabled(rename = "ID")]
+    id: String,
+    #[tabled(rename = "Name")]
+    name: String,
+    #[tabled(rename = "Email")]
+    email: String,
+    #[tabled(rename = "Role")]
+    role: String,
+    #[tabled(rename = "Super")]
+    is_super: String,
+}
+
+impl From<&Admin> for AdminRow {
+    fn from(a: &Admin) -> Self {
+        Self {
+            id: a.id.to_string(),
+            name: a.name.clone(),
+            email: a.email.clone().unwrap_or_default(),
+            role: a.role.clone(),
+            is_super: if a.is_super { "yes" } else { "no" }.into(),
+        }
+    }
+}
+
+// ── Handler ─────────────────────────────────────────────────────────
 
 pub async fn handle(
     controller: &Controller,
@@ -13,7 +45,17 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        AdminCommand::List => util::not_yet_implemented("admin listing"),
+        AdminCommand::List => {
+            let admins = controller.list_admins().await?;
+            let out = output::render_list(
+                &global.output,
+                &admins,
+                |a| AdminRow::from(a),
+                |a| a.id.to_string(),
+            );
+            output::print_output(&out, global.quiet);
+            Ok(())
+        }
 
         AdminCommand::Invite { name, email, role } => {
             controller

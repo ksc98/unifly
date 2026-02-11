@@ -1,18 +1,49 @@
 //! RADIUS profile command handlers.
 
-use unifi_core::Controller;
+use tabled::Tabled;
+use unifi_core::{Controller, RadiusProfile};
 
 use crate::cli::{GlobalOpts, RadiusArgs, RadiusCommand};
 use crate::error::CliError;
+use crate::output;
 
-use super::util;
+// ── Table row ───────────────────────────────────────────────────────
+
+#[derive(Tabled)]
+struct RadiusProfileRow {
+    #[tabled(rename = "ID")]
+    id: String,
+    #[tabled(rename = "Name")]
+    name: String,
+}
+
+impl From<&RadiusProfile> for RadiusProfileRow {
+    fn from(r: &RadiusProfile) -> Self {
+        Self {
+            id: r.id.to_string(),
+            name: r.name.clone(),
+        }
+    }
+}
+
+// ── Handler ─────────────────────────────────────────────────────────
 
 pub async fn handle(
-    _controller: &Controller,
+    controller: &Controller,
     args: RadiusArgs,
-    _global: &GlobalOpts,
+    global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        RadiusCommand::Profiles(_) => util::not_yet_implemented("RADIUS profile listing"),
+        RadiusCommand::Profiles(_) => {
+            let profiles = controller.list_radius_profiles().await?;
+            let out = output::render_list(
+                &global.output,
+                &profiles,
+                |r| RadiusProfileRow::from(r),
+                |r| r.id.to_string(),
+            );
+            output::print_output(&out, global.quiet);
+            Ok(())
+        }
     }
 }

@@ -106,8 +106,16 @@ pub async fn handle(
             util::not_yet_implemented("ACL rule update")
         }
 
-        AclCommand::Delete { id: _ } => {
-            util::not_yet_implemented("ACL rule deletion")
+        AclCommand::Delete { id } => {
+            let eid = EntityId::from(id.clone());
+            if !util::confirm(&format!("Delete ACL rule {id}?"), global.yes)? {
+                return Ok(());
+            }
+            controller.execute(CoreCommand::DeleteAclRule { id: eid }).await?;
+            if !global.quiet {
+                eprintln!("ACL rule deleted");
+            }
+            Ok(())
         }
 
         AclCommand::Reorder { get, set } => {

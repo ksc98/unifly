@@ -232,6 +232,12 @@ impl From<CoreError> for CliError {
                 list_command: "clients list".into(),
             },
 
+            CoreError::SiteNotFound { name } => CliError::NotFound {
+                resource_type: "site".into(),
+                identifier: name,
+                list_command: "sites list".into(),
+            },
+
             CoreError::NetworkNotFound { identifier } => CliError::NotFound {
                 resource_type: "network".into(),
                 identifier,

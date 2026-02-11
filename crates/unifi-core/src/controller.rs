@@ -823,8 +823,45 @@ impl Controller {
         Ok(raw.into_iter().map(Alarm::from).collect())
     }
 
-    /// Fetch controller system info from the Legacy API.
+    /// Fetch controller system info.
+    ///
+    /// Prefers the Integration API (`GET /v1/info`) when available,
+    /// falls back to Legacy `stat/sysinfo`.
     pub async fn get_system_info(&self) -> Result<SystemInfo, CoreError> {
+        // Try Integration API first (works with API key auth).
+        {
+            let guard = self.inner.integration_client.lock().await;
+            if let Some(ic) = guard.as_ref() {
+                let info = ic.get_info().await?;
+                let f = &info.fields;
+                return Ok(SystemInfo {
+                    controller_name: f
+                        .get("applicationName")
+                        .or_else(|| f.get("name"))
+                        .and_then(|v| v.as_str())
+                        .map(String::from),
+                    version: f
+                        .get("applicationVersion")
+                        .or_else(|| f.get("version"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                        .to_owned(),
+                    build: f.get("build").and_then(|v| v.as_str()).map(String::from),
+                    hostname: f
+                        .get("hostname")
+                        .and_then(|v| v.as_str())
+                        .map(String::from),
+                    ip: None, // Not available via Integration API
+                    uptime_secs: f.get("uptime").and_then(|v| v.as_u64()),
+                    update_available: f
+                        .get("isUpdateAvailable")
+                        .or_else(|| f.get("update_available"))
+                        .and_then(|v| v.as_bool()),
+                });
+            }
+        }
+
+        // Fallback to Legacy API (requires session auth).
         let guard = self.inner.legacy_client.lock().await;
         let legacy = require_legacy(&guard)?;
         let raw = legacy.get_sysinfo().await?;
@@ -1242,7 +1279,8 @@ async fn route_command(
             let (ic, sid) = require_integration(&integration_guard, site_id, "PatchFirewallPolicy")?;
             let uuid = require_uuid(&id)?;
             let body = unifi_api::integration_types::FirewallPolicyPatch {
-                logging_enabled: Some(enabled),
+                enabled: Some(enabled),
+                logging_enabled: None,
             };
             ic.patch_firewall_policy(&sid, &uuid, &body).await?;
             Ok(CommandResult::Ok)
@@ -1447,13 +1485,19 @@ fn tls_to_transport(tls: &TlsVerification) -> TlsMode {
     }
 }
 
-/// Resolve the Integration API site UUID from a site name.
+/// Resolve the Integration API site UUID from a site name or UUID string.
 ///
-/// Lists all sites and finds the one matching `site_name` by `internal_reference`.
+/// If `site_name` is already a valid UUID, returns it directly.
+/// Otherwise lists all sites and finds the one matching by `internal_reference`.
 async fn resolve_site_id(
     client: &IntegrationClient,
     site_name: &str,
 ) -> Result<uuid::Uuid, CoreError> {
+    // Fast path: if the input is already a UUID, use it directly.
+    if let Ok(uuid) = uuid::Uuid::parse_str(site_name) {
+        return Ok(uuid);
+    }
+
     let sites = client
         .paginate_all(50, |off, lim| client.list_sites(off, lim))
         .await?;

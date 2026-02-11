@@ -570,7 +570,7 @@ impl IntegrationClient {
         limit: i32,
     ) -> Result<types::Page<types::WifiBroadcastResponse>, Error> {
         self.get_with_params(
-            &format!("v1/sites/{site_id}/wifi-broadcasts"),
+            &format!("v1/sites/{site_id}/wifi/broadcasts"),
             &[
                 ("offset", offset.to_string()),
                 ("limit", limit.to_string()),
@@ -585,7 +585,7 @@ impl IntegrationClient {
         broadcast_id: &Uuid,
     ) -> Result<types::WifiBroadcastDetailsResponse, Error> {
         self.get(&format!(
-            "v1/sites/{site_id}/wifi-broadcasts/{broadcast_id}"
+            "v1/sites/{site_id}/wifi/broadcasts/{broadcast_id}"
         ))
         .await
     }
@@ -595,7 +595,7 @@ impl IntegrationClient {
         site_id: &Uuid,
         body: &types::WifiBroadcastCreateUpdate,
     ) -> Result<types::WifiBroadcastDetailsResponse, Error> {
-        self.post(&format!("v1/sites/{site_id}/wifi-broadcasts"), body)
+        self.post(&format!("v1/sites/{site_id}/wifi/broadcasts"), body)
             .await
     }
 
@@ -606,7 +606,7 @@ impl IntegrationClient {
         body: &types::WifiBroadcastCreateUpdate,
     ) -> Result<types::WifiBroadcastDetailsResponse, Error> {
         self.put(
-            &format!("v1/sites/{site_id}/wifi-broadcasts/{broadcast_id}"),
+            &format!("v1/sites/{site_id}/wifi/broadcasts/{broadcast_id}"),
             body,
         )
         .await
@@ -618,7 +618,7 @@ impl IntegrationClient {
         broadcast_id: &Uuid,
     ) -> Result<(), Error> {
         self.delete(&format!(
-            "v1/sites/{site_id}/wifi-broadcasts/{broadcast_id}"
+            "v1/sites/{site_id}/wifi/broadcasts/{broadcast_id}"
         ))
         .await
     }
@@ -632,7 +632,7 @@ impl IntegrationClient {
         limit: i32,
     ) -> Result<types::Page<types::FirewallPolicyResponse>, Error> {
         self.get_with_params(
-            &format!("v1/sites/{site_id}/firewall-policies"),
+            &format!("v1/sites/{site_id}/firewall/policies"),
             &[
                 ("offset", offset.to_string()),
                 ("limit", limit.to_string()),
@@ -647,7 +647,7 @@ impl IntegrationClient {
         policy_id: &Uuid,
     ) -> Result<types::FirewallPolicyResponse, Error> {
         self.get(&format!(
-            "v1/sites/{site_id}/firewall-policies/{policy_id}"
+            "v1/sites/{site_id}/firewall/policies/{policy_id}"
         ))
         .await
     }
@@ -657,7 +657,7 @@ impl IntegrationClient {
         site_id: &Uuid,
         body: &types::FirewallPolicyCreateUpdate,
     ) -> Result<types::FirewallPolicyResponse, Error> {
-        self.post(&format!("v1/sites/{site_id}/firewall-policies"), body)
+        self.post(&format!("v1/sites/{site_id}/firewall/policies"), body)
             .await
     }
 
@@ -668,7 +668,7 @@ impl IntegrationClient {
         body: &types::FirewallPolicyCreateUpdate,
     ) -> Result<types::FirewallPolicyResponse, Error> {
         self.put(
-            &format!("v1/sites/{site_id}/firewall-policies/{policy_id}"),
+            &format!("v1/sites/{site_id}/firewall/policies/{policy_id}"),
             body,
         )
         .await
@@ -681,7 +681,7 @@ impl IntegrationClient {
         body: &types::FirewallPolicyPatch,
     ) -> Result<types::FirewallPolicyResponse, Error> {
         self.patch(
-            &format!("v1/sites/{site_id}/firewall-policies/{policy_id}"),
+            &format!("v1/sites/{site_id}/firewall/policies/{policy_id}"),
             body,
         )
         .await
@@ -693,7 +693,7 @@ impl IntegrationClient {
         policy_id: &Uuid,
     ) -> Result<(), Error> {
         self.delete(&format!(
-            "v1/sites/{site_id}/firewall-policies/{policy_id}"
+            "v1/sites/{site_id}/firewall/policies/{policy_id}"
         ))
         .await
     }
@@ -703,7 +703,7 @@ impl IntegrationClient {
         site_id: &Uuid,
     ) -> Result<types::FirewallPolicyOrdering, Error> {
         self.get(&format!(
-            "v1/sites/{site_id}/firewall-policies/ordering"
+            "v1/sites/{site_id}/firewall/policies/ordering"
         ))
         .await
     }
@@ -714,7 +714,7 @@ impl IntegrationClient {
         body: &types::FirewallPolicyOrdering,
     ) -> Result<types::FirewallPolicyOrdering, Error> {
         self.put(
-            &format!("v1/sites/{site_id}/firewall-policies/ordering"),
+            &format!("v1/sites/{site_id}/firewall/policies/ordering"),
             body,
         )
         .await
@@ -729,7 +729,7 @@ impl IntegrationClient {
         limit: i32,
     ) -> Result<types::Page<types::FirewallZoneResponse>, Error> {
         self.get_with_params(
-            &format!("v1/sites/{site_id}/firewall-zones"),
+            &format!("v1/sites/{site_id}/firewall/zones"),
             &[
                 ("offset", offset.to_string()),
                 ("limit", limit.to_string()),
@@ -744,7 +744,7 @@ impl IntegrationClient {
         zone_id: &Uuid,
     ) -> Result<types::FirewallZoneResponse, Error> {
         self.get(&format!(
-            "v1/sites/{site_id}/firewall-zones/{zone_id}"
+            "v1/sites/{site_id}/firewall/zones/{zone_id}"
         ))
         .await
     }
@@ -754,7 +754,7 @@ impl IntegrationClient {
         site_id: &Uuid,
         body: &types::FirewallZoneCreateUpdate,
     ) -> Result<types::FirewallZoneResponse, Error> {
-        self.post(&format!("v1/sites/{site_id}/firewall-zones"), body)
+        self.post(&format!("v1/sites/{site_id}/firewall/zones"), body)
             .await
     }
 
@@ -765,7 +765,7 @@ impl IntegrationClient {
         body: &types::FirewallZoneCreateUpdate,
     ) -> Result<types::FirewallZoneResponse, Error> {
         self.put(
-            &format!("v1/sites/{site_id}/firewall-zones/{zone_id}"),
+            &format!("v1/sites/{site_id}/firewall/zones/{zone_id}"),
             body,
         )
         .await
@@ -777,7 +777,7 @@ impl IntegrationClient {
         zone_id: &Uuid,
     ) -> Result<(), Error> {
         self.delete(&format!(
-            "v1/sites/{site_id}/firewall-zones/{zone_id}"
+            "v1/sites/{site_id}/firewall/zones/{zone_id}"
         ))
         .await
     }
@@ -869,7 +869,7 @@ impl IntegrationClient {
         limit: i32,
     ) -> Result<types::Page<types::DnsPolicyResponse>, Error> {
         self.get_with_params(
-            &format!("v1/sites/{site_id}/dns-policies"),
+            &format!("v1/sites/{site_id}/dns/policies"),
             &[
                 ("offset", offset.to_string()),
                 ("limit", limit.to_string()),
@@ -883,7 +883,7 @@ impl IntegrationClient {
         site_id: &Uuid,
         dns_id: &Uuid,
     ) -> Result<types::DnsPolicyResponse, Error> {
-        self.get(&format!("v1/sites/{site_id}/dns-policies/{dns_id}"))
+        self.get(&format!("v1/sites/{site_id}/dns/policies/{dns_id}"))
             .await
     }
 
@@ -892,7 +892,7 @@ impl IntegrationClient {
         site_id: &Uuid,
         body: &types::DnsPolicyCreateUpdate,
     ) -> Result<types::DnsPolicyResponse, Error> {
-        self.post(&format!("v1/sites/{site_id}/dns-policies"), body)
+        self.post(&format!("v1/sites/{site_id}/dns/policies"), body)
             .await
     }
 
@@ -903,7 +903,7 @@ impl IntegrationClient {
         body: &types::DnsPolicyCreateUpdate,
     ) -> Result<types::DnsPolicyResponse, Error> {
         self.put(
-            &format!("v1/sites/{site_id}/dns-policies/{dns_id}"),
+            &format!("v1/sites/{site_id}/dns/policies/{dns_id}"),
             body,
         )
         .await
@@ -914,7 +914,7 @@ impl IntegrationClient {
         site_id: &Uuid,
         dns_id: &Uuid,
     ) -> Result<(), Error> {
-        self.delete(&format!("v1/sites/{site_id}/dns-policies/{dns_id}"))
+        self.delete(&format!("v1/sites/{site_id}/dns/policies/{dns_id}"))
             .await
     }
 

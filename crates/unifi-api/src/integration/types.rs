@@ -277,6 +277,9 @@ pub struct FirewallPolicyCreateUpdate {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FirewallPolicyPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub logging_enabled: Option<bool>,
 }
 

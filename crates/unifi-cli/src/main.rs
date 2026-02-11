@@ -97,9 +97,12 @@ fn build_controller_config(
     }
 
     // No profile found -- try to build from CLI flags / env vars alone
-    let url_str = global.controller.as_deref().ok_or_else(|| CliError::NoConfig {
-        path: config::config_path().display().to_string(),
-    })?;
+    let url_str = global
+        .controller
+        .as_deref()
+        .ok_or_else(|| CliError::NoConfig {
+            path: config::config_path().display().to_string(),
+        })?;
 
     let url: url::Url = url_str.parse().map_err(|_| CliError::Validation {
         field: "controller".into(),

@@ -4,13 +4,11 @@ use std::sync::Arc;
 
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{
-    Block, BorderType, Borders, Cell, Paragraph, Row, Table, TableState,
-};
-use ratatui::Frame;
+use ratatui::widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, Table, TableState};
 use tokio::sync::mpsc::UnboundedSender;
 
 use unifi_core::Network;
@@ -135,7 +133,10 @@ impl NetworksScreen {
             Line::from(vec![
                 Span::styled("  Management     ", Style::default().fg(theme::DIM_WHITE)),
                 Span::styled(&mgmt, Style::default().fg(theme::NEON_CYAN)),
-                Span::styled("     Internet Access  ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(
+                    "     Internet Access  ",
+                    Style::default().fg(theme::DIM_WHITE),
+                ),
                 Span::styled(internet, Style::default().fg(theme::NEON_CYAN)),
             ]),
             Line::from(vec![
@@ -145,7 +146,10 @@ impl NetworksScreen {
             Line::from(vec![
                 Span::styled("  Isolation      ", Style::default().fg(theme::DIM_WHITE)),
                 Span::styled(isolation, Style::default().fg(theme::DIM_WHITE)),
-                Span::styled("     mDNS Forwarding  ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(
+                    "     mDNS Forwarding  ",
+                    Style::default().fg(theme::DIM_WHITE),
+                ),
                 Span::styled(mdns, Style::default().fg(theme::DIM_WHITE)),
             ]),
             Line::from(vec![
@@ -231,18 +235,15 @@ impl Component for NetworksScreen {
         frame.render_widget(block, area);
 
         let (table_area, detail_area) = if self.detail_open {
-            let chunks = Layout::vertical([
-                Constraint::Percentage(55),
-                Constraint::Percentage(45),
-            ])
-            .split(inner);
+            let chunks = Layout::vertical([Constraint::Percentage(55), Constraint::Percentage(45)])
+                .split(inner);
             (chunks[0], Some(chunks[1]))
         } else {
             (inner, None)
         };
 
         let layout = Layout::vertical([
-            Constraint::Min(1),   // table
+            Constraint::Min(1),    // table
             Constraint::Length(1), // hints
         ])
         .split(table_area);
@@ -276,14 +277,8 @@ impl Component for NetworksScreen {
                     .as_ref()
                     .map(|d| {
                         if d.enabled {
-                            let start = d
-                                .range_start
-                                .map(|ip| ip.to_string())
-                                .unwrap_or_default();
-                            let stop = d
-                                .range_stop
-                                .map(|ip| ip.to_string())
-                                .unwrap_or_default();
+                            let start = d.range_start.map(|ip| ip.to_string()).unwrap_or_default();
+                            let stop = d.range_stop.map(|ip| ip.to_string()).unwrap_or_default();
                             format!("{start}-{stop}")
                         } else {
                             "Disabled".into()
@@ -297,11 +292,7 @@ impl Component for NetworksScreen {
                     .unwrap_or_else(|| "─".into());
 
                 // Zone ID placeholder — we'd resolve this to a name with zone data
-                let zone = net
-                    .firewall_zone_id
-                    .as_ref()
-                    .map(|_| "Zone")
-                    .unwrap_or("─");
+                let zone = net.firewall_zone_id.as_ref().map(|_| "Zone").unwrap_or("─");
 
                 let row_style = if is_selected {
                     theme::table_selected()

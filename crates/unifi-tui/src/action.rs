@@ -3,10 +3,8 @@
 use std::fmt;
 use std::sync::Arc;
 
+use unifi_core::model::{AclRule, EventCategory, FirewallPolicy, FirewallZone, WifiBroadcast};
 use unifi_core::{Client, Device, EntityId, Event, Network, Site};
-use unifi_core::model::{
-    AclRule, EventCategory, FirewallPolicy, FirewallZone, WifiBroadcast,
-};
 
 use crate::screen::ScreenId;
 
@@ -58,6 +56,7 @@ pub enum StatsPeriod {
 }
 
 /// Sort field for table columns.
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SortField {
     Name,
@@ -73,6 +72,7 @@ pub enum SortField {
 }
 
 /// Notification severity level.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NotificationLevel {
     Info,
@@ -82,12 +82,14 @@ pub enum NotificationLevel {
 }
 
 /// A toast notification.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Notification {
     pub message: String,
     pub level: NotificationLevel,
 }
 
+#[allow(dead_code)]
 impl Notification {
     pub fn success(msg: impl Into<String>) -> Self {
         Self {
@@ -112,6 +114,7 @@ impl Notification {
 }
 
 /// Pending confirmation action.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum ConfirmAction {
     RestartDevice { id: EntityId, name: String },
@@ -144,6 +147,7 @@ impl fmt::Display for ConfirmAction {
 }
 
 /// Every state transition in the TUI is expressed as an Action.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum Action {
     // ── Lifecycle ──────────────────────────────────────────────────

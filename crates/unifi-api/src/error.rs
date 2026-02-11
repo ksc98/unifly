@@ -8,7 +8,6 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum Error {
     // ── Authentication ──────────────────────────────────────────────
-
     /// Login failed (wrong credentials, account locked, etc.)
     #[error("Authentication failed: {message}")]
     Authentication { message: String },
@@ -27,13 +26,9 @@ pub enum Error {
 
     /// Wrong credential type for the requested operation.
     #[error("Wrong auth strategy: expected {expected}, got {got}")]
-    WrongAuthStrategy {
-        expected: String,
-        got: String,
-    },
+    WrongAuthStrategy { expected: String, got: String },
 
     // ── Transport ───────────────────────────────────────────────────
-
     /// HTTP transport error (connection refused, DNS failure, etc.)
     #[error("HTTP transport error: {0}")]
     Transport(#[from] reqwest::Error),
@@ -51,13 +46,11 @@ pub enum Error {
     Tls(String),
 
     // ── Cloud ───────────────────────────────────────────────────────
-
     /// Rate limited by the cloud API. Includes retry-after in seconds.
     #[error("Rate limited -- retry after {retry_after_secs}s")]
     RateLimited { retry_after_secs: u64 },
 
     // ── Integration API ─────────────────────────────────────────────
-
     /// Structured error from the Integration API.
     #[error("Integration API error (HTTP {status}): {message}")]
     Integration {
@@ -67,13 +60,11 @@ pub enum Error {
     },
 
     // ── Legacy API ──────────────────────────────────────────────────
-
     /// Error from the legacy API (parsed from the `{meta: {rc, msg}}` envelope).
     #[error("Legacy API error: {message}")]
     LegacyApi { message: String },
 
     // ── WebSocket ───────────────────────────────────────────────────
-
     /// WebSocket connection failed.
     #[error("WebSocket connection failed: {0}")]
     WebSocketConnect(String),
@@ -83,13 +74,11 @@ pub enum Error {
     WebSocketClosed { code: u16, reason: String },
 
     // ── Data ────────────────────────────────────────────────────────
-
     /// JSON deserialization failed, with the raw body for debugging.
     #[error("Deserialization error: {message}")]
     Deserialization { message: String, body: String },
 
     // ── Platform ────────────────────────────────────────────────────
-
     /// Operation not supported on this controller platform.
     #[error("Unsupported operation: {0}")]
     UnsupportedOperation(&'static str),

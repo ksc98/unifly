@@ -47,6 +47,7 @@ pub struct Event {
     pub raw_key: Option<String>,
 
     #[serde(skip)]
+    #[allow(dead_code)]
     pub(crate) source: DataSource,
 }
 

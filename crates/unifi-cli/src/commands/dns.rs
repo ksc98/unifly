@@ -60,7 +60,12 @@ fn detail(d: &Arc<DnsPolicy>) -> String {
         format!("Type:   {:?}", d.policy_type),
         format!("Domain: {}", d.domain),
         format!("Value:  {}", d.value),
-        format!("TTL:    {}", d.ttl_seconds.map(|t: u32| t.to_string()).unwrap_or_else(|| "-".into())),
+        format!(
+            "TTL:    {}",
+            d.ttl_seconds
+                .map(|t: u32| t.to_string())
+                .unwrap_or_else(|| "-".into())
+        ),
     ]
     .join("\n")
 }
@@ -90,7 +95,8 @@ pub async fn handle(
             let found = snap.iter().find(|d| d.id.to_string() == id);
             match found {
                 Some(d) => {
-                    let out = output::render_single(&global.output, d, detail, |d| d.id.to_string());
+                    let out =
+                        output::render_single(&global.output, d, detail, |d| d.id.to_string());
                     output::print_output(&out, global.quiet);
                 }
                 None => {
@@ -98,7 +104,7 @@ pub async fn handle(
                         resource_type: "DNS policy".into(),
                         identifier: id,
                         list_command: "dns list".into(),
-                    })
+                    });
                 }
             }
             Ok(())
@@ -117,7 +123,9 @@ pub async fn handle(
             } else {
                 CreateDnsPolicyRequest {
                     name: domain.clone().unwrap_or_default(),
-                    policy_type: record_type.map(map_dns_type).unwrap_or(DnsPolicyType::ARecord),
+                    policy_type: record_type
+                        .map(map_dns_type)
+                        .unwrap_or(DnsPolicyType::ARecord),
                     enabled: true,
                     domains: domain.map(|d| vec![d]),
                     upstream: None,

@@ -48,7 +48,9 @@ pub async fn spawn_data_bridge(
     let _ = action_tx.send(Action::DevicesUpdated(devices.current().clone()));
     let _ = action_tx.send(Action::ClientsUpdated(clients.current().clone()));
     let _ = action_tx.send(Action::NetworksUpdated(networks.current().clone()));
-    let _ = action_tx.send(Action::FirewallPoliciesUpdated(fw_policies.current().clone()));
+    let _ = action_tx.send(Action::FirewallPoliciesUpdated(
+        fw_policies.current().clone(),
+    ));
     let _ = action_tx.send(Action::FirewallZonesUpdated(fw_zones.current().clone()));
     let _ = action_tx.send(Action::AclRulesUpdated(acl_rules.current().clone()));
     let _ = action_tx.send(Action::WifiBroadcastsUpdated(wifi.current().clone()));

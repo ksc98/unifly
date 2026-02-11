@@ -7,8 +7,8 @@ use std::future::Future;
 
 use reqwest::header::{HeaderMap, HeaderValue};
 use secrecy::ExposeSecret;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tracing::debug;
 use url::Url;
 use uuid::Uuid;
@@ -40,44 +40,54 @@ pub struct IntegrationClient {
 impl IntegrationClient {
     // ── Constructors ─────────────────────────────────────────────────
 
-    /// Build from an API key and transport config.
+    /// Build from an API key, transport config, and detected platform.
     ///
     /// Injects `X-API-KEY` as a default header on every request.
-    /// If `base_url` doesn't already end with `/integration`, it is appended.
+    /// On UniFi OS the base path is `/proxy/network/integration/`;
+    /// on standalone controllers it's just `/integration/`.
     pub fn from_api_key(
         base_url: &str,
         api_key: &secrecy::SecretString,
         transport: &crate::TransportConfig,
+        platform: crate::ControllerPlatform,
     ) -> Result<Self, Error> {
         let mut headers = HeaderMap::new();
-        let mut key_value = HeaderValue::from_str(api_key.expose_secret())
-            .map_err(|e| Error::Authentication {
+        let mut key_value =
+            HeaderValue::from_str(api_key.expose_secret()).map_err(|e| Error::Authentication {
                 message: format!("invalid API key header value: {e}"),
             })?;
         key_value.set_sensitive(true);
         headers.insert("X-API-KEY", key_value);
 
         let http = transport.build_client_with_headers(headers)?;
-        let base_url = Self::normalize_base_url(base_url)?;
+        let base_url = Self::normalize_base_url(base_url, platform)?;
 
         Ok(Self { http, base_url })
     }
 
     /// Wrap an existing `reqwest::Client` (caller manages auth headers).
-    pub fn from_reqwest(base_url: &str, http: reqwest::Client) -> Result<Self, Error> {
-        let base_url = Self::normalize_base_url(base_url)?;
+    pub fn from_reqwest(
+        base_url: &str,
+        http: reqwest::Client,
+        platform: crate::ControllerPlatform,
+    ) -> Result<Self, Error> {
+        let base_url = Self::normalize_base_url(base_url, platform)?;
         Ok(Self { http, base_url })
     }
 
-    /// Ensure `base_url` ends with `/integration/` for clean joins.
-    fn normalize_base_url(raw: &str) -> Result<Url, Error> {
+    /// Build the base URL with correct platform prefix + `/integration/`.
+    ///
+    /// UniFi OS: `https://host/proxy/network/integration/`
+    /// Standalone: `https://host/integration/`
+    fn normalize_base_url(raw: &str, platform: crate::ControllerPlatform) -> Result<Url, Error> {
         let mut url = Url::parse(raw)?;
 
         // Strip trailing slash for uniform handling
         let path = url.path().trim_end_matches('/').to_owned();
 
         if !path.ends_with("/integration") {
-            url.set_path(&format!("{path}/integration/"));
+            let prefix = platform.integration_prefix();
+            url.set_path(&format!("{path}{prefix}/"));
         } else {
             url.set_path(&format!("{path}/"));
         }
@@ -129,11 +139,7 @@ impl IntegrationClient {
         self.handle_response(resp).await
     }
 
-    async fn post_no_response<B: Serialize>(
-        &self,
-        path: &str,
-        body: &B,
-    ) -> Result<(), Error> {
+    async fn post_no_response<B: Serialize>(&self, path: &str, body: &B) -> Result<(), Error> {
         let url = self.url(path);
         debug!("POST {url}");
 
@@ -173,10 +179,7 @@ impl IntegrationClient {
         self.handle_empty(resp).await
     }
 
-    async fn delete_with_response<T: DeserializeOwned>(
-        &self,
-        path: &str,
-    ) -> Result<T, Error> {
+    async fn delete_with_response<T: DeserializeOwned>(&self, path: &str) -> Result<T, Error> {
         let url = self.url(path);
         debug!("DELETE {url}");
 
@@ -205,9 +208,12 @@ impl IntegrationClient {
         let status = resp.status();
         if status.is_success() {
             let body = resp.text().await?;
-            serde_json::from_str(&body).map_err(|e| Error::Deserialization {
-                message: format!("{e}"),
-                body,
+            serde_json::from_str(&body).map_err(|e| {
+                let preview = &body[..body.len().min(200)];
+                Error::Deserialization {
+                    message: format!("{e} (body preview: {preview:?})"),
+                    body,
+                }
             })
         } else {
             Err(self.parse_error(status, resp).await)
@@ -223,11 +229,7 @@ impl IntegrationClient {
         }
     }
 
-    async fn parse_error(
-        &self,
-        status: reqwest::StatusCode,
-        resp: reqwest::Response,
-    ) -> Error {
+    async fn parse_error(&self, status: reqwest::StatusCode, resp: reqwest::Response) -> Error {
         if status == reqwest::StatusCode::UNAUTHORIZED {
             return Error::InvalidApiKey;
         }
@@ -256,11 +258,7 @@ impl IntegrationClient {
     // ── Pagination helper ────────────────────────────────────────────
 
     /// Collect all pages into a single `Vec<T>`.
-    pub async fn paginate_all<T, F, Fut>(
-        &self,
-        limit: i32,
-        fetch: F,
-    ) -> Result<Vec<T>, Error>
+    pub async fn paginate_all<T, F, Fut>(&self, limit: i32, fetch: F) -> Result<Vec<T>, Error>
     where
         F: Fn(i64, i32) -> Fut,
         Fut: Future<Output = Result<types::Page<T>, Error>>,
@@ -300,10 +298,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::SiteResponse>, Error> {
         self.get_with_params(
             "v1/sites",
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -318,10 +313,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::DeviceResponse>, Error> {
         self.get_with_params(
             &format!("v1/sites/{site_id}/devices"),
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -368,11 +360,7 @@ impl IntegrationClient {
         .await
     }
 
-    pub async fn remove_device(
-        &self,
-        site_id: &Uuid,
-        device_id: &Uuid,
-    ) -> Result<(), Error> {
+    pub async fn remove_device(&self, site_id: &Uuid, device_id: &Uuid) -> Result<(), Error> {
         self.delete(&format!("v1/sites/{site_id}/devices/{device_id}"))
             .await
     }
@@ -408,9 +396,7 @@ impl IntegrationClient {
         }
 
         self.post_no_response(
-            &format!(
-                "v1/sites/{site_id}/devices/{device_id}/interfaces/ports/{port_idx}/actions"
-            ),
+            &format!("v1/sites/{site_id}/devices/{device_id}/interfaces/ports/{port_idx}/actions"),
             &Body { action },
         )
         .await
@@ -423,10 +409,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::PendingDeviceResponse>, Error> {
         self.get_with_params(
             "v1/pending-devices",
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -439,10 +422,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::DeviceTagResponse>, Error> {
         self.get_with_params(
             &format!("v1/sites/{site_id}/device-tags"),
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -457,10 +437,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::ClientResponse>, Error> {
         self.get_with_params(
             &format!("v1/sites/{site_id}/clients"),
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -502,10 +479,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::NetworkResponse>, Error> {
         self.get_with_params(
             &format!("v1/sites/{site_id}/networks"),
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -534,18 +508,11 @@ impl IntegrationClient {
         network_id: &Uuid,
         body: &types::NetworkCreateUpdate,
     ) -> Result<types::NetworkDetailsResponse, Error> {
-        self.put(
-            &format!("v1/sites/{site_id}/networks/{network_id}"),
-            body,
-        )
-        .await
+        self.put(&format!("v1/sites/{site_id}/networks/{network_id}"), body)
+            .await
     }
 
-    pub async fn delete_network(
-        &self,
-        site_id: &Uuid,
-        network_id: &Uuid,
-    ) -> Result<(), Error> {
+    pub async fn delete_network(&self, site_id: &Uuid, network_id: &Uuid) -> Result<(), Error> {
         self.delete(&format!("v1/sites/{site_id}/networks/{network_id}"))
             .await
     }
@@ -571,10 +538,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::WifiBroadcastResponse>, Error> {
         self.get_with_params(
             &format!("v1/sites/{site_id}/wifi/broadcasts"),
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -633,10 +597,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::FirewallPolicyResponse>, Error> {
         self.get_with_params(
             &format!("v1/sites/{site_id}/firewall/policies"),
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -646,10 +607,8 @@ impl IntegrationClient {
         site_id: &Uuid,
         policy_id: &Uuid,
     ) -> Result<types::FirewallPolicyResponse, Error> {
-        self.get(&format!(
-            "v1/sites/{site_id}/firewall/policies/{policy_id}"
-        ))
-        .await
+        self.get(&format!("v1/sites/{site_id}/firewall/policies/{policy_id}"))
+            .await
     }
 
     pub async fn create_firewall_policy(
@@ -692,20 +651,16 @@ impl IntegrationClient {
         site_id: &Uuid,
         policy_id: &Uuid,
     ) -> Result<(), Error> {
-        self.delete(&format!(
-            "v1/sites/{site_id}/firewall/policies/{policy_id}"
-        ))
-        .await
+        self.delete(&format!("v1/sites/{site_id}/firewall/policies/{policy_id}"))
+            .await
     }
 
     pub async fn get_firewall_policy_ordering(
         &self,
         site_id: &Uuid,
     ) -> Result<types::FirewallPolicyOrdering, Error> {
-        self.get(&format!(
-            "v1/sites/{site_id}/firewall/policies/ordering"
-        ))
-        .await
+        self.get(&format!("v1/sites/{site_id}/firewall/policies/ordering"))
+            .await
     }
 
     pub async fn set_firewall_policy_ordering(
@@ -730,10 +685,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::FirewallZoneResponse>, Error> {
         self.get_with_params(
             &format!("v1/sites/{site_id}/firewall/zones"),
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -743,10 +695,8 @@ impl IntegrationClient {
         site_id: &Uuid,
         zone_id: &Uuid,
     ) -> Result<types::FirewallZoneResponse, Error> {
-        self.get(&format!(
-            "v1/sites/{site_id}/firewall/zones/{zone_id}"
-        ))
-        .await
+        self.get(&format!("v1/sites/{site_id}/firewall/zones/{zone_id}"))
+            .await
     }
 
     pub async fn create_firewall_zone(
@@ -771,15 +721,9 @@ impl IntegrationClient {
         .await
     }
 
-    pub async fn delete_firewall_zone(
-        &self,
-        site_id: &Uuid,
-        zone_id: &Uuid,
-    ) -> Result<(), Error> {
-        self.delete(&format!(
-            "v1/sites/{site_id}/firewall/zones/{zone_id}"
-        ))
-        .await
+    pub async fn delete_firewall_zone(&self, site_id: &Uuid, zone_id: &Uuid) -> Result<(), Error> {
+        self.delete(&format!("v1/sites/{site_id}/firewall/zones/{zone_id}"))
+            .await
     }
 
     // ── ACL Rules ────────────────────────────────────────────────────
@@ -792,10 +736,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::AclRuleResponse>, Error> {
         self.get_with_params(
             &format!("v1/sites/{site_id}/acl-rules"),
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -824,18 +765,11 @@ impl IntegrationClient {
         rule_id: &Uuid,
         body: &types::AclRuleCreateUpdate,
     ) -> Result<types::AclRuleResponse, Error> {
-        self.put(
-            &format!("v1/sites/{site_id}/acl-rules/{rule_id}"),
-            body,
-        )
-        .await
+        self.put(&format!("v1/sites/{site_id}/acl-rules/{rule_id}"), body)
+            .await
     }
 
-    pub async fn delete_acl_rule(
-        &self,
-        site_id: &Uuid,
-        rule_id: &Uuid,
-    ) -> Result<(), Error> {
+    pub async fn delete_acl_rule(&self, site_id: &Uuid, rule_id: &Uuid) -> Result<(), Error> {
         self.delete(&format!("v1/sites/{site_id}/acl-rules/{rule_id}"))
             .await
     }
@@ -853,11 +787,8 @@ impl IntegrationClient {
         site_id: &Uuid,
         body: &types::AclRuleOrdering,
     ) -> Result<types::AclRuleOrdering, Error> {
-        self.put(
-            &format!("v1/sites/{site_id}/acl-rules/ordering"),
-            body,
-        )
-        .await
+        self.put(&format!("v1/sites/{site_id}/acl-rules/ordering"), body)
+            .await
     }
 
     // ── DNS Policies ─────────────────────────────────────────────────
@@ -870,10 +801,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::DnsPolicyResponse>, Error> {
         self.get_with_params(
             &format!("v1/sites/{site_id}/dns/policies"),
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -902,18 +830,11 @@ impl IntegrationClient {
         dns_id: &Uuid,
         body: &types::DnsPolicyCreateUpdate,
     ) -> Result<types::DnsPolicyResponse, Error> {
-        self.put(
-            &format!("v1/sites/{site_id}/dns/policies/{dns_id}"),
-            body,
-        )
-        .await
+        self.put(&format!("v1/sites/{site_id}/dns/policies/{dns_id}"), body)
+            .await
     }
 
-    pub async fn delete_dns_policy(
-        &self,
-        site_id: &Uuid,
-        dns_id: &Uuid,
-    ) -> Result<(), Error> {
+    pub async fn delete_dns_policy(&self, site_id: &Uuid, dns_id: &Uuid) -> Result<(), Error> {
         self.delete(&format!("v1/sites/{site_id}/dns/policies/{dns_id}"))
             .await
     }
@@ -928,10 +849,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::TrafficMatchingListResponse>, Error> {
         self.get_with_params(
             &format!("v1/sites/{site_id}/traffic-matching-lists"),
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -952,11 +870,8 @@ impl IntegrationClient {
         site_id: &Uuid,
         body: &types::TrafficMatchingListCreateUpdate,
     ) -> Result<types::TrafficMatchingListResponse, Error> {
-        self.post(
-            &format!("v1/sites/{site_id}/traffic-matching-lists"),
-            body,
-        )
-        .await
+        self.post(&format!("v1/sites/{site_id}/traffic-matching-lists"), body)
+            .await
     }
 
     pub async fn update_traffic_matching_list(
@@ -993,10 +908,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::VoucherResponse>, Error> {
         self.get_with_params(
             &format!("v1/sites/{site_id}/hotspot/vouchers"),
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -1006,10 +918,8 @@ impl IntegrationClient {
         site_id: &Uuid,
         voucher_id: &Uuid,
     ) -> Result<types::VoucherResponse, Error> {
-        self.get(&format!(
-            "v1/sites/{site_id}/hotspot/vouchers/{voucher_id}"
-        ))
-        .await
+        self.get(&format!("v1/sites/{site_id}/hotspot/vouchers/{voucher_id}"))
+            .await
     }
 
     pub async fn create_vouchers(
@@ -1026,10 +936,8 @@ impl IntegrationClient {
         site_id: &Uuid,
         voucher_id: &Uuid,
     ) -> Result<types::VoucherDeletionResults, Error> {
-        self.delete_with_response(&format!(
-            "v1/sites/{site_id}/hotspot/vouchers/{voucher_id}"
-        ))
-        .await
+        self.delete_with_response(&format!("v1/sites/{site_id}/hotspot/vouchers/{voucher_id}"))
+            .await
     }
 
     pub async fn purge_vouchers(
@@ -1054,10 +962,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::VpnServerResponse>, Error> {
         self.get_with_params(
             &format!("v1/sites/{site_id}/vpn/servers"),
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -1070,10 +975,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::VpnTunnelResponse>, Error> {
         self.get_with_params(
             &format!("v1/sites/{site_id}/vpn/tunnels"),
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -1088,10 +990,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::WanResponse>, Error> {
         self.get_with_params(
             &format!("v1/sites/{site_id}/wans"),
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -1106,10 +1005,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::DpiCategoryResponse>, Error> {
         self.get_with_params(
             &format!("v1/sites/{site_id}/dpi/categories"),
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -1122,10 +1018,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::DpiApplicationResponse>, Error> {
         self.get_with_params(
             &format!("v1/sites/{site_id}/dpi/applications"),
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -1140,10 +1033,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::RadiusProfileResponse>, Error> {
         self.get_with_params(
             &format!("v1/sites/{site_id}/radius/profiles"),
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }
@@ -1157,10 +1047,7 @@ impl IntegrationClient {
     ) -> Result<types::Page<types::CountryResponse>, Error> {
         self.get_with_params(
             "v1/countries",
-            &[
-                ("offset", offset.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
     }

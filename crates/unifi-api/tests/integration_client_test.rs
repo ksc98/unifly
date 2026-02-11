@@ -8,14 +8,19 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use unifi_api::integration_types::{
     DeviceDetailsResponse, NetworkCreateUpdate, NetworkDetailsResponse, Page, SiteResponse,
 };
-use unifi_api::{Error, IntegrationClient};
+use unifi_api::{ControllerPlatform, Error, IntegrationClient};
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
 async fn setup() -> (MockServer, IntegrationClient) {
     let server = MockServer::start().await;
-    let client =
-        IntegrationClient::from_reqwest(&server.uri(), reqwest::Client::new()).unwrap();
+    // Classic = no proxy prefix, so wiremock paths start at /integration/
+    let client = IntegrationClient::from_reqwest(
+        &server.uri(),
+        reqwest::Client::new(),
+        ControllerPlatform::ClassicController,
+    )
+    .unwrap();
     (server, client)
 }
 
@@ -216,9 +221,7 @@ async fn test_error_404_not_found() {
         .and(path(format!(
             "/integration/v1/sites/{site_id}/devices/{device_id}"
         )))
-        .respond_with(
-            ResponseTemplate::new(404).set_body_json(json!({ "message": "Not found" })),
-        )
+        .respond_with(ResponseTemplate::new(404).set_body_json(json!({ "message": "Not found" })))
         .mount(&server)
         .await;
 

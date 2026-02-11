@@ -4,13 +4,11 @@ use std::sync::Arc;
 
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{
-    Block, BorderType, Borders, Cell, Paragraph, Row, Table, TableState,
-};
-use ratatui::Frame;
+use ratatui::widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, Table, TableState};
 use tokio::sync::mpsc::UnboundedSender;
 
 use unifi_core::model::{AclRule, FirewallPolicy, FirewallZone};
@@ -115,7 +113,10 @@ impl FirewallScreen {
                 let is_selected = i == selected_idx;
                 let prefix = if is_selected { "▸" } else { " " };
 
-                let idx = policy.index.map(|n| n.to_string()).unwrap_or_else(|| (i + 1).to_string());
+                let idx = policy
+                    .index
+                    .map(|n| n.to_string())
+                    .unwrap_or_else(|| (i + 1).to_string());
                 let enabled = if policy.enabled { "✓" } else { "✗" };
                 let action_str = format!("{:?}", policy.action);
                 let action_color = match policy.action {
@@ -135,13 +136,11 @@ impl FirewallScreen {
 
                 Row::new(vec![
                     Cell::from(format!("{prefix}{idx}")),
-                    Cell::from(enabled.to_string()).style(Style::default().fg(
-                        if policy.enabled {
-                            theme::SUCCESS_GREEN
-                        } else {
-                            theme::BORDER_GRAY
-                        },
-                    )),
+                    Cell::from(enabled.to_string()).style(Style::default().fg(if policy.enabled {
+                        theme::SUCCESS_GREEN
+                    } else {
+                        theme::BORDER_GRAY
+                    })),
                     Cell::from(policy.name.clone()).style(
                         Style::default()
                             .fg(theme::NEON_CYAN)
@@ -407,7 +406,7 @@ impl Component for FirewallScreen {
 
         let layout = Layout::vertical([
             Constraint::Length(1), // sub-tabs
-            Constraint::Min(1),   // content
+            Constraint::Min(1),    // content
             Constraint::Length(1), // hints
         ])
         .split(inner);

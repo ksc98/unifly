@@ -75,7 +75,13 @@ fn detail(w: &Arc<WifiBroadcast>) -> String {
         format!("Band Steer: {}", w.band_steering),
         format!("MLO:        {}", w.mlo_enabled),
         format!("Hotspot:    {}", w.hotspot_enabled),
-        format!("Network:    {}", w.network_id.as_ref().map(ToString::to_string).unwrap_or_else(|| "-".into())),
+        format!(
+            "Network:    {}",
+            w.network_id
+                .as_ref()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| "-".into())
+        ),
     ]
     .join("\n")
 }
@@ -105,7 +111,8 @@ pub async fn handle(
             let found = snap.iter().find(|w| w.id.to_string() == id);
             match found {
                 Some(w) => {
-                    let out = output::render_single(&global.output, w, detail, |w| w.id.to_string());
+                    let out =
+                        output::render_single(&global.output, w, detail, |w| w.id.to_string());
                     output::print_output(&out, global.quiet);
                 }
                 None => {
@@ -113,7 +120,7 @@ pub async fn handle(
                         resource_type: "wifi".into(),
                         identifier: id,
                         list_command: "wifi list".into(),
-                    })
+                    });
                 }
             }
             Ok(())

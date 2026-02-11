@@ -4,13 +4,11 @@ use std::sync::Arc;
 
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{
-    Block, BorderType, Borders, Cell, Paragraph, Row, Table, TableState,
-};
-use ratatui::Frame;
+use ratatui::widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, Table, TableState};
 use tokio::sync::mpsc::UnboundedSender;
 
 use unifi_core::{Device, DeviceState};
@@ -53,7 +51,10 @@ impl DevicesScreen {
                 .filter(|d| {
                     d.name.as_deref().unwrap_or("").to_lowercase().contains(&q)
                         || d.model.as_deref().unwrap_or("").to_lowercase().contains(&q)
-                        || d.ip.map(|ip| ip.to_string()).unwrap_or_default().contains(&q)
+                        || d.ip
+                            .map(|ip| ip.to_string())
+                            .unwrap_or_default()
+                            .contains(&q)
                         || d.mac.to_string().contains(&q)
                 })
                 .collect()
@@ -89,7 +90,10 @@ impl DevicesScreen {
     fn render_detail(&self, frame: &mut Frame, area: Rect, device: &Device) {
         let name = device.name.as_deref().unwrap_or("Unknown");
         let model = device.model.as_deref().unwrap_or("─");
-        let ip = device.ip.map(|ip| ip.to_string()).unwrap_or_else(|| "─".into());
+        let ip = device
+            .ip
+            .map(|ip| ip.to_string())
+            .unwrap_or_else(|| "─".into());
         let mac = device.mac.to_string();
 
         let title = format!(" {name}  ·  {model}  ·  {ip}  ·  {mac} ");
@@ -106,7 +110,7 @@ impl DevicesScreen {
         // Sub-tab bar
         let tabs_layout = Layout::vertical([
             Constraint::Length(2), // tab bar
-            Constraint::Min(1),   // content
+            Constraint::Min(1),    // content
             Constraint::Length(1), // hints
         ])
         .split(inner);
@@ -133,10 +137,7 @@ impl DevicesScreen {
             }
             DeviceDetailTab::Radios => self.render_radios_tab(frame, tabs_layout[1], device),
             DeviceDetailTab::Clients => {
-                let text = format!(
-                    "  Connected clients: {}",
-                    device.client_count.unwrap_or(0)
-                );
+                let text = format!("  Connected clients: {}", device.client_count.unwrap_or(0));
                 frame.render_widget(
                     Paragraph::new(text).style(theme::table_row()),
                     tabs_layout[1],
@@ -162,10 +163,7 @@ impl DevicesScreen {
     fn render_overview_tab(&self, frame: &mut Frame, area: Rect, device: &Device) {
         let state_span = status_indicator::status_span(&device.state);
         let state_label = format!("{:?}", device.state);
-        let firmware = device
-            .firmware_version
-            .as_deref()
-            .unwrap_or("─");
+        let firmware = device.firmware_version.as_deref().unwrap_or("─");
         let fw_status = if device.firmware_updatable {
             "update available"
         } else {
@@ -186,7 +184,10 @@ impl DevicesScreen {
             Line::from(vec![
                 Span::styled("  State          ", Style::default().fg(theme::DIM_WHITE)),
                 state_span,
-                Span::styled(format!(" {state_label}"), Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(
+                    format!(" {state_label}"),
+                    Style::default().fg(theme::DIM_WHITE),
+                ),
                 Span::styled("       Adopted     ", Style::default().fg(theme::DIM_WHITE)),
                 Span::styled(adopted, Style::default().fg(theme::NEON_CYAN)),
             ]),
@@ -340,10 +341,7 @@ impl DevicesScreen {
 
             for port in &device.ports {
                 let idx_str = port.index.to_string();
-                let name = port
-                    .name
-                    .as_deref()
-                    .unwrap_or(&idx_str);
+                let name = port.name.as_deref().unwrap_or(&idx_str);
                 let state_color = match port.state {
                     unifi_core::model::PortState::Up => theme::SUCCESS_GREEN,
                     unifi_core::model::PortState::Down => theme::ERROR_RED,
@@ -363,13 +361,7 @@ impl DevicesScreen {
                 let poe = port
                     .poe
                     .as_ref()
-                    .map(|p| {
-                        if p.enabled {
-                            "✓"
-                        } else {
-                            "✗"
-                        }
-                    })
+                    .map(|p| if p.enabled { "✓" } else { "✗" })
                     .unwrap_or("─");
 
                 lines.push(Line::from(vec![
@@ -377,8 +369,14 @@ impl DevicesScreen {
                         format!("  {:<6}", name),
                         Style::default().fg(theme::NEON_CYAN),
                     ),
-                    Span::styled(format!("{:<8}", state_str), Style::default().fg(state_color)),
-                    Span::styled(format!("{:<11}", speed), Style::default().fg(theme::DIM_WHITE)),
+                    Span::styled(
+                        format!("{:<8}", state_str),
+                        Style::default().fg(state_color),
+                    ),
+                    Span::styled(
+                        format!("{:<11}", speed),
+                        Style::default().fg(theme::DIM_WHITE),
+                    ),
                     Span::styled(poe, Style::default().fg(theme::DIM_WHITE)),
                 ]));
             }
@@ -552,11 +550,8 @@ impl Component for DevicesScreen {
 
         // Split for table + optional detail panel
         let (table_area, detail_area) = if self.detail_open {
-            let chunks = Layout::vertical([
-                Constraint::Percentage(50),
-                Constraint::Percentage(50),
-            ])
-            .split(inner);
+            let chunks = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .split(inner);
             (chunks[0], Some(chunks[1]))
         } else {
             (inner, None)
@@ -565,7 +560,7 @@ impl Component for DevicesScreen {
         // Filter/sort header line
         let header_layout = Layout::vertical([
             Constraint::Length(1), // filter line
-            Constraint::Min(1),   // table
+            Constraint::Min(1),    // table
             Constraint::Length(1), // hints
         ])
         .split(table_area);
@@ -573,7 +568,10 @@ impl Component for DevicesScreen {
         let filter_text = if self.search_query.is_empty() {
             Span::styled("[all]", Style::default().fg(theme::NEON_CYAN))
         } else {
-            Span::styled(format!("[\"{}\" ]", self.search_query), Style::default().fg(theme::ELECTRIC_YELLOW))
+            Span::styled(
+                format!("[\"{}\" ]", self.search_query),
+                Style::default().fg(theme::ELECTRIC_YELLOW),
+            )
         };
         let filter_line = Line::from(vec![
             Span::styled(" Filter: ", Style::default().fg(theme::DIM_WHITE)),
@@ -610,7 +608,10 @@ impl Component for DevicesScreen {
                 let status = status_indicator::status_char(&dev.state);
                 let name = dev.name.as_deref().unwrap_or("Unknown");
                 let model = dev.model.as_deref().unwrap_or("─");
-                let ip = dev.ip.map(|ip| ip.to_string()).unwrap_or_else(|| "─".into());
+                let ip = dev
+                    .ip
+                    .map(|ip| ip.to_string())
+                    .unwrap_or_else(|| "─".into());
                 let cpu = dev
                     .stats
                     .cpu_utilization_pct
@@ -625,9 +626,7 @@ impl Component for DevicesScreen {
                     .stats
                     .uplink_bandwidth
                     .as_ref()
-                    .map(|bw| {
-                        bytes_fmt::fmt_tx_rx(bw.tx_bytes_per_sec, bw.rx_bytes_per_sec)
-                    })
+                    .map(|bw| bytes_fmt::fmt_tx_rx(bw.tx_bytes_per_sec, bw.rx_bytes_per_sec))
                     .unwrap_or_else(|| "···/···".into());
                 let uptime = dev
                     .stats
@@ -651,7 +650,8 @@ impl Component for DevicesScreen {
                 };
 
                 Row::new(vec![
-                    Cell::from(format!("{prefix}{status}")).style(Style::default().fg(status_color)),
+                    Cell::from(format!("{prefix}{status}"))
+                        .style(Style::default().fg(status_color)),
                     Cell::from(name.to_string()).style(
                         Style::default()
                             .fg(theme::NEON_CYAN)

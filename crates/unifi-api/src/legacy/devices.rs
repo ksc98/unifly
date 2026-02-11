@@ -36,10 +36,15 @@ impl LegacyClient {
     pub async fn adopt_device(&self, mac: &str) -> Result<(), Error> {
         let url = self.site_url("cmd/devmgr");
         debug!(mac, "adopting device");
-        let _: Vec<serde_json::Value> = self.post(url, &json!({
-            "cmd": "adopt",
-            "mac": mac,
-        })).await?;
+        let _: Vec<serde_json::Value> = self
+            .post(
+                url,
+                &json!({
+                    "cmd": "adopt",
+                    "mac": mac,
+                }),
+            )
+            .await?;
         Ok(())
     }
 
@@ -49,10 +54,15 @@ impl LegacyClient {
     pub async fn restart_device(&self, mac: &str) -> Result<(), Error> {
         let url = self.site_url("cmd/devmgr");
         debug!(mac, "restarting device");
-        let _: Vec<serde_json::Value> = self.post(url, &json!({
-            "cmd": "restart",
-            "mac": mac,
-        })).await?;
+        let _: Vec<serde_json::Value> = self
+            .post(
+                url,
+                &json!({
+                    "cmd": "restart",
+                    "mac": mac,
+                }),
+            )
+            .await?;
         Ok(())
     }
 
@@ -60,11 +70,7 @@ impl LegacyClient {
     ///
     /// If `url` is `Some`, upgrades from that URL (`cmd: "upgrade-external"`).
     /// Otherwise upgrades from Ubiquiti's cloud (`cmd: "upgrade"`).
-    pub async fn upgrade_device(
-        &self,
-        mac: &str,
-        firmware_url: Option<&str>,
-    ) -> Result<(), Error> {
+    pub async fn upgrade_device(&self, mac: &str, firmware_url: Option<&str>) -> Result<(), Error> {
         let api_url = self.site_url("cmd/devmgr");
         debug!(mac, ?firmware_url, "upgrading device firmware");
 
@@ -91,10 +97,15 @@ impl LegacyClient {
         let url = self.site_url("cmd/devmgr");
         let cmd = if enable { "set-locate" } else { "unset-locate" };
         debug!(mac, cmd, "toggling device locate LED");
-        let _: Vec<serde_json::Value> = self.post(url, &json!({
-            "cmd": cmd,
-            "mac": mac,
-        })).await?;
+        let _: Vec<serde_json::Value> = self
+            .post(
+                url,
+                &json!({
+                    "cmd": cmd,
+                    "mac": mac,
+                }),
+            )
+            .await?;
         Ok(())
     }
 }

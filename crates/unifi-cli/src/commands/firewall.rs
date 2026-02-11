@@ -5,14 +5,13 @@ use std::sync::Arc;
 use tabled::Tabled;
 use unifi_core::model::{FirewallAction as ModelFirewallAction, FirewallPolicy, FirewallZone};
 use unifi_core::{
-    Command as CoreCommand, Controller, CreateFirewallPolicyRequest,
-    CreateFirewallZoneRequest, EntityId, UpdateFirewallPolicyRequest,
-    UpdateFirewallZoneRequest,
+    Command as CoreCommand, Controller, CreateFirewallPolicyRequest, CreateFirewallZoneRequest,
+    EntityId, UpdateFirewallPolicyRequest, UpdateFirewallZoneRequest,
 };
 
 use crate::cli::{
-    FirewallAction, FirewallArgs, FirewallCommand, FirewallPoliciesCommand,
-    FirewallZonesCommand, GlobalOpts,
+    FirewallAction, FirewallArgs, FirewallCommand, FirewallPoliciesCommand, FirewallZonesCommand,
+    GlobalOpts,
 };
 use crate::error::CliError;
 use crate::output;
@@ -52,8 +51,16 @@ impl From<&Arc<FirewallPolicy>> for PolicyRow {
             name: p.name.clone(),
             action: format!("{:?}", p.action),
             enabled: if p.enabled { "yes" } else { "no" }.into(),
-            src_zone: p.source_zone_id.as_ref().map(|z| z.to_string()).unwrap_or_default(),
-            dst_zone: p.destination_zone_id.as_ref().map(|z| z.to_string()).unwrap_or_default(),
+            src_zone: p
+                .source_zone_id
+                .as_ref()
+                .map(|z| z.to_string())
+                .unwrap_or_default(),
+            dst_zone: p
+                .destination_zone_id
+                .as_ref()
+                .map(|z| z.to_string())
+                .unwrap_or_default(),
         }
     }
 }
@@ -66,8 +73,20 @@ fn policy_detail(p: &Arc<FirewallPolicy>) -> String {
         format!("Enabled:     {}", p.enabled),
         format!("Action:      {:?}", p.action),
         format!("IP Version:  {:?}", p.ip_version),
-        format!("Src Zone:    {}", p.source_zone_id.as_ref().map(|z| z.to_string()).unwrap_or_else(|| "-".into())),
-        format!("Dst Zone:    {}", p.destination_zone_id.as_ref().map(|z| z.to_string()).unwrap_or_else(|| "-".into())),
+        format!(
+            "Src Zone:    {}",
+            p.source_zone_id
+                .as_ref()
+                .map(|z| z.to_string())
+                .unwrap_or_else(|| "-".into())
+        ),
+        format!(
+            "Dst Zone:    {}",
+            p.destination_zone_id
+                .as_ref()
+                .map(|z| z.to_string())
+                .unwrap_or_else(|| "-".into())
+        ),
         format!("Logging:     {}", p.logging_enabled),
     ]
     .join("\n")
@@ -116,7 +135,9 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        FirewallCommand::Policies(pargs) => handle_policies(controller, pargs.command, global).await,
+        FirewallCommand::Policies(pargs) => {
+            handle_policies(controller, pargs.command, global).await
+        }
         FirewallCommand::Zones(zargs) => handle_zones(controller, zargs.command, global).await,
     }
 }
@@ -144,7 +165,9 @@ async fn handle_policies(
             let found = snap.iter().find(|p| p.id.to_string() == id);
             match found {
                 Some(p) => {
-                    let out = output::render_single(&global.output, p, policy_detail, |p| p.id.to_string());
+                    let out = output::render_single(&global.output, p, policy_detail, |p| {
+                        p.id.to_string()
+                    });
                     output::print_output(&out, global.quiet);
                 }
                 None => {
@@ -152,7 +175,7 @@ async fn handle_policies(
                         resource_type: "firewall policy".into(),
                         identifier: id,
                         list_command: "firewall policies list".into(),
-                    })
+                    });
                 }
             }
             Ok(())
@@ -171,7 +194,9 @@ async fn handle_policies(
             } else {
                 CreateFirewallPolicyRequest {
                     name: name.unwrap_or_default(),
-                    action: action.map(map_fw_action).unwrap_or(ModelFirewallAction::Block),
+                    action: action
+                        .map(map_fw_action)
+                        .unwrap_or(ModelFirewallAction::Block),
                     source_zone_id: EntityId::from(""),
                     destination_zone_id: EntityId::from(""),
                     enabled,
@@ -242,10 +267,7 @@ async fn handle_policies(
             set,
         } => {
             if let Some(ids) = set {
-                let zone_pair = (
-                    EntityId::from(source_zone),
-                    EntityId::from(dest_zone),
-                );
+                let zone_pair = (EntityId::from(source_zone), EntityId::from(dest_zone));
                 let ordered_ids: Vec<EntityId> = ids.into_iter().map(EntityId::from).collect();
                 controller
                     .execute(CoreCommand::ReorderFirewallPolicies {
@@ -289,7 +311,8 @@ async fn handle_zones(
             let found = snap.iter().find(|z| z.id.to_string() == id);
             match found {
                 Some(z) => {
-                    let out = output::render_single(&global.output, z, zone_detail, |z| z.id.to_string());
+                    let out =
+                        output::render_single(&global.output, z, zone_detail, |z| z.id.to_string());
                     output::print_output(&out, global.quiet);
                 }
                 None => {
@@ -297,7 +320,7 @@ async fn handle_zones(
                         resource_type: "firewall zone".into(),
                         identifier: id,
                         list_command: "firewall zones list".into(),
-                    })
+                    });
                 }
             }
             Ok(())
@@ -328,8 +351,7 @@ async fn handle_zones(
             let update = UpdateFirewallZoneRequest {
                 name,
                 description: None,
-                network_ids: networks
-                    .map(|ns| ns.into_iter().map(EntityId::from).collect()),
+                network_ids: networks.map(|ns| ns.into_iter().map(EntityId::from).collect()),
             };
             controller
                 .execute(CoreCommand::UpdateFirewallZone { id: eid, update })

@@ -19,17 +19,17 @@
 //! [`Controller`](../unifi_core/struct.Controller.html) facade and merge their
 //! responses into canonical domain types.
 
-pub mod error;
 pub mod auth;
+pub mod error;
 pub mod integration;
 pub mod legacy;
 pub mod transport;
 pub mod websocket;
 
+pub use auth::{AuthStrategy, ControllerPlatform, Credentials};
 pub use error::Error;
-pub use auth::{AuthStrategy, Credentials, ControllerPlatform};
 pub use integration::IntegrationClient;
 pub use integration::types as integration_types;
 pub use legacy::LegacyClient;
 pub use legacy::models as legacy_models;
-pub use transport::{TransportConfig, TlsMode};
+pub use transport::{TlsMode, TransportConfig};

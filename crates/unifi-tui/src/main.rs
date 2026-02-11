@@ -74,7 +74,10 @@ fn setup_tracing(cli: &Cli) -> Result<WorkerGuard> {
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new(format!("unifi_tui={log_level}")));
 
-    let log_dir = cli.log_file.parent().unwrap_or(std::path::Path::new("/tmp"));
+    let log_dir = cli
+        .log_file
+        .parent()
+        .unwrap_or(std::path::Path::new("/tmp"));
     let log_filename = cli
         .log_file
         .file_name()

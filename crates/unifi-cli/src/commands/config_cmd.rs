@@ -11,6 +11,56 @@ use crate::output;
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
+/// Format config for display, masking sensitive fields.
+fn format_config_redacted(cfg: &Config) -> String {
+    use std::fmt::Write;
+    let mut out = String::new();
+
+    if let Some(ref default) = cfg.default_profile {
+        writeln!(out, "default_profile = \"{default}\"").unwrap();
+    }
+    writeln!(out).unwrap();
+    writeln!(out, "[defaults]").unwrap();
+    writeln!(out, "output = \"{}\"", cfg.defaults.output).unwrap();
+    writeln!(out, "color = \"{}\"", cfg.defaults.color).unwrap();
+    writeln!(out, "insecure = {}", cfg.defaults.insecure).unwrap();
+    writeln!(out, "timeout = {}", cfg.defaults.timeout).unwrap();
+
+    let mut names: Vec<_> = cfg.profiles.keys().collect();
+    names.sort();
+    for name in names {
+        let p = &cfg.profiles[name];
+        writeln!(out).unwrap();
+        writeln!(out, "[profiles.{name}]").unwrap();
+        writeln!(out, "controller = \"{}\"", p.controller).unwrap();
+        writeln!(out, "site = \"{}\"", p.site).unwrap();
+        writeln!(out, "auth_mode = \"{}\"", p.auth_mode).unwrap();
+        if p.api_key.is_some() {
+            writeln!(out, "api_key = \"****\"").unwrap();
+        }
+        if let Some(ref env) = p.api_key_env {
+            writeln!(out, "api_key_env = \"{env}\"").unwrap();
+        }
+        if let Some(ref u) = p.username {
+            writeln!(out, "username = \"{u}\"").unwrap();
+        }
+        if p.password.is_some() {
+            writeln!(out, "password = \"****\"").unwrap();
+        }
+        if let Some(ref ca) = p.ca_cert {
+            writeln!(out, "ca_cert = \"{}\"", ca.display()).unwrap();
+        }
+        if let Some(insecure) = p.insecure {
+            writeln!(out, "insecure = {insecure}").unwrap();
+        }
+        if let Some(timeout) = p.timeout {
+            writeln!(out, "timeout = {timeout}").unwrap();
+        }
+    }
+
+    out
+}
+
 /// Serialize config to TOML and write to the canonical config path.
 fn save_config(cfg: &Config) -> Result<(), CliError> {
     let path = config::config_path();
@@ -30,6 +80,64 @@ fn prompt_err(e: impl std::fmt::Display) -> CliError {
     CliError::Validation {
         field: "interactive".into(),
         reason: format!("prompt failed: {e}"),
+    }
+}
+
+/// Prompt for username and password, validating neither is empty.
+fn prompt_credentials() -> Result<(String, String), CliError> {
+    let user: String = Input::new()
+        .with_prompt("Username")
+        .interact_text()
+        .map_err(prompt_err)?;
+
+    let pass = rpassword::prompt_password("Password: ").map_err(prompt_err)?;
+
+    if user.is_empty() || pass.is_empty() {
+        return Err(CliError::Validation {
+            field: "credentials".into(),
+            reason: "username and password cannot be empty".into(),
+        });
+    }
+
+    Ok((user, pass))
+}
+
+/// Offer to store a secret in the system keyring or return it for plaintext config.
+///
+/// Returns `Some(secret)` if the user chose plaintext, `None` if stored in keyring.
+fn prompt_keyring_storage(
+    secret: &str,
+    keyring_key: &str,
+    prompt: &str,
+    label: &str,
+) -> Result<Option<String>, CliError> {
+    let choices = &[
+        "Store in system keyring (recommended)",
+        "Save to config file (plaintext)",
+    ];
+    let selection = Select::new()
+        .with_prompt(prompt)
+        .items(choices)
+        .default(0)
+        .interact()
+        .map_err(prompt_err)?;
+
+    if selection == 0 {
+        let entry =
+            keyring::Entry::new("unifi-cli", keyring_key).map_err(|e| CliError::Validation {
+                field: "keyring".into(),
+                reason: format!("failed to access keyring: {e}"),
+            })?;
+        entry
+            .set_password(secret)
+            .map_err(|e| CliError::Validation {
+                field: "keyring".into(),
+                reason: format!("failed to store {label} in keyring: {e}"),
+            })?;
+        eprintln!("   ✓ {label} stored in system keyring");
+        Ok(None)
+    } else {
+        Ok(Some(secret.to_owned()))
     }
 }
 
@@ -58,7 +166,11 @@ pub async fn handle(args: ConfigArgs, global: &GlobalOpts) -> Result<(), CliErro
                 .map_err(prompt_err)?;
 
             // 3. Auth mode
-            let auth_choices = &["API Key (recommended)", "Username/Password"];
+            let auth_choices = &[
+                "API Key (recommended)",
+                "Username/Password",
+                "Hybrid (API key + credentials for full access)",
+            ];
             let auth_selection = Select::new()
                 .with_prompt("Authentication method")
                 .items(auth_choices)
@@ -66,88 +178,79 @@ pub async fn handle(args: ConfigArgs, global: &GlobalOpts) -> Result<(), CliErro
                 .interact()
                 .map_err(prompt_err)?;
 
-            let (auth_mode, api_key, username, password) = if auth_selection == 0 {
-                // --- API Key flow ---
-                let key = rpassword::prompt_password("API key: ")
-                    .map_err(prompt_err)?;
+            let (auth_mode, api_key, username, password) = match auth_selection {
+                0 => {
+                    // --- API Key flow ---
+                    let key = rpassword::prompt_password("API key: ").map_err(prompt_err)?;
 
-                if key.is_empty() {
-                    return Err(CliError::Validation {
-                        field: "api_key".into(),
-                        reason: "API key cannot be empty".into(),
-                    });
+                    if key.is_empty() {
+                        return Err(CliError::Validation {
+                            field: "api_key".into(),
+                            reason: "API key cannot be empty".into(),
+                        });
+                    }
+
+                    let api_key_field = prompt_keyring_storage(
+                        &key,
+                        &format!("{profile_name}/api-key"),
+                        "Where to store the API key?",
+                        "API key",
+                    )?;
+
+                    ("integration".to_string(), api_key_field, None, None)
                 }
+                1 => {
+                    // --- Username/Password flow ---
+                    let (user, pass) = prompt_credentials()?;
 
-                // Offer keyring storage
-                let store_choices = &["Store in system keyring (recommended)", "Save to config file (plaintext)"];
-                let store_selection = Select::new()
-                    .with_prompt("Where to store the API key?")
-                    .items(store_choices)
-                    .default(0)
-                    .interact()
-                    .map_err(prompt_err)?;
+                    let password_field = prompt_keyring_storage(
+                        &pass,
+                        &format!("{profile_name}/password"),
+                        "Where to store the password?",
+                        "Password",
+                    )?;
 
-                let api_key_field = if store_selection == 0 {
-                    // Store in keyring
-                    let entry = keyring::Entry::new("unifi-cli", &format!("{profile_name}/api-key"))
-                        .map_err(|e| CliError::Validation {
-                            field: "keyring".into(),
-                            reason: format!("failed to access keyring: {e}"),
-                        })?;
-                    entry.set_password(&key).map_err(|e| CliError::Validation {
-                        field: "keyring".into(),
-                        reason: format!("failed to store API key in keyring: {e}"),
-                    })?;
-                    eprintln!("   ✓ API key stored in system keyring");
-                    None // Don't write to config file
-                } else {
-                    Some(key) // Save plaintext in config
-                };
-
-                ("integration".to_string(), api_key_field, None, None)
-            } else {
-                // --- Username/Password flow ---
-                let user: String = Input::new()
-                    .with_prompt("Username")
-                    .interact_text()
-                    .map_err(prompt_err)?;
-
-                let pass = rpassword::prompt_password("Password: ")
-                    .map_err(prompt_err)?;
-
-                if user.is_empty() || pass.is_empty() {
-                    return Err(CliError::Validation {
-                        field: "credentials".into(),
-                        reason: "username and password cannot be empty".into(),
-                    });
+                    ("legacy".to_string(), None, Some(user), password_field)
                 }
+                _ => {
+                    // --- Hybrid flow: API key + credentials ---
+                    eprintln!("\n   Hybrid mode uses an API key for the Integration API");
+                    eprintln!(
+                        "   and username/password for the Legacy API (stats, events, alarms).\n"
+                    );
 
-                // Offer keyring storage for password
-                let store_choices = &["Store password in system keyring (recommended)", "Save to config file (plaintext)"];
-                let store_selection = Select::new()
-                    .with_prompt("Where to store the password?")
-                    .items(store_choices)
-                    .default(0)
-                    .interact()
-                    .map_err(prompt_err)?;
+                    let key = rpassword::prompt_password("API key: ").map_err(prompt_err)?;
 
-                let password_field = if store_selection == 0 {
-                    let entry = keyring::Entry::new("unifi-cli", &format!("{profile_name}/password"))
-                        .map_err(|e| CliError::Validation {
-                            field: "keyring".into(),
-                            reason: format!("failed to access keyring: {e}"),
-                        })?;
-                    entry.set_password(&pass).map_err(|e| CliError::Validation {
-                        field: "keyring".into(),
-                        reason: format!("failed to store password in keyring: {e}"),
-                    })?;
-                    eprintln!("   ✓ Password stored in system keyring");
-                    None
-                } else {
-                    Some(pass)
-                };
+                    if key.is_empty() {
+                        return Err(CliError::Validation {
+                            field: "api_key".into(),
+                            reason: "API key cannot be empty".into(),
+                        });
+                    }
 
-                ("legacy".to_string(), None, Some(user), password_field)
+                    let api_key_field = prompt_keyring_storage(
+                        &key,
+                        &format!("{profile_name}/api-key"),
+                        "Where to store the API key?",
+                        "API key",
+                    )?;
+
+                    let (user, pass) = prompt_credentials()?;
+
+                    let password_field = prompt_keyring_storage(
+                        &pass,
+                        &format!("{profile_name}/password"),
+                        "Where to store the password?",
+                        "Password",
+                    )?;
+
+                    (
+                        "hybrid".to_string(),
+                        api_key_field,
+                        Some(user),
+                        password_field,
+                    )
+                }
             };
 
             // 4. Site name
@@ -193,12 +296,9 @@ pub async fn handle(args: ConfigArgs, global: &GlobalOpts) -> Result<(), CliErro
         // ── Show ────────────────────────────────────────────────────
         ConfigCommand::Show => {
             let cfg = config::load_config_or_default();
-            let out = output::render_single(
-                &global.output,
-                &cfg,
-                |c| format!("{c:#?}"),
-                |_| "config".into(),
-            );
+            let out = output::render_single(&global.output, &cfg, format_config_redacted, |_| {
+                "config".into()
+            });
             output::print_output(&out, global.quiet);
             Ok(())
         }
@@ -228,10 +328,10 @@ pub async fn handle(args: ConfigArgs, global: &GlobalOpts) -> Result<(), CliErro
                 "controller" => profile.controller = value,
                 "site" => profile.site = value,
                 "auth_mode" | "auth-mode" => {
-                    if value != "integration" && value != "legacy" {
+                    if !matches!(value.as_str(), "integration" | "legacy" | "hybrid") {
                         return Err(CliError::Validation {
                             field: "auth_mode".into(),
-                            reason: "must be 'integration' or 'legacy'".into(),
+                            reason: "must be 'integration', 'legacy', or 'hybrid'".into(),
                         });
                     }
                     profile.auth_mode = value;
@@ -308,8 +408,7 @@ pub async fn handle(args: ConfigArgs, global: &GlobalOpts) -> Result<(), CliErro
         // ── SetPassword ─────────────────────────────────────────────
         ConfigCommand::SetPassword { profile } => {
             let cfg = config::load_config_or_default();
-            let profile_name = profile
-                .unwrap_or_else(|| config::active_profile_name(global, &cfg));
+            let profile_name = profile.unwrap_or_else(|| config::active_profile_name(global, &cfg));
 
             let prof = cfg.profiles.get(&profile_name).ok_or_else(|| {
                 let available: Vec<_> = cfg.profiles.keys().cloned().collect();
@@ -323,37 +422,43 @@ pub async fn handle(args: ConfigArgs, global: &GlobalOpts) -> Result<(), CliErro
                 }
             })?;
 
-            let keyring_key = match prof.auth_mode.as_str() {
-                "integration" => format!("{profile_name}/api-key"),
-                _ => format!("{profile_name}/password"),
+            let store_secret = |key: &str, label: &str| -> Result<(), CliError> {
+                let secret = rpassword::prompt_password(label).map_err(prompt_err)?;
+                if secret.is_empty() {
+                    return Err(CliError::Validation {
+                        field: "secret".into(),
+                        reason: "value cannot be empty".into(),
+                    });
+                }
+                let entry =
+                    keyring::Entry::new("unifi-cli", key).map_err(|e| CliError::Validation {
+                        field: "keyring".into(),
+                        reason: format!("failed to access keyring: {e}"),
+                    })?;
+                entry
+                    .set_password(&secret)
+                    .map_err(|e| CliError::Validation {
+                        field: "keyring".into(),
+                        reason: format!("failed to store secret in keyring: {e}"),
+                    })?;
+                Ok(())
             };
 
-            let prompt_label = match prof.auth_mode.as_str() {
-                "integration" => "API key: ",
-                _ => "Password: ",
-            };
-
-            let secret = rpassword::prompt_password(prompt_label)
-                .map_err(prompt_err)?;
-
-            if secret.is_empty() {
-                return Err(CliError::Validation {
-                    field: "secret".into(),
-                    reason: "value cannot be empty".into(),
-                });
+            match prof.auth_mode.as_str() {
+                "hybrid" => {
+                    // Hybrid needs both API key and password
+                    store_secret(&format!("{profile_name}/api-key"), "API key: ")?;
+                    store_secret(&format!("{profile_name}/password"), "Password: ")?;
+                }
+                "integration" => {
+                    store_secret(&format!("{profile_name}/api-key"), "API key: ")?;
+                }
+                _ => {
+                    store_secret(&format!("{profile_name}/password"), "Password: ")?;
+                }
             }
 
-            let entry = keyring::Entry::new("unifi-cli", &keyring_key)
-                .map_err(|e| CliError::Validation {
-                    field: "keyring".into(),
-                    reason: format!("failed to access keyring: {e}"),
-                })?;
-            entry.set_password(&secret).map_err(|e| CliError::Validation {
-                field: "keyring".into(),
-                reason: format!("failed to store secret in keyring: {e}"),
-            })?;
-
-            eprintln!("✓ Secret stored in system keyring for profile '{profile_name}'");
+            eprintln!("✓ Secret(s) stored in system keyring for profile '{profile_name}'");
             Ok(())
         }
     }

@@ -50,16 +50,12 @@ fn test_no_args_shows_help() {
 
 #[test]
 fn test_help_flag() {
-    unifi_cmd()
-        .arg("--help")
-        .assert()
-        .success()
-        .stdout(
-            predicate::str::contains("UniFi network")
-                .and(predicate::str::contains("devices"))
-                .and(predicate::str::contains("clients"))
-                .and(predicate::str::contains("networks")),
-        );
+    unifi_cmd().arg("--help").assert().success().stdout(
+        predicate::str::contains("UniFi network")
+            .and(predicate::str::contains("devices"))
+            .and(predicate::str::contains("clients"))
+            .and(predicate::str::contains("networks")),
+    );
 }
 
 #[test]
@@ -105,7 +101,10 @@ fn test_completions_fish() {
 #[test]
 fn test_invalid_subcommand() {
     let output = unifi_cmd().arg("foobar").output().unwrap();
-    assert!(!output.status.success(), "Expected failure for invalid subcommand");
+    assert!(
+        !output.status.success(),
+        "Expected failure for invalid subcommand"
+    );
     let text = combined_output(&output);
     assert!(
         text.contains("invalid") || text.contains("unrecognized") || text.contains("foobar"),
@@ -131,10 +130,7 @@ fn test_devices_list_no_controller() {
 fn test_config_show_no_config() {
     // `config show` uses load_config_or_default() so it succeeds even
     // when no config file exists — it just renders the default config.
-    unifi_cmd()
-        .args(["config", "show"])
-        .assert()
-        .success();
+    unifi_cmd().args(["config", "show"]).assert().success();
 }
 
 #[test]
@@ -143,10 +139,15 @@ fn test_invalid_output_format() {
         .args(["--output", "invalid", "devices", "list"])
         .output()
         .unwrap();
-    assert!(!output.status.success(), "Expected failure for invalid output format");
+    assert!(
+        !output.status.success(),
+        "Expected failure for invalid output format"
+    );
     let text = combined_output(&output);
     assert!(
-        text.contains("invalid") || text.contains("possible values") || text.contains("valid value"),
+        text.contains("invalid")
+            || text.contains("possible values")
+            || text.contains("valid value"),
         "Expected error about valid output formats:\n{text}"
     );
 }
@@ -157,11 +158,14 @@ fn test_global_flags_parsing() {
     // missing controller config, not about argument parsing.
     unifi_cmd()
         .args([
-            "--output", "json",
+            "--output",
+            "json",
             "--verbose",
             "--insecure",
-            "--timeout", "60",
-            "devices", "list",
+            "--timeout",
+            "60",
+            "devices",
+            "list",
         ])
         .assert()
         .failure()
@@ -210,10 +214,7 @@ fn test_firewall_subcommands_exist() {
         .args(["firewall", "--help"])
         .assert()
         .success()
-        .stdout(
-            predicate::str::contains("policies")
-                .and(predicate::str::contains("zones")),
-        );
+        .stdout(predicate::str::contains("policies").and(predicate::str::contains("zones")));
 }
 
 #[test]

@@ -16,17 +16,15 @@ use std::time::Instant;
 
 use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{
-    Block, BorderType, Borders, Paragraph, Sparkline as RatatuiSparkline,
-};
-use ratatui::Frame;
+use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Sparkline as RatatuiSparkline};
 use tokio::sync::mpsc::UnboundedSender;
 
-use unifi_core::{Client, Device, DeviceState, Event};
 use unifi_core::model::EventSeverity;
+use unifi_core::{Client, Device, DeviceState, Event};
 
 use crate::action::Action;
 use crate::component::Component;
@@ -154,14 +152,12 @@ impl DashboardScreen {
                 Line::from("")
             },
             Line::from(""),
-            Line::from(vec![
-                Span::styled(
-                    format!("  {total_clients} Clients"),
-                    Style::default()
-                        .fg(theme::NEON_CYAN)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]),
+            Line::from(vec![Span::styled(
+                format!("  {total_clients} Clients"),
+                Style::default()
+                    .fg(theme::NEON_CYAN)
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(Span::styled(
                 format!("    {wireless} WiFi"),
                 Style::default().fg(theme::DIM_WHITE),
@@ -207,11 +203,7 @@ impl DashboardScreen {
             .map(|ip| ip.to_string())
             .unwrap_or_else(|| "─".into());
 
-        let outdated_fw = self
-            .devices
-            .iter()
-            .filter(|d| d.firmware_updatable)
-            .count();
+        let outdated_fw = self.devices.iter().filter(|d| d.firmware_updatable).count();
 
         let guests = self.clients.iter().filter(|c| c.is_guest).count();
 
@@ -240,16 +232,10 @@ impl DashboardScreen {
                 Span::styled("  WAN IP     ", Style::default().fg(theme::DIM_WHITE)),
                 Span::styled(wan_ip, Style::default().fg(theme::CORAL)),
                 Span::styled("     Guests    ", Style::default().fg(theme::DIM_WHITE)),
-                Span::styled(
-                    format!("{guests}"),
-                    Style::default().fg(theme::DIM_WHITE),
-                ),
+                Span::styled(format!("{guests}"), Style::default().fg(theme::DIM_WHITE)),
             ]),
             Line::from(vec![
-                Span::styled(
-                    "  ISP Latency    ─",
-                    Style::default().fg(theme::DIM_WHITE),
-                ),
+                Span::styled("  ISP Latency    ─", Style::default().fg(theme::DIM_WHITE)),
                 Span::styled("     VPN Clients ", Style::default().fg(theme::DIM_WHITE)),
                 Span::styled(
                     format!("{vpn_clients}"),
@@ -282,7 +268,7 @@ impl DashboardScreen {
             Constraint::Length(1), // TX sparkline
             Constraint::Length(1), // RX label
             Constraint::Length(1), // RX sparkline
-            Constraint::Min(0),   // stats line
+            Constraint::Min(0),    // stats line
         ])
         .split(inner);
 
@@ -402,7 +388,11 @@ impl DashboardScreen {
                 _ => theme::DIM_WHITE,
             };
 
-            let msg: String = evt.message.chars().take(inner.width.saturating_sub(22) as usize).collect();
+            let msg: String = evt
+                .message
+                .chars()
+                .take(inner.width.saturating_sub(22) as usize)
+                .collect();
             lines.push(Line::from(vec![
                 Span::styled(
                     format!("  {time_str}  "),
@@ -510,35 +500,26 @@ impl Component for DashboardScreen {
                 self.devices.len(),
                 self.clients.len()
             );
-            frame.render_widget(
-                Paragraph::new(summary).style(theme::table_row()),
-                inner,
-            );
+            frame.render_widget(Paragraph::new(summary).style(theme::table_row()), inner);
             return;
         }
 
         // Two-column layout: left (25 cols) | right (remaining)
         let left_width = 28u16.min(inner.width / 3);
-        let columns = Layout::horizontal([
-            Constraint::Length(left_width),
-            Constraint::Min(30),
-        ])
-        .split(inner);
+        let columns =
+            Layout::horizontal([Constraint::Length(left_width), Constraint::Min(30)]).split(inner);
 
         // Left column: Health panel + Top Clients
-        let left = Layout::vertical([
-            Constraint::Percentage(50),
-            Constraint::Percentage(50),
-        ])
-        .split(columns[0]);
+        let left = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(columns[0]);
 
         self.render_health(frame, left[0]);
         self.render_top_clients(frame, left[1]);
 
         // Right column: Quick Stats + Bandwidth + Recent Events
         let right = Layout::vertical([
-            Constraint::Length(6),  // Quick Stats
-            Constraint::Length(8),  // Bandwidth
+            Constraint::Length(6), // Quick Stats
+            Constraint::Length(8), // Bandwidth
             Constraint::Min(6),    // Recent Events
         ])
         .split(columns[1]);

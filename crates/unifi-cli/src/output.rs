@@ -5,13 +5,14 @@
 
 use std::io::{self, IsTerminal, Write};
 
-use tabled::{settings::Style, Table, Tabled};
+use tabled::{Table, Tabled, settings::Style};
 
 use crate::cli::{ColorMode, OutputFormat};
 
 // ── Color helpers (SilkCircuit palette) ──────────────────────────────
 
 /// Determine whether color output should be enabled.
+#[allow(dead_code)]
 pub fn should_color(mode: &ColorMode) -> bool {
     match mode {
         ColorMode::Always => true,

@@ -81,7 +81,8 @@ pub async fn handle(
             let found = snap.iter().find(|t| t.id.to_string() == id);
             match found {
                 Some(t) => {
-                    let out = output::render_single(&global.output, t, detail, |t| t.id.to_string());
+                    let out =
+                        output::render_single(&global.output, t, detail, |t| t.id.to_string());
                     output::print_output(&out, global.quiet);
                 }
                 None => {
@@ -89,7 +90,7 @@ pub async fn handle(
                         resource_type: "traffic matching list".into(),
                         identifier: id,
                         list_command: "traffic-lists list".into(),
-                    })
+                    });
                 }
             }
             Ok(())

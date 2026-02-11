@@ -22,7 +22,10 @@ pub fn resolve_device_id(controller: &Controller, identifier: &str) -> Result<En
 }
 
 /// Resolve a device identifier to a MacAddress via snapshot lookup.
-pub fn resolve_device_mac(controller: &Controller, identifier: &str) -> Result<MacAddress, CliError> {
+pub fn resolve_device_mac(
+    controller: &Controller,
+    identifier: &str,
+) -> Result<MacAddress, CliError> {
     let snap = controller.devices_snapshot();
     for device in snap.iter() {
         if device.id.to_string() == identifier || device.mac.to_string() == identifier {
@@ -34,6 +37,7 @@ pub fn resolve_device_mac(controller: &Controller, identifier: &str) -> Result<M
 }
 
 /// Resolve a client identifier (UUID or MAC) to an EntityId via snapshot lookup.
+#[allow(dead_code)]
 pub fn resolve_client_id(controller: &Controller, identifier: &str) -> Result<EntityId, CliError> {
     let snap = controller.clients_snapshot();
     for client in snap.iter() {

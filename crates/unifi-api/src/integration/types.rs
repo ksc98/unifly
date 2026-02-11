@@ -146,6 +146,7 @@ pub struct NetworkResponse {
     /// One of: `USER_DEFINED`, `SYSTEM_DEFINED`, `ORCHESTRATED`.
     pub management: String,
     pub vlan_id: i32,
+    #[serde(default)]
     pub default: bool,
     pub metadata: Value,
 }
@@ -159,6 +160,7 @@ pub struct NetworkDetailsResponse {
     pub enabled: bool,
     pub management: String,
     pub vlan_id: i32,
+    #[serde(default)]
     pub default: bool,
     pub metadata: Value,
     pub dhcp_guarding: Option<Value>,
@@ -239,21 +241,19 @@ pub struct WifiBroadcastCreateUpdate {
 pub struct FirewallPolicyResponse {
     pub id: Uuid,
     pub name: String,
+    #[serde(default)]
     pub description: Option<String>,
     pub enabled: bool,
-    pub index: i32,
     /// Polymorphic action object with `type` discriminator.
     pub action: Value,
-    /// Complex source filter.
-    pub source: Value,
-    /// Complex destination filter.
-    pub destination: Value,
-    pub ip_protocol_scope: Value,
+    pub ip_protocol_scope: Option<Value>,
+    #[serde(default)]
     pub logging_enabled: bool,
-    pub ipsec_filter: Option<String>,
-    pub schedule: Option<Value>,
-    pub connection_state_filter: Option<Vec<String>>,
-    pub metadata: Value,
+    pub metadata: Option<Value>,
+    /// Catch-all for additional / variable fields (index, source, destination,
+    /// sourceFirewallZoneId, destinationFirewallZoneId, schedule, etc.)
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
 }
 
 /// Create or update a firewall policy.

@@ -79,6 +79,7 @@ pub fn tab_inactive() -> Style {
 }
 
 /// Status bar text.
+#[allow(dead_code)]
 pub fn status_bar() -> Style {
     Style::default().fg(DIM_WHITE)
 }
@@ -90,7 +91,5 @@ pub fn key_hint() -> Style {
 
 /// Key hint key character.
 pub fn key_hint_key() -> Style {
-    Style::default()
-        .fg(NEON_CYAN)
-        .add_modifier(Modifier::BOLD)
+    Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD)
 }

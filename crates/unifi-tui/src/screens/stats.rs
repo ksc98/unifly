@@ -2,14 +2,12 @@
 
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::symbols::Marker;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{
-    Axis, Block, BorderType, Borders, Chart, Dataset, GraphType, Paragraph,
-};
-use ratatui::Frame;
+use ratatui::widgets::{Axis, Block, BorderType, Borders, Chart, Dataset, GraphType, Paragraph};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::action::{Action, StatsPeriod};
@@ -70,11 +68,7 @@ impl StatsScreen {
         }
 
         // Determine bounds
-        let x_min = self
-            .bandwidth_tx
-            .first()
-            .map(|(x, _)| *x)
-            .unwrap_or(0.0);
+        let x_min = self.bandwidth_tx.first().map(|(x, _)| *x).unwrap_or(0.0);
         let x_max = self.bandwidth_tx.last().map(|(x, _)| *x).unwrap_or(1.0);
         let y_max = self
             .bandwidth_tx
@@ -263,10 +257,10 @@ impl Component for StatsScreen {
         frame.render_widget(block, area);
 
         let layout = Layout::vertical([
-            Constraint::Length(1), // period selector
+            Constraint::Length(1),      // period selector
             Constraint::Percentage(50), // bandwidth chart
             Constraint::Percentage(50), // bottom row: client count + DPI
-            Constraint::Length(1), // hints
+            Constraint::Length(1),      // hints
         ])
         .split(inner);
 
@@ -274,9 +268,10 @@ impl Component for StatsScreen {
         let period_labels = &["1h", "24h", "7d", "30d"];
         let period_line = sub_tabs::render_sub_tabs(period_labels, self.period_index());
         frame.render_widget(
-            Paragraph::new(vec![Line::from(vec![
-                Span::styled(" Period: ", Style::default().fg(theme::DIM_WHITE)),
-            ])]),
+            Paragraph::new(vec![Line::from(vec![Span::styled(
+                " Period: ",
+                Style::default().fg(theme::DIM_WHITE),
+            )])]),
             Rect {
                 height: 0,
                 ..layout[0]
@@ -288,11 +283,8 @@ impl Component for StatsScreen {
         self.render_bandwidth_chart(frame, layout[1]);
 
         // Bottom row: client count + DPI
-        let bottom = Layout::horizontal([
-            Constraint::Percentage(50),
-            Constraint::Percentage(50),
-        ])
-        .split(layout[2]);
+        let bottom = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(layout[2]);
 
         self.render_client_chart(frame, bottom[0]);
         self.render_dpi_chart(frame, bottom[1]);

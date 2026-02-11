@@ -36,6 +36,7 @@ pub trait Component: Send {
     fn render(&self, frame: &mut Frame, area: Rect);
 
     /// Whether this component currently holds input focus.
+    #[allow(dead_code)]
     fn focused(&self) -> bool {
         false
     }
@@ -44,5 +45,6 @@ pub trait Component: Send {
     fn set_focused(&mut self, _focused: bool) {}
 
     /// Unique identifier for this component (for focus management).
+    #[allow(dead_code)]
     fn id(&self) -> &str;
 }

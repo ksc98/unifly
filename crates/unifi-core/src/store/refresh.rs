@@ -179,15 +179,13 @@ impl DataStore {
             snap.events
                 .into_iter()
                 .map(|e| {
-                    let key = e
-                        .id
-                        .as_ref()
-                        .map(|id| id.to_string())
-                        .unwrap_or_else(|| format!("evt:{}", e.timestamp.timestamp_millis()));
-                    let id = e
-                        .id
-                        .clone()
-                        .unwrap_or_else(|| EntityId::Legacy(key.clone()));
+                    let key =
+                        e.id.as_ref()
+                            .map(|id| id.to_string())
+                            .unwrap_or_else(|| format!("evt:{}", e.timestamp.timestamp_millis()));
+                    let id =
+                        e.id.clone()
+                            .unwrap_or_else(|| EntityId::Legacy(key.clone()));
                     (key, id, e)
                 })
                 .collect(),
@@ -214,6 +212,7 @@ impl DataStore {
     /// already present (Integration data wins on conflict). Events are
     /// not stored in the DataStore — the caller should broadcast them
     /// through a separate event channel.
+    #[allow(dead_code)]
     pub(crate) fn apply_legacy_snapshot(
         &self,
         devices: Vec<Device>,

@@ -24,5 +24,6 @@ pub struct Voucher {
     pub tx_rate_limit_kbps: Option<u64>,
 
     #[serde(skip)]
+    #[allow(dead_code)]
     pub(crate) source: DataSource,
 }

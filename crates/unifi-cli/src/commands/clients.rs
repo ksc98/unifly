@@ -33,7 +33,11 @@ impl From<&Arc<Client>> for ClientRow {
     fn from(c: &Arc<Client>) -> Self {
         Self {
             id: c.id.to_string(),
-            name: c.name.clone().or_else(|| c.hostname.clone()).unwrap_or_default(),
+            name: c
+                .name
+                .clone()
+                .or_else(|| c.hostname.clone())
+                .unwrap_or_default(),
             ip: c.ip.map(|ip| ip.to_string()).unwrap_or_default(),
             mac: c.mac.to_string(),
             ctype: format!("{:?}", c.client_type),
@@ -52,7 +56,10 @@ fn detail(c: &Arc<Client>) -> String {
         format!("Name:      {}", c.name.as_deref().unwrap_or("-")),
         format!("Hostname:  {}", c.hostname.as_deref().unwrap_or("-")),
         format!("MAC:       {}", c.mac),
-        format!("IP:        {}", c.ip.map(|ip| ip.to_string()).unwrap_or_else(|| "-".into())),
+        format!(
+            "IP:        {}",
+            c.ip.map(|ip| ip.to_string()).unwrap_or_else(|| "-".into())
+        ),
         format!("Type:      {:?}", c.client_type),
         format!("Guest:     {}", c.is_guest),
         format!("Blocked:   {}", c.blocked),
@@ -91,12 +98,13 @@ pub async fn handle(
 
         ClientsCommand::Get { client } => {
             let snap = controller.clients_snapshot();
-            let found = snap.iter().find(|c| {
-                c.id.to_string() == client || c.mac.to_string() == client
-            });
+            let found = snap
+                .iter()
+                .find(|c| c.id.to_string() == client || c.mac.to_string() == client);
             match found {
                 Some(c) => {
-                    let out = output::render_single(&global.output, c, detail, |c| c.id.to_string());
+                    let out =
+                        output::render_single(&global.output, c, detail, |c| c.id.to_string());
                     output::print_output(&out, global.quiet);
                 }
                 None => {
@@ -104,7 +112,7 @@ pub async fn handle(
                         resource_type: "client".into(),
                         identifier: client,
                         list_command: "clients list".into(),
-                    })
+                    });
                 }
             }
             Ok(())
@@ -146,9 +154,7 @@ pub async fn handle(
 
         ClientsCommand::Block { mac } => {
             let mac = MacAddress::new(&mac);
-            controller
-                .execute(CoreCommand::BlockClient { mac })
-                .await?;
+            controller.execute(CoreCommand::BlockClient { mac }).await?;
             if !global.quiet {
                 eprintln!("Client blocked");
             }
@@ -168,9 +174,7 @@ pub async fn handle(
 
         ClientsCommand::Kick { mac } => {
             let mac = MacAddress::new(&mac);
-            controller
-                .execute(CoreCommand::KickClient { mac })
-                .await?;
+            controller.execute(CoreCommand::KickClient { mac }).await?;
             if !global.quiet {
                 eprintln!("Client disconnected");
             }
@@ -179,7 +183,10 @@ pub async fn handle(
 
         ClientsCommand::Forget { mac } => {
             let mac_addr = MacAddress::new(&mac);
-            if !util::confirm(&format!("Forget client {mac}? This cannot be undone."), global.yes)? {
+            if !util::confirm(
+                &format!("Forget client {mac}? This cannot be undone."),
+                global.yes,
+            )? {
                 return Ok(());
             }
             controller

@@ -50,7 +50,10 @@ fn detail(d: &Arc<Device>) -> String {
         format!("ID:       {}", d.id),
         format!("Name:     {}", d.name.as_deref().unwrap_or("-")),
         format!("MAC:      {}", d.mac),
-        format!("IP:       {}", d.ip.map(|ip| ip.to_string()).unwrap_or_else(|| "-".into())),
+        format!(
+            "IP:       {}",
+            d.ip.map(|ip| ip.to_string()).unwrap_or_else(|| "-".into())
+        ),
         format!("Model:    {}", d.model.as_deref().unwrap_or("-")),
         format!("Type:     {:?}", d.device_type),
         format!("State:    {:?}", d.state),
@@ -90,12 +93,13 @@ pub async fn handle(
 
         DevicesCommand::Get { device } => {
             let snap = controller.devices_snapshot();
-            let found = snap.iter().find(|d| {
-                d.id.to_string() == device || d.mac.to_string() == device
-            });
+            let found = snap
+                .iter()
+                .find(|d| d.id.to_string() == device || d.mac.to_string() == device);
             match found {
                 Some(d) => {
-                    let out = output::render_single(&global.output, d, detail, |d| d.id.to_string());
+                    let out =
+                        output::render_single(&global.output, d, detail, |d| d.id.to_string());
                     output::print_output(&out, global.quiet);
                 }
                 None => {
@@ -103,13 +107,16 @@ pub async fn handle(
                         resource_type: "device".into(),
                         identifier: device,
                         list_command: "devices list".into(),
-                    })
+                    });
                 }
             }
             Ok(())
         }
 
-        DevicesCommand::Adopt { mac, ignore_limit: _ } => {
+        DevicesCommand::Adopt {
+            mac,
+            ignore_limit: _,
+        } => {
             let mac = MacAddress::new(&mac);
             controller.execute(CoreCommand::AdoptDevice { mac }).await?;
             if !global.quiet {
@@ -132,7 +139,9 @@ pub async fn handle(
 
         DevicesCommand::Restart { device } => {
             let id = util::resolve_device_id(controller, &device)?;
-            controller.execute(CoreCommand::RestartDevice { id }).await?;
+            controller
+                .execute(CoreCommand::RestartDevice { id })
+                .await?;
             if !global.quiet {
                 eprintln!("Device restart initiated");
             }
@@ -165,13 +174,9 @@ pub async fn handle(
             Ok(())
         }
 
-        DevicesCommand::Stats { device: _ } => {
-            util::not_yet_implemented("device real-time stats")
-        }
+        DevicesCommand::Stats { device: _ } => util::not_yet_implemented("device real-time stats"),
 
-        DevicesCommand::Pending(_list) => {
-            util::not_yet_implemented("pending device listing")
-        }
+        DevicesCommand::Pending(_list) => util::not_yet_implemented("pending device listing"),
 
         DevicesCommand::Upgrade { device, url } => {
             let mac = util::resolve_device_mac(controller, &device)?;
@@ -199,17 +204,13 @@ pub async fn handle(
         }
 
         DevicesCommand::Speedtest => {
-            controller
-                .execute(CoreCommand::SpeedtestDevice)
-                .await?;
+            controller.execute(CoreCommand::SpeedtestDevice).await?;
             if !global.quiet {
                 eprintln!("Speed test initiated");
             }
             Ok(())
         }
 
-        DevicesCommand::Tags(_list) => {
-            util::not_yet_implemented("device tags")
-        }
+        DevicesCommand::Tags(_list) => util::not_yet_implemented("device tags"),
     }
 }

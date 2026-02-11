@@ -9,8 +9,8 @@ use std::time::Duration;
 
 use directories::ProjectDirs;
 use figment::{
-    providers::{Env, Format, Serialized, Toml},
     Figment,
+    providers::{Env, Format, Serialized, Toml},
 };
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
@@ -202,11 +202,20 @@ pub fn resolve_profile(
             let (username, password) = resolve_legacy_credentials(profile, profile_name)?;
             AuthCredentials::Credentials { username, password }
         }
+        "hybrid" => {
+            let api_key = resolve_api_key(profile, profile_name, global)?;
+            let (username, password) = resolve_legacy_credentials(profile, profile_name)?;
+            AuthCredentials::Hybrid {
+                api_key,
+                username,
+                password,
+            }
+        }
         other => {
             return Err(CliError::Validation {
                 field: "auth_mode".into(),
-                reason: format!("expected 'integration' or 'legacy', got '{other}'"),
-            })
+                reason: format!("expected 'integration', 'legacy', or 'hybrid', got '{other}'"),
+            });
         }
     };
 
@@ -220,11 +229,7 @@ pub fn resolve_profile(
     };
 
     // 4. Site (flag > env > profile)
-    let site = global
-        .site
-        .as_deref()
-        .unwrap_or(&profile.site)
-        .to_string();
+    let site = global.site.as_deref().unwrap_or(&profile.site).to_string();
 
     // 5. Timeout
     let timeout = Duration::from_secs(global.timeout);

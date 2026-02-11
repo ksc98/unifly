@@ -36,17 +36,6 @@ impl From<&Arc<Site>> for SiteRow {
     }
 }
 
-fn detail(s: &Arc<Site>) -> String {
-    [
-        format!("ID:            {}", s.id),
-        format!("Name:          {}", s.name),
-        format!("Internal Name: {}", s.internal_name),
-        format!("Devices:       {}", s.device_count.map(|c| c.to_string()).unwrap_or_else(|| "-".into())),
-        format!("Clients:       {}", s.client_count.map(|c| c.to_string()).unwrap_or_else(|| "-".into())),
-    ]
-    .join("\n")
-}
-
 // ── Handler ─────────────────────────────────────────────────────────
 
 pub async fn handle(
@@ -78,12 +67,13 @@ pub async fn handle(
         }
 
         SitesCommand::Delete { name } => {
-            if !util::confirm(&format!("Delete site '{name}'? This is destructive."), global.yes)? {
+            if !util::confirm(
+                &format!("Delete site '{name}'? This is destructive."),
+                global.yes,
+            )? {
                 return Ok(());
             }
-            controller
-                .execute(CoreCommand::DeleteSite { name })
-                .await?;
+            controller.execute(CoreCommand::DeleteSite { name }).await?;
             if !global.quiet {
                 eprintln!("Site deleted");
             }

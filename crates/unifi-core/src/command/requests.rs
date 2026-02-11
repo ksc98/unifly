@@ -5,9 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{
-    DnsPolicyType, EntityId, FirewallAction, NetworkPurpose, WifiSecurityMode,
-};
+use crate::model::{DnsPolicyType, EntityId, FirewallAction, NetworkPurpose, WifiSecurityMode};
 
 // ── Network ────────────────────────────────────────────────────────
 

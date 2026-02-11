@@ -28,6 +28,7 @@ pub struct FirewallZone {
     pub origin: Option<EntityOrigin>,
 
     #[serde(skip)]
+    #[allow(dead_code)]
     pub(crate) source: DataSource,
 }
 
@@ -61,6 +62,7 @@ pub struct FirewallPolicy {
     pub origin: Option<EntityOrigin>,
 
     #[serde(skip)]
+    #[allow(dead_code)]
     pub(crate) source: DataSource,
 }
 
@@ -91,5 +93,6 @@ pub struct AclRule {
     pub origin: Option<EntityOrigin>,
 
     #[serde(skip)]
+    #[allow(dead_code)]
     pub(crate) source: DataSource,
 }

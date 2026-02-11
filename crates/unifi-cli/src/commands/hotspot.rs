@@ -49,9 +49,25 @@ fn detail(v: &Arc<Voucher>) -> String {
         format!("Code:       {}", v.code),
         format!("Name:       {}", v.name.as_deref().unwrap_or("-")),
         format!("Expired:    {}", v.expired),
-        format!("Minutes:    {}", v.time_limit_minutes.map(|m: u32| m.to_string()).unwrap_or_else(|| "-".into())),
-        format!("Data Limit: {} MB", v.data_usage_limit_mb.map(|m: u64| m.to_string()).unwrap_or_else(|| "-".into())),
-        format!("Guests:     {}/{}", v.authorized_guest_count.unwrap_or(0), v.authorized_guest_limit.map(|l: u32| l.to_string()).unwrap_or_else(|| "unlimited".into())),
+        format!(
+            "Minutes:    {}",
+            v.time_limit_minutes
+                .map(|m: u32| m.to_string())
+                .unwrap_or_else(|| "-".into())
+        ),
+        format!(
+            "Data Limit: {} MB",
+            v.data_usage_limit_mb
+                .map(|m: u64| m.to_string())
+                .unwrap_or_else(|| "-".into())
+        ),
+        format!(
+            "Guests:     {}/{}",
+            v.authorized_guest_count.unwrap_or(0),
+            v.authorized_guest_limit
+                .map(|l: u32| l.to_string())
+                .unwrap_or_else(|| "unlimited".into())
+        ),
     ]
     .join("\n")
 }
@@ -81,7 +97,8 @@ pub async fn handle(
             let found = snap.iter().find(|v| v.id.to_string() == id);
             match found {
                 Some(v) => {
-                    let out = output::render_single(&global.output, v, detail, |v| v.id.to_string());
+                    let out =
+                        output::render_single(&global.output, v, detail, |v| v.id.to_string());
                     output::print_output(&out, global.quiet);
                 }
                 None => {
@@ -89,7 +106,7 @@ pub async fn handle(
                         resource_type: "voucher".into(),
                         identifier: id,
                         list_command: "hotspot list".into(),
-                    })
+                    });
                 }
             }
             Ok(())
@@ -114,9 +131,7 @@ pub async fn handle(
                 authorized_guest_limit: guest_limit,
             };
 
-            controller
-                .execute(CoreCommand::CreateVouchers(req))
-                .await?;
+            controller.execute(CoreCommand::CreateVouchers(req)).await?;
             if !global.quiet {
                 eprintln!("{count} voucher(s) created");
             }

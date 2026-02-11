@@ -28,10 +28,7 @@ impl From<&Country> for CountryRow {
 
 // ── Handler ─────────────────────────────────────────────────────────
 
-pub async fn handle(
-    controller: &Controller,
-    global: &GlobalOpts,
-) -> Result<(), CliError> {
+pub async fn handle(controller: &Controller, global: &GlobalOpts) -> Result<(), CliError> {
     let countries = controller.list_countries().await?;
     let out = output::render_list(
         &global.output,

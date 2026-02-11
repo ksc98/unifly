@@ -51,9 +51,8 @@ impl TransportConfig {
                 let cert_pem = std::fs::read(path).map_err(|e| {
                     crate::error::Error::Tls(format!("failed to read CA cert: {e}"))
                 })?;
-                let cert = reqwest::Certificate::from_pem(&cert_pem).map_err(|e| {
-                    crate::error::Error::Tls(format!("invalid CA cert: {e}"))
-                })?;
+                let cert = reqwest::Certificate::from_pem(&cert_pem)
+                    .map_err(|e| crate::error::Error::Tls(format!("invalid CA cert: {e}")))?;
                 builder = builder.add_root_certificate(cert);
             }
             TlsMode::DangerAcceptInvalid => {
@@ -88,9 +87,8 @@ impl TransportConfig {
                 let cert_pem = std::fs::read(path).map_err(|e| {
                     crate::error::Error::Tls(format!("failed to read CA cert: {e}"))
                 })?;
-                let cert = reqwest::Certificate::from_pem(&cert_pem).map_err(|e| {
-                    crate::error::Error::Tls(format!("invalid CA cert: {e}"))
-                })?;
+                let cert = reqwest::Certificate::from_pem(&cert_pem)
+                    .map_err(|e| crate::error::Error::Tls(format!("invalid CA cert: {e}")))?;
                 builder = builder.add_root_certificate(cert);
             }
             TlsMode::DangerAcceptInvalid => {

@@ -79,9 +79,7 @@ pub async fn handle(
             if !util::confirm("Archive all alarms?", global.yes)? {
                 return Ok(());
             }
-            controller
-                .execute(CoreCommand::ArchiveAllAlarms)
-                .await?;
+            controller.execute(CoreCommand::ArchiveAllAlarms).await?;
             if !global.quiet {
                 eprintln!("All alarms archived");
             }

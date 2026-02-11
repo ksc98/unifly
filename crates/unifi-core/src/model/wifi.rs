@@ -51,5 +51,6 @@ pub struct WifiBroadcast {
     pub origin: Option<EntityOrigin>,
 
     #[serde(skip)]
+    #[allow(dead_code)]
     pub(crate) source: DataSource,
 }

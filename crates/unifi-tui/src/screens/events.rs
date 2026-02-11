@@ -4,11 +4,11 @@ use std::sync::Arc;
 
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
-use ratatui::Frame;
 use tokio::sync::mpsc::UnboundedSender;
 
 use unifi_core::Event;
@@ -38,6 +38,7 @@ impl EventsScreen {
         }
     }
 
+    #[allow(dead_code)]
     fn visible_count(&self, area_height: u16) -> usize {
         area_height.saturating_sub(1) as usize
     }
@@ -131,7 +132,7 @@ impl Component for EventsScreen {
 
         let layout = Layout::vertical([
             Constraint::Length(1), // status line
-            Constraint::Min(1),   // events
+            Constraint::Min(1),    // events
             Constraint::Length(1), // hints
         ])
         .split(inner);
@@ -174,10 +175,7 @@ impl Component for EventsScreen {
                 _ => theme::DIM_WHITE,
             };
             let category = format!("{:?}", event.category);
-            let msg_width = layout[1]
-                .width
-                .saturating_sub(50)
-                .max(10) as usize;
+            let msg_width = layout[1].width.saturating_sub(50).max(10) as usize;
             let msg: String = event.message.chars().take(msg_width).collect();
 
             lines.push(Line::from(vec![

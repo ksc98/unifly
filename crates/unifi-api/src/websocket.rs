@@ -203,7 +203,9 @@ async fn ws_loop(
     // Note: tracing after the loop is technically reachable (via break)
     // but the compiler's macro expansion for select! can't prove it.
     #[allow(unreachable_code)]
-    { tracing::debug!("WebSocket loop exiting"); }
+    {
+        tracing::debug!("WebSocket loop exiting");
+    }
 }
 
 // ── Single connection lifecycle ──────────────────────────────────────
@@ -301,10 +303,7 @@ struct WsMeta {
 }
 
 /// Parse a WebSocket text frame and broadcast any events found inside.
-fn parse_and_broadcast(
-    text: &str,
-    event_tx: &broadcast::Sender<Arc<UnifiEvent>>,
-) {
+fn parse_and_broadcast(text: &str, event_tx: &broadcast::Sender<Arc<UnifiEvent>>) {
     let envelope: WsEnvelope = match serde_json::from_str(text) {
         Ok(e) => e,
         Err(e) => {
@@ -344,25 +343,14 @@ fn parse_and_broadcast(
 /// or the message is a sync/unknown type.
 fn event_from_raw(msg_type: &str, data: &serde_json::Value) -> UnifiEvent {
     UnifiEvent {
-        key: data["key"]
-            .as_str()
-            .unwrap_or(msg_type)
-            .to_string(),
-        subsystem: data["subsystem"]
-            .as_str()
-            .unwrap_or("unknown")
-            .to_string(),
-        site_id: data["site_id"]
-            .as_str()
-            .unwrap_or("")
-            .to_string(),
+        key: data["key"].as_str().unwrap_or(msg_type).to_string(),
+        subsystem: data["subsystem"].as_str().unwrap_or("unknown").to_string(),
+        site_id: data["site_id"].as_str().unwrap_or("").to_string(),
         message: data["msg"]
             .as_str()
             .or_else(|| data["message"].as_str())
             .map(String::from),
-        datetime: data["datetime"]
-            .as_str()
-            .map(String::from),
+        datetime: data["datetime"].as_str().map(String::from),
         extra: data.clone(),
     }
 }
@@ -375,10 +363,7 @@ fn event_from_raw(msg_type: &str, data: &serde_json::Value) -> UnifiEvent {
 ///
 /// Jitter is +-25% to spread out reconnection storms from multiple clients.
 fn calculate_backoff(attempt: u32, config: &ReconnectConfig) -> Duration {
-    let base = config
-        .initial_delay
-        .as_secs_f64()
-        * 2.0_f64.powi(attempt as i32);
+    let base = config.initial_delay.as_secs_f64() * 2.0_f64.powi(attempt as i32);
     let capped = base.min(config.max_delay.as_secs_f64());
 
     // Deterministic "jitter" seeded from the attempt number.
@@ -448,7 +433,10 @@ mod tests {
         assert_eq!(event.key, "EVT_WU_Connected");
         assert_eq!(event.subsystem, "wlan");
         assert_eq!(event.site_id, "abc123");
-        assert_eq!(event.message.as_deref(), Some("User[aa:bb:cc:dd:ee:ff] connected"));
+        assert_eq!(
+            event.message.as_deref(),
+            Some("User[aa:bb:cc:dd:ee:ff] connected")
+        );
         assert_eq!(event.datetime.as_deref(), Some("2026-02-10T12:00:00Z"));
     }
 

@@ -151,7 +151,9 @@ pub struct Device {
     pub origin: Option<EntityOrigin>,
 
     #[serde(skip)]
+    #[allow(dead_code)]
     pub(crate) source: DataSource,
     #[serde(skip)]
+    #[allow(dead_code)]
     pub(crate) updated_at: DateTime<Utc>,
 }

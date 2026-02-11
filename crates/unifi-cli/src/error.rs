@@ -1,6 +1,10 @@
 //! CLI error types with miette diagnostics.
 //!
 //! Maps `CoreError` variants into user-facing errors with actionable help text.
+// thiserror + miette derive macros generate Display impls where struct fields
+// appear as "assigned but never read" — the fields ARE used in format strings
+// but clippy can't see through the macro expansion.
+#![allow(unused_assignments)]
 
 use miette::Diagnostic;
 use thiserror::Error;
@@ -9,7 +13,6 @@ use unifi_core::CoreError;
 
 /// Exit codes per the CLI spec.
 pub mod exit_code {
-    pub const SUCCESS: i32 = 0;
     pub const GENERAL: i32 = 1;
     pub const USAGE: i32 = 2;
     pub const AUTH: i32 = 3;
@@ -21,10 +24,9 @@ pub mod exit_code {
 }
 
 #[derive(Debug, Error, Diagnostic)]
-#[allow(dead_code, unused_assignments)]
+#[allow(dead_code)]
 pub enum CliError {
     // ── Connection ───────────────────────────────────────────────────
-
     #[error("Could not connect to controller at {url}")]
     #[diagnostic(
         code(unifi::connection_failed),
@@ -51,8 +53,7 @@ pub enum CliError {
     TlsError { url: String },
 
     // ── Authentication ───────────────────────────────────────────────
-
-    #[error("Authentication failed")]
+    #[error("Authentication failed: {message}")]
     #[diagnostic(
         code(unifi::auth_failed),
         help(
@@ -61,7 +62,7 @@ pub enum CliError {
              Run: unifi config set-password --profile {profile}"
         )
     )]
-    AuthFailed { profile: String },
+    AuthFailed { profile: String, message: String },
 
     #[error("No credentials configured for profile '{profile}'")]
     #[diagnostic(
@@ -74,7 +75,6 @@ pub enum CliError {
     NoCredentials { profile: String },
 
     // ── Resources ────────────────────────────────────────────────────
-
     #[error("{resource_type} '{identifier}' not found")]
     #[diagnostic(
         code(unifi::not_found),
@@ -94,8 +94,7 @@ pub enum CliError {
     },
 
     // ── API ──────────────────────────────────────────────────────────
-
-    #[error("API error ({code}): {message}")]
+    #[error("API error{}: {message}", if code.is_empty() { String::new() } else { format!(" ({code})") })]
     #[diagnostic(code(unifi::api_error))]
     ApiError {
         code: String,
@@ -104,7 +103,6 @@ pub enum CliError {
     },
 
     // ── Unsupported ──────────────────────────────────────────────────
-
     #[error("Operation '{operation}' is not supported with the current auth mode")]
     #[diagnostic(
         code(unifi::unsupported),
@@ -123,13 +121,11 @@ pub enum CliError {
     NotYetImplemented { feature: String },
 
     // ── Validation ───────────────────────────────────────────────────
-
     #[error("Invalid value for {field}: {reason}")]
     #[diagnostic(code(unifi::validation))]
     Validation { field: String, reason: String },
 
     // ── Configuration ────────────────────────────────────────────────
-
     #[error("Profile '{name}' not found in configuration")]
     #[diagnostic(
         code(unifi::profile_not_found),
@@ -155,7 +151,6 @@ pub enum CliError {
     Config(Box<figment::Error>),
 
     // ── Interactive ──────────────────────────────────────────────────
-
     #[error("Destructive operation '{action}' requires confirmation")]
     #[diagnostic(
         code(unifi::confirmation_required),
@@ -164,7 +159,6 @@ pub enum CliError {
     NonInteractiveRequiresYes { action: String },
 
     // ── Timeout ──────────────────────────────────────────────────────
-
     #[error("Request timed out after {seconds}s")]
     #[diagnostic(
         code(unifi::timeout),
@@ -173,7 +167,6 @@ pub enum CliError {
     Timeout { seconds: u64 },
 
     // ── IO / Serialization ────────────────────────────────────────────
-
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
@@ -214,8 +207,9 @@ impl From<CoreError> for CliError {
                 source: reason.into(),
             },
 
-            CoreError::AuthenticationFailed { message: _ } => CliError::AuthFailed {
+            CoreError::AuthenticationFailed { message } => CliError::AuthFailed {
                 profile: "current".into(),
+                message,
             },
 
             CoreError::ControllerDisconnected => CliError::ConnectionFailed {

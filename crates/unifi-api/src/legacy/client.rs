@@ -5,15 +5,29 @@
 // (devices, clients, etc.) are implemented as inherent methods via
 // separate files to keep this module focused on transport mechanics.
 
-use serde::de::DeserializeOwned;
+use std::sync::RwLock;
+
 use serde::Serialize;
-use tracing::debug;
+use serde::de::DeserializeOwned;
+use tracing::{debug, trace};
 use url::Url;
 
 use crate::auth::ControllerPlatform;
 use crate::error::Error;
 use crate::legacy::models::LegacyResponse;
 use crate::transport::TransportConfig;
+
+/// UniFi OS wraps some errors as `{"error":{"code":N,"message":"..."}}` with HTTP 200.
+#[derive(serde::Deserialize)]
+struct UnifiOsError {
+    error: Option<UnifiOsErrorInner>,
+}
+
+#[derive(serde::Deserialize)]
+struct UnifiOsErrorInner {
+    code: u16,
+    message: Option<String>,
+}
 
 /// Raw HTTP client for the UniFi controller's legacy API.
 ///
@@ -26,6 +40,10 @@ pub struct LegacyClient {
     base_url: Url,
     site: String,
     platform: ControllerPlatform,
+    /// CSRF token for UniFi OS. Required on all POST/PUT/DELETE requests
+    /// through the `/proxy/network/` path. Captured from login response
+    /// headers and rotated via `X-Updated-CSRF-Token`.
+    csrf_token: RwLock<Option<String>>,
 }
 
 impl LegacyClient {
@@ -47,7 +65,13 @@ impl LegacyClient {
             transport.clone().with_cookie_jar()
         };
         let http = config.build_client()?;
-        Ok(Self { http, base_url, site, platform })
+        Ok(Self {
+            http,
+            base_url,
+            site,
+            platform,
+            csrf_token: RwLock::new(None),
+        })
     }
 
     /// Create a legacy client with a pre-built `reqwest::Client`.
@@ -65,6 +89,7 @@ impl LegacyClient {
             base_url,
             site,
             platform,
+            csrf_token: RwLock::new(None),
         }
     }
 
@@ -88,6 +113,38 @@ impl LegacyClient {
         self.platform
     }
 
+    // ── CSRF token management ─────────────────────────────────────────
+
+    /// Store a CSRF token (captured from login response headers).
+    pub(crate) fn set_csrf_token(&self, token: String) {
+        debug!("storing CSRF token");
+        *self.csrf_token.write().unwrap() = Some(token);
+    }
+
+    /// Update CSRF token if the response contains a rotated value.
+    fn update_csrf_from_response(&self, headers: &reqwest::header::HeaderMap) {
+        // UniFi OS may rotate tokens — prefer the updated one.
+        let new_token = headers
+            .get("X-Updated-CSRF-Token")
+            .or_else(|| headers.get("x-csrf-token"))
+            .and_then(|v| v.to_str().ok())
+            .map(String::from);
+
+        if let Some(token) = new_token {
+            trace!("CSRF token rotated");
+            *self.csrf_token.write().unwrap() = Some(token);
+        }
+    }
+
+    /// Apply the stored CSRF token to a request builder.
+    fn apply_csrf(&self, builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        let guard = self.csrf_token.read().unwrap();
+        match guard.as_deref() {
+            Some(token) => builder.header("X-CSRF-Token", token),
+            None => builder,
+        }
+    }
+
     // ── URL builders ─────────────────────────────────────────────────
 
     /// Build a full URL for a controller-level API path.
@@ -96,7 +153,9 @@ impl LegacyClient {
     /// For example, on UniFi OS: `https://host/proxy/network/api/{path}`
     pub(crate) fn api_url(&self, path: &str) -> Url {
         let prefix = self.platform.legacy_prefix().unwrap_or("");
-        let full = format!("{}{}/api/{}", self.base_url, prefix.trim_end_matches('/'), path);
+        let base = self.base_url.as_str().trim_end_matches('/');
+        let prefix = prefix.trim_end_matches('/');
+        let full = format!("{base}{prefix}/api/{path}");
         Url::parse(&full).expect("invalid API URL")
     }
 
@@ -105,13 +164,9 @@ impl LegacyClient {
     /// Most legacy endpoints are site-scoped: stat/device, cmd/devmgr, etc.
     pub(crate) fn site_url(&self, path: &str) -> Url {
         let prefix = self.platform.legacy_prefix().unwrap_or("");
-        let full = format!(
-            "{}{}/api/s/{}/{}",
-            self.base_url,
-            prefix.trim_end_matches('/'),
-            self.site,
-            path
-        );
+        let base = self.base_url.as_str().trim_end_matches('/');
+        let prefix = prefix.trim_end_matches('/');
+        let full = format!("{base}{prefix}/api/s/{}/{path}", self.site);
         Url::parse(&full).expect("invalid site URL")
     }
 
@@ -121,12 +176,7 @@ impl LegacyClient {
     pub(crate) async fn get<T: DeserializeOwned>(&self, url: Url) -> Result<Vec<T>, Error> {
         debug!("GET {}", url);
 
-        let resp = self
-            .http
-            .get(url)
-            .send()
-            .await
-            .map_err(Error::Transport)?;
+        let resp = self.http.get(url).send().await.map_err(Error::Transport)?;
 
         self.parse_envelope(resp).await
     }
@@ -139,18 +189,14 @@ impl LegacyClient {
     ) -> Result<Vec<T>, Error> {
         debug!("POST {}", url);
 
-        let resp = self
-            .http
-            .post(url)
-            .json(body)
-            .send()
-            .await
-            .map_err(Error::Transport)?;
+        let builder = self.apply_csrf(self.http.post(url).json(body));
+        let resp = builder.send().await.map_err(Error::Transport)?;
 
         self.parse_envelope(resp).await
     }
 
     /// Send a PUT request with JSON body and unwrap the legacy envelope.
+    #[allow(dead_code)]
     pub(crate) async fn put<T: DeserializeOwned>(
         &self,
         url: Url,
@@ -158,38 +204,36 @@ impl LegacyClient {
     ) -> Result<Vec<T>, Error> {
         debug!("PUT {}", url);
 
-        let resp = self
-            .http
-            .put(url)
-            .json(body)
-            .send()
-            .await
-            .map_err(Error::Transport)?;
+        let builder = self.apply_csrf(self.http.put(url).json(body));
+        let resp = builder.send().await.map_err(Error::Transport)?;
 
         self.parse_envelope(resp).await
     }
 
     /// Send a DELETE request and unwrap the legacy envelope.
+    #[allow(dead_code)]
     pub(crate) async fn delete<T: DeserializeOwned>(&self, url: Url) -> Result<Vec<T>, Error> {
         debug!("DELETE {}", url);
 
-        let resp = self
-            .http
-            .delete(url)
-            .send()
-            .await
-            .map_err(Error::Transport)?;
+        let builder = self.apply_csrf(self.http.delete(url));
+        let resp = builder.send().await.map_err(Error::Transport)?;
 
         self.parse_envelope(resp).await
     }
 
     /// Parse the `{ meta, data }` envelope, returning `data` on success
     /// or an `Error::LegacyApi` if `meta.rc != "ok"`.
+    ///
+    /// Also handles UniFi OS error responses that use a different shape:
+    /// `{"error": {"code": 403, "message": "..."}}` (returned with HTTP 200).
     async fn parse_envelope<T: DeserializeOwned>(
         &self,
         resp: reqwest::Response,
     ) -> Result<Vec<T>, Error> {
         let status = resp.status();
+
+        // Capture any CSRF token rotation before consuming the response.
+        self.update_csrf_from_response(resp.headers());
 
         if status == reqwest::StatusCode::UNAUTHORIZED {
             return Err(Error::Authentication {
@@ -197,13 +241,42 @@ impl LegacyClient {
             });
         }
 
+        if status == reqwest::StatusCode::FORBIDDEN {
+            return Err(Error::LegacyApi {
+                message: "insufficient permissions (HTTP 403)".into(),
+            });
+        }
+
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(Error::LegacyApi {
+                message: format!("HTTP {status}: {}", &body[..body.len().min(200)]),
+            });
+        }
+
         let body = resp.text().await.map_err(Error::Transport)?;
 
-        let envelope: LegacyResponse<T> =
-            serde_json::from_str(&body).map_err(|e| Error::Deserialization {
-                message: e.to_string(),
+        // UniFi OS sometimes returns `{"error":{"code":N,"message":"..."}}` with HTTP 200.
+        if let Ok(wrapper) = serde_json::from_str::<UnifiOsError>(&body) {
+            if let Some(err) = wrapper.error {
+                let msg = err.message.unwrap_or_default();
+                return Err(if err.code == 401 {
+                    Error::Authentication { message: msg }
+                } else {
+                    Error::LegacyApi {
+                        message: format!("UniFi OS error {}: {msg}", err.code),
+                    }
+                });
+            }
+        }
+
+        let envelope: LegacyResponse<T> = serde_json::from_str(&body).map_err(|e| {
+            let preview = &body[..body.len().min(200)];
+            Error::Deserialization {
+                message: format!("{e} (body preview: {preview:?})"),
                 body: body.clone(),
-            })?;
+            }
+        })?;
 
         match envelope.meta.rc.as_str() {
             "ok" => Ok(envelope.data),

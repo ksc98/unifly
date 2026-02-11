@@ -17,10 +17,7 @@ impl LegacyClient {
     ///
     /// The `interval` parameter should be one of: `"5minutes"`, `"hourly"`, `"daily"`.
     /// Returns loosely-typed JSON because the field set varies by report type.
-    pub async fn get_site_stats(
-        &self,
-        interval: &str,
-    ) -> Result<Vec<serde_json::Value>, Error> {
+    pub async fn get_site_stats(&self, interval: &str) -> Result<Vec<serde_json::Value>, Error> {
         let path = format!("stat/report/{}.site", interval);
         let url = self.site_url(&path);
         debug!(interval, "fetching site stats");
@@ -85,10 +82,7 @@ impl LegacyClient {
     /// Fetch gateway historical statistics.
     ///
     /// `POST /api/s/{site}/stat/report/{interval}.gw`
-    pub async fn get_gateway_stats(
-        &self,
-        interval: &str,
-    ) -> Result<Vec<serde_json::Value>, Error> {
+    pub async fn get_gateway_stats(&self, interval: &str) -> Result<Vec<serde_json::Value>, Error> {
         let path = format!("stat/report/{}.gw", interval);
         let url = self.site_url(&path);
         debug!(interval, "fetching gateway stats");
@@ -105,10 +99,7 @@ impl LegacyClient {
     /// `GET /api/s/{site}/stat/sitedpi`
     ///
     /// The `group_by` parameter selects the DPI grouping: `"by-app"` or `"by-cat"`.
-    pub async fn get_dpi_stats(
-        &self,
-        group_by: &str,
-    ) -> Result<Vec<serde_json::Value>, Error> {
+    pub async fn get_dpi_stats(&self, group_by: &str) -> Result<Vec<serde_json::Value>, Error> {
         let endpoint = match group_by {
             "by-cat" => "stat/sitedpi",
             _ => "stat/stadpi",

@@ -37,9 +37,7 @@ impl From<&HealthSummary> for HealthRow {
 // ── Detail views ────────────────────────────────────────────────────
 
 fn system_info_detail(info: &SystemInfo) -> String {
-    let mut lines = vec![
-        format!("Version:  {}", info.version),
-    ];
+    let mut lines = vec![format!("Version:  {}", info.version)];
     if let Some(ref name) = info.controller_name {
         lines.insert(0, format!("Name:     {name}"));
     }
@@ -56,7 +54,10 @@ fn system_info_detail(info: &SystemInfo) -> String {
         lines.push(format!("Uptime:   {}s", uptime));
     }
     if let Some(update) = info.update_available {
-        lines.push(format!("Update:   {}", if update { "available" } else { "up to date" }));
+        lines.push(format!(
+            "Update:   {}",
+            if update { "available" } else { "up to date" }
+        ));
     }
     lines.join("\n")
 }
@@ -73,7 +74,10 @@ fn sysinfo_detail(info: &SysInfo) -> String {
         lines.push(format!("IPs:        {}", info.ip_addrs.join(", ")));
     }
     if let Some(autobackup) = info.autobackup {
-        lines.push(format!("Autobackup: {}", if autobackup { "yes" } else { "no" }));
+        lines.push(format!(
+            "Autobackup: {}",
+            if autobackup { "yes" } else { "no" }
+        ));
     }
     if let Some(retention) = info.data_retention_days {
         lines.push(format!("Retention:  {} days", retention));
@@ -94,12 +98,9 @@ pub async fn handle(
     match args.command {
         SystemCommand::Info => {
             let info = controller.get_system_info().await?;
-            let out = output::render_single(
-                &global.output,
-                &info,
-                system_info_detail,
-                |i| i.version.clone(),
-            );
+            let out = output::render_single(&global.output, &info, system_info_detail, |i| {
+                i.version.clone()
+            });
             output::print_output(&out, global.quiet);
             Ok(())
         }
@@ -118,12 +119,8 @@ pub async fn handle(
 
         SystemCommand::Sysinfo => {
             let info = controller.get_sysinfo().await?;
-            let out = output::render_single(
-                &global.output,
-                &info,
-                sysinfo_detail,
-                |_| "sysinfo".into(),
-            );
+            let out =
+                output::render_single(&global.output, &info, sysinfo_detail, |_| "sysinfo".into());
             output::print_output(&out, global.quiet);
             Ok(())
         }
@@ -136,9 +133,7 @@ pub async fn handle(
             if !util::confirm("Reboot controller hardware?", global.yes)? {
                 return Ok(());
             }
-            controller
-                .execute(CoreCommand::RebootController)
-                .await?;
+            controller.execute(CoreCommand::RebootController).await?;
             if !global.quiet {
                 eprintln!("Controller reboot initiated");
             }
@@ -146,12 +141,13 @@ pub async fn handle(
         }
 
         SystemCommand::Poweroff => {
-            if !util::confirm("Power off controller hardware? This cannot be undone remotely.", global.yes)? {
+            if !util::confirm(
+                "Power off controller hardware? This cannot be undone remotely.",
+                global.yes,
+            )? {
                 return Ok(());
             }
-            controller
-                .execute(CoreCommand::PoweroffController)
-                .await?;
+            controller.execute(CoreCommand::PoweroffController).await?;
             if !global.quiet {
                 eprintln!("Controller power-off initiated");
             }
@@ -167,9 +163,7 @@ async fn handle_backup(
 ) -> Result<(), CliError> {
     match cmd {
         BackupCommand::Create => {
-            controller
-                .execute(CoreCommand::CreateBackup)
-                .await?;
+            controller.execute(CoreCommand::CreateBackup).await?;
             if !global.quiet {
                 eprintln!("Backup created");
             }

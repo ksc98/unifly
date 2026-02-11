@@ -4,12 +4,12 @@ use std::sync::Arc;
 
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::canvas::{Canvas, Context, Rectangle};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
-use ratatui::Frame;
 use tokio::sync::mpsc::UnboundedSender;
 
 use unifi_core::{Device, DeviceState, DeviceType};
@@ -19,6 +19,7 @@ use crate::component::Component;
 use crate::theme;
 
 /// A positioned device node on the topology canvas.
+#[allow(dead_code)]
 struct TopoNode {
     label: String,
     ip: String,
@@ -292,19 +293,20 @@ impl Component for TopologyScreen {
                         ctx.print(
                             node.x + 1.0,
                             node.y + 0.5,
-                            Span::styled(
-                                node.ip.clone(),
-                                Style::default().fg(theme::DIM_WHITE),
-                            ),
+                            Span::styled(node.ip.clone(), Style::default().fg(theme::DIM_WHITE)),
                         );
                     }
                 }
 
                 // Draw connection lines from gateways to switches
-                let gateway_nodes: Vec<_> =
-                    nodes.iter().filter(|n| n.device_type == DeviceType::Gateway).collect();
-                let switch_nodes: Vec<_> =
-                    nodes.iter().filter(|n| n.device_type == DeviceType::Switch).collect();
+                let gateway_nodes: Vec<_> = nodes
+                    .iter()
+                    .filter(|n| n.device_type == DeviceType::Gateway)
+                    .collect();
+                let switch_nodes: Vec<_> = nodes
+                    .iter()
+                    .filter(|n| n.device_type == DeviceType::Switch)
+                    .collect();
                 let ap_nodes: Vec<_> = nodes
                     .iter()
                     .filter(|n| n.device_type == DeviceType::AccessPoint)

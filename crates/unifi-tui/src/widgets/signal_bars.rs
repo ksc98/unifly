@@ -14,6 +14,7 @@ use crate::theme;
 /// | `▂▄  ` | -60 to -70| Electric Yellow|
 /// | `▂   ` | -70 to -80| Coral         |
 /// | `·   ` | < -80     | Error Red     |
+#[allow(dead_code)]
 pub fn signal_span(dbm: Option<i32>) -> Span<'static> {
     let Some(dbm) = dbm else {
         return Span::styled("····", Style::default().fg(theme::BORDER_GRAY));
@@ -35,6 +36,7 @@ pub fn signal_span(dbm: Option<i32>) -> Span<'static> {
 }
 
 /// Returns a styled `Span` for wired clients (no signal data).
+#[allow(dead_code)]
 pub fn wired_span() -> Span<'static> {
     Span::styled("····", Style::default().fg(theme::BORDER_GRAY))
 }

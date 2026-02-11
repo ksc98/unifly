@@ -11,7 +11,6 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum CoreError {
     // ── Connection errors ────────────────────────────────────────────
-
     #[error("Cannot connect to controller at {url}: {reason}")]
     ConnectionFailed { url: String, reason: String },
 
@@ -25,7 +24,6 @@ pub enum CoreError {
     Timeout { timeout_secs: u64 },
 
     // ── Data errors ──────────────────────────────────────────────────
-
     #[error("Device not found: {identifier}")]
     DeviceNotFound { identifier: String },
 
@@ -45,12 +43,8 @@ pub enum CoreError {
     },
 
     // ── Operation errors ─────────────────────────────────────────────
-
     #[error("Operation not supported: {operation} (requires {required})")]
-    Unsupported {
-        operation: String,
-        required: String,
-    },
+    Unsupported { operation: String, required: String },
 
     #[error("Operation rejected by controller: {message}")]
     Rejected { message: String },
@@ -62,7 +56,6 @@ pub enum CoreError {
     OperationFailed { message: String },
 
     // ── API errors (wrapped, not exposed raw) ────────────────────────
-
     #[error("API error: {message}")]
     Api {
         message: String,
@@ -73,12 +66,10 @@ pub enum CoreError {
     },
 
     // ── Configuration errors ─────────────────────────────────────────
-
     #[error("Configuration error: {message}")]
     Config { message: String },
 
     // ── Internal errors ──────────────────────────────────────────────
-
     #[error("Internal error: {0}")]
     Internal(String),
 }
@@ -119,10 +110,7 @@ impl From<unifi_api::Error> for CoreError {
                 } else if e.status().map(|s| s.as_u16()) == Some(404) {
                     CoreError::NotFound {
                         entity_type: "resource".into(),
-                        identifier: e
-                            .url()
-                            .map(|u| u.path().to_string())
-                            .unwrap_or_default(),
+                        identifier: e.url().map(|u| u.path().to_string()).unwrap_or_default(),
                     }
                 } else {
                     CoreError::Api {
@@ -135,9 +123,7 @@ impl From<unifi_api::Error> for CoreError {
             unifi_api::Error::InvalidUrl(e) => CoreError::Config {
                 message: format!("Invalid URL: {e}"),
             },
-            unifi_api::Error::Timeout { timeout_secs } => {
-                CoreError::Timeout { timeout_secs }
-            }
+            unifi_api::Error::Timeout { timeout_secs } => CoreError::Timeout { timeout_secs },
             unifi_api::Error::Tls(msg) => CoreError::ConnectionFailed {
                 url: String::new(),
                 reason: format!("TLS error: {msg}"),
@@ -165,12 +151,10 @@ impl From<unifi_api::Error> for CoreError {
                 url: String::new(),
                 reason: format!("WebSocket connection failed: {reason}"),
             },
-            unifi_api::Error::WebSocketClosed { code, reason } => {
-                CoreError::ConnectionFailed {
-                    url: String::new(),
-                    reason: format!("WebSocket closed (code {code}): {reason}"),
-                }
-            }
+            unifi_api::Error::WebSocketClosed { code, reason } => CoreError::ConnectionFailed {
+                url: String::new(),
+                reason: format!("WebSocket closed (code {code}): {reason}"),
+            },
             unifi_api::Error::Deserialization { message, body: _ } => {
                 CoreError::Internal(format!("Deserialization error: {message}"))
             }

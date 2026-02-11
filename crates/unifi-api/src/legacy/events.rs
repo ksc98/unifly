@@ -17,10 +17,7 @@ impl LegacyClient {
     ///
     /// If `count` is provided, limits the number of events returned
     /// by appending `?_limit={count}` to the request.
-    pub async fn list_events(
-        &self,
-        count: Option<u32>,
-    ) -> Result<Vec<LegacyEvent>, Error> {
+    pub async fn list_events(&self, count: Option<u32>) -> Result<Vec<LegacyEvent>, Error> {
         let path = match count {
             Some(n) => format!("stat/event?_limit={}", n),
             None => "stat/event".to_string(),
@@ -45,10 +42,15 @@ impl LegacyClient {
     pub async fn archive_alarm(&self, id: &str) -> Result<(), Error> {
         let url = self.site_url("cmd/evtmgr");
         debug!(id, "archiving alarm");
-        let _: Vec<serde_json::Value> = self.post(url, &json!({
-            "cmd": "archive-alarm",
-            "_id": id,
-        })).await?;
+        let _: Vec<serde_json::Value> = self
+            .post(
+                url,
+                &json!({
+                    "cmd": "archive-alarm",
+                    "_id": id,
+                }),
+            )
+            .await?;
         Ok(())
     }
 }

@@ -19,7 +19,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
         with legacy API fallback for features not yet in the official spec.",
     propagate_version = true,
     subcommand_required = true,
-    arg_required_else_help = true,
+    arg_required_else_help = true
 )]
 pub struct Cli {
     #[command(flatten)]
@@ -50,7 +50,13 @@ pub struct GlobalOpts {
     pub api_key: Option<String>,
 
     /// Output format
-    #[arg(long, short = 'o', env = "UNIFI_OUTPUT", default_value = "table", global = true)]
+    #[arg(
+        long,
+        short = 'o',
+        env = "UNIFI_OUTPUT",
+        default_value = "table",
+        global = true
+    )]
     pub output: OutputFormat,
 
     /// When to use color output

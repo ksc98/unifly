@@ -357,10 +357,14 @@ fn map_origin(management: &str) -> Option<EntityOrigin> {
     }
 }
 
-/// Extract origin from a `metadata` JSON object's `management` field.
+/// Extract origin from a `metadata` JSON object.
+///
+/// Checks `metadata.origin` (real API) and `metadata.management` (spec)
+/// since the field name varies by firmware version.
 fn origin_from_metadata(metadata: &serde_json::Value) -> Option<EntityOrigin> {
     metadata
-        .get("management")
+        .get("origin")
+        .or_else(|| metadata.get("management"))
         .and_then(|v| v.as_str())
         .and_then(map_origin)
 }
@@ -595,34 +599,74 @@ impl From<integration_types::FirewallPolicyResponse> for FirewallPolicy {
             })
             .unwrap_or(FirewallAction::Block);
 
+        let index = p
+            .extra
+            .get("index")
+            .and_then(|v| v.as_i64())
+            .map(|i| i as i32);
+
+        // Zone IDs may be in flat fields (real API) or nested source/destination objects (spec)
+        let source_zone_id = p
+            .extra
+            .get("sourceFirewallZoneId")
+            .and_then(|v| v.as_str())
+            .or_else(|| {
+                p.extra
+                    .get("source")
+                    .and_then(|v| v.get("zoneId"))
+                    .and_then(|v| v.as_str())
+            })
+            .and_then(|s| uuid::Uuid::parse_str(s).ok())
+            .map(EntityId::Uuid);
+
+        let destination_zone_id = p
+            .extra
+            .get("destinationFirewallZoneId")
+            .and_then(|v| v.as_str())
+            .or_else(|| {
+                p.extra
+                    .get("destination")
+                    .and_then(|v| v.get("zoneId"))
+                    .and_then(|v| v.as_str())
+            })
+            .and_then(|s| uuid::Uuid::parse_str(s).ok())
+            .map(EntityId::Uuid);
+
+        let ipsec_mode = p
+            .extra
+            .get("ipsecFilter")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+
+        let connection_states = p
+            .extra
+            .get("connectionStateFilter")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+
         FirewallPolicy {
             id: EntityId::Uuid(p.id),
             name: p.name,
             description: p.description,
             enabled: p.enabled,
-            index: Some(p.index),
+            index,
             action,
             ip_version: crate::model::firewall::IpVersion::Both,
-            source_zone_id: p
-                .source
-                .get("zoneId")
-                .and_then(|v| v.as_str())
-                .and_then(|s| uuid::Uuid::parse_str(s).ok())
-                .map(EntityId::Uuid),
-            destination_zone_id: p
-                .destination
-                .get("zoneId")
-                .and_then(|v| v.as_str())
-                .and_then(|s| uuid::Uuid::parse_str(s).ok())
-                .map(EntityId::Uuid),
+            source_zone_id,
+            destination_zone_id,
             source_summary: None,
             destination_summary: None,
             protocol_summary: None,
             schedule: None,
-            ipsec_mode: p.ipsec_filter,
-            connection_states: p.connection_state_filter.unwrap_or_default(),
+            ipsec_mode,
+            connection_states,
             logging_enabled: p.logging_enabled,
-            origin: origin_from_metadata(&p.metadata),
+            origin: p.metadata.as_ref().and_then(origin_from_metadata),
             source: DataSource::IntegrationApi,
         }
     }

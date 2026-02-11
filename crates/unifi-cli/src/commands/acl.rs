@@ -48,7 +48,10 @@ fn detail(r: &Arc<AclRule>) -> String {
         format!("Type:    {:?}", r.rule_type),
         format!("Action:  {:?}", r.action),
         format!("Source:  {}", r.source_summary.as_deref().unwrap_or("-")),
-        format!("Dest:    {}", r.destination_summary.as_deref().unwrap_or("-")),
+        format!(
+            "Dest:    {}",
+            r.destination_summary.as_deref().unwrap_or("-")
+        ),
     ]
     .join("\n")
 }
@@ -78,7 +81,8 @@ pub async fn handle(
             let found = snap.iter().find(|r| r.id.to_string() == id);
             match found {
                 Some(r) => {
-                    let out = output::render_single(&global.output, r, detail, |r| r.id.to_string());
+                    let out =
+                        output::render_single(&global.output, r, detail, |r| r.id.to_string());
                     output::print_output(&out, global.quiet);
                 }
                 None => {
@@ -86,7 +90,7 @@ pub async fn handle(
                         resource_type: "ACL rule".into(),
                         identifier: id,
                         list_command: "acl list".into(),
-                    })
+                    });
                 }
             }
             Ok(())
@@ -104,8 +108,12 @@ pub async fn handle(
                 unifi_core::command::CreateAclRuleRequest {
                     name: name.unwrap_or_default(),
                     action: match action {
-                        Some(crate::cli::AclAction::Allow) => unifi_core::model::FirewallAction::Allow,
-                        Some(crate::cli::AclAction::Block) | None => unifi_core::model::FirewallAction::Block,
+                        Some(crate::cli::AclAction::Allow) => {
+                            unifi_core::model::FirewallAction::Allow
+                        }
+                        Some(crate::cli::AclAction::Block) | None => {
+                            unifi_core::model::FirewallAction::Block
+                        }
                     },
                     source_zone_id: EntityId::from(""),
                     destination_zone_id: EntityId::from(""),
@@ -143,7 +151,9 @@ pub async fn handle(
             if !util::confirm(&format!("Delete ACL rule {id}?"), global.yes)? {
                 return Ok(());
             }
-            controller.execute(CoreCommand::DeleteAclRule { id: eid }).await?;
+            controller
+                .execute(CoreCommand::DeleteAclRule { id: eid })
+                .await?;
             if !global.quiet {
                 eprintln!("ACL rule deleted");
             }

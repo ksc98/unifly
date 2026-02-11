@@ -27,6 +27,7 @@ use crate::theme;
 use crate::tui::Tui;
 
 /// Connection status as seen by the TUI.
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ConnectionStatus {
     #[default]
@@ -72,8 +73,7 @@ impl App {
     pub fn new(controller: Option<Controller>) -> Self {
         let (action_tx, action_rx) = mpsc::unbounded_channel();
 
-        let screens: HashMap<ScreenId, Box<dyn Component>> =
-            create_screens().into_iter().collect();
+        let screens: HashMap<ScreenId, Box<dyn Component>> = create_screens().into_iter().collect();
 
         Self {
             active_screen: ScreenId::Dashboard,
@@ -428,24 +428,18 @@ impl App {
             ConnectionStatus::Disconnected => {
                 Span::styled("○ disconnected", Style::default().fg(theme::ERROR_RED))
             }
-            ConnectionStatus::Reconnecting => {
-                Span::styled("◐ reconnecting", Style::default().fg(theme::ELECTRIC_YELLOW))
-            }
+            ConnectionStatus::Reconnecting => Span::styled(
+                "◐ reconnecting",
+                Style::default().fg(theme::ELECTRIC_YELLOW),
+            ),
             ConnectionStatus::Connecting => {
                 Span::styled("◐ connecting", Style::default().fg(theme::ELECTRIC_YELLOW))
             }
         };
 
-        let hints = Span::styled(
-            " │ ? help  / search  q quit",
-            theme::key_hint(),
-        );
+        let hints = Span::styled(" │ ? help  / search  q quit", theme::key_hint());
 
-        let line = Line::from(vec![
-            Span::raw(" "),
-            connection_indicator,
-            hints,
-        ]);
+        let line = Line::from(vec![Span::raw(" "), connection_indicator, hints]);
 
         frame.render_widget(Paragraph::new(line), area);
     }
@@ -458,12 +452,7 @@ impl App {
         let x = (area.width.saturating_sub(help_width)) / 2;
         let y = (area.height.saturating_sub(help_height)) / 2;
 
-        let help_area = Rect::new(
-            area.x + x,
-            area.y + y,
-            help_width,
-            help_height,
-        );
+        let help_area = Rect::new(area.x + x, area.y + y, help_width, help_height);
 
         // Clear the background
         frame.render_widget(
@@ -483,13 +472,11 @@ impl App {
 
         let help_text = vec![
             Line::from(""),
-            Line::from(vec![
-                Span::styled("  Navigation", Style::default().fg(theme::NEON_CYAN)),
-            ]),
-            Line::from(Span::styled(
-                "  ─────────",
-                theme::key_hint(),
-            )),
+            Line::from(vec![Span::styled(
+                "  Navigation",
+                Style::default().fg(theme::NEON_CYAN),
+            )]),
+            Line::from(Span::styled("  ─────────", theme::key_hint())),
             Line::from(vec![
                 Span::styled("  1-8       ", theme::key_hint_key()),
                 Span::styled("Jump to screen", theme::key_hint()),
@@ -519,13 +506,11 @@ impl App {
                 Span::styled("Page down / up", theme::key_hint()),
             ]),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("  Global", Style::default().fg(theme::NEON_CYAN)),
-            ]),
-            Line::from(Span::styled(
-                "  ──────",
-                theme::key_hint(),
-            )),
+            Line::from(vec![Span::styled(
+                "  Global",
+                Style::default().fg(theme::NEON_CYAN),
+            )]),
+            Line::from(Span::styled("  ──────", theme::key_hint())),
             Line::from(vec![
                 Span::styled("  /         ", theme::key_hint_key()),
                 Span::styled("Search              ", theme::key_hint()),

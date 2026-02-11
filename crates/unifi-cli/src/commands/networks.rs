@@ -38,10 +38,7 @@ impl From<&Arc<Network>> for NetworkRow {
             id: n.id.to_string(),
             name: n.name.clone(),
             vlan: n.vlan_id.map(|v| v.to_string()).unwrap_or_default(),
-            management: n
-                .management
-                .map(|m| format!("{m:?}"))
-                .unwrap_or_default(),
+            management: n.management.map(|m| format!("{m:?}")).unwrap_or_default(),
             enabled: if n.enabled { "yes" } else { "no" }.into(),
             subnet: n.subnet.clone().unwrap_or_default(),
         }
@@ -53,10 +50,25 @@ fn detail(n: &Arc<Network>) -> String {
         format!("ID:         {}", n.id),
         format!("Name:       {}", n.name),
         format!("Enabled:    {}", n.enabled),
-        format!("Management: {}", n.management.map(|m: unifi_core::model::NetworkManagement| format!("{m:?}")).unwrap_or_else(|| "-".into())),
-        format!("VLAN:       {}", n.vlan_id.map(|v: u16| v.to_string()).unwrap_or_else(|| "-".into())),
+        format!(
+            "Management: {}",
+            n.management
+                .map(|m: unifi_core::model::NetworkManagement| format!("{m:?}"))
+                .unwrap_or_else(|| "-".into())
+        ),
+        format!(
+            "VLAN:       {}",
+            n.vlan_id
+                .map(|v: u16| v.to_string())
+                .unwrap_or_else(|| "-".into())
+        ),
         format!("Subnet:     {}", n.subnet.as_deref().unwrap_or("-")),
-        format!("Gateway:    {}", n.gateway_ip.map(|ip: std::net::Ipv4Addr| ip.to_string()).unwrap_or_else(|| "-".into())),
+        format!(
+            "Gateway:    {}",
+            n.gateway_ip
+                .map(|ip: std::net::Ipv4Addr| ip.to_string())
+                .unwrap_or_else(|| "-".into())
+        ),
         format!("Isolated:   {}", n.isolation_enabled),
         format!("Internet:   {}", n.internet_access_enabled),
     ];
@@ -97,7 +109,8 @@ pub async fn handle(
             let found = snap.iter().find(|n| n.id.to_string() == id);
             match found {
                 Some(n) => {
-                    let out = output::render_single(&global.output, n, detail, |n| n.id.to_string());
+                    let out =
+                        output::render_single(&global.output, n, detail, |n| n.id.to_string());
                     output::print_output(&out, global.quiet);
                 }
                 None => {
@@ -105,7 +118,7 @@ pub async fn handle(
                         resource_type: "network".into(),
                         identifier: id,
                         list_command: "networks list".into(),
-                    })
+                    });
                 }
             }
             Ok(())
@@ -145,9 +158,7 @@ pub async fn handle(
                 }
             };
 
-            controller
-                .execute(CoreCommand::CreateNetwork(req))
-                .await?;
+            controller.execute(CoreCommand::CreateNetwork(req)).await?;
             if !global.quiet {
                 eprintln!("Network created");
             }
@@ -197,8 +208,6 @@ pub async fn handle(
             Ok(())
         }
 
-        NetworksCommand::Refs { id: _ } => {
-            util::not_yet_implemented("network cross-references")
-        }
+        NetworksCommand::Refs { id: _ } => util::not_yet_implemented("network cross-references"),
     }
 }

@@ -3,12 +3,11 @@
 //! Wraps the crossterm + ratatui terminal lifecycle so the rest of the app
 //! never has to think about raw mode or alternate screen.
 
-use std::io::{stdout, Stdout};
+use std::io::{Stdout, stdout};
 
 use color_eyre::eyre::Result;
 use crossterm::{
-    ExecutableCommand,
-    cursor,
+    ExecutableCommand, cursor,
     event::{DisableMouseCapture, EnableMouseCapture},
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };

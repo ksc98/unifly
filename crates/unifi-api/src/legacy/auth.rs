@@ -57,6 +57,17 @@ impl LegacyClient {
             });
         }
 
+        // Capture CSRF token from login response — required for all
+        // POST/PUT/DELETE requests through the UniFi OS proxy.
+        if let Some(token) = resp
+            .headers()
+            .get("X-CSRF-Token")
+            .or_else(|| resp.headers().get("x-csrf-token"))
+            .and_then(|v| v.to_str().ok())
+        {
+            self.set_csrf_token(token.to_owned());
+        }
+
         debug!("login successful");
         Ok(())
     }

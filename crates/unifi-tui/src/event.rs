@@ -5,9 +5,7 @@
 
 use std::time::Duration;
 
-use crossterm::event::{
-    Event as CrosstermEvent, EventStream, KeyEvent, KeyEventKind, MouseEvent,
-};
+use crossterm::event::{Event as CrosstermEvent, EventStream, KeyEvent, KeyEventKind, MouseEvent};
 use futures::StreamExt;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;

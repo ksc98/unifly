@@ -26,10 +26,15 @@ impl LegacyClient {
     pub async fn block_client(&self, mac: &str) -> Result<(), Error> {
         let url = self.site_url("cmd/stamgr");
         debug!(mac, "blocking client");
-        let _: Vec<serde_json::Value> = self.post(url, &json!({
-            "cmd": "block-sta",
-            "mac": mac,
-        })).await?;
+        let _: Vec<serde_json::Value> = self
+            .post(
+                url,
+                &json!({
+                    "cmd": "block-sta",
+                    "mac": mac,
+                }),
+            )
+            .await?;
         Ok(())
     }
 
@@ -39,10 +44,15 @@ impl LegacyClient {
     pub async fn unblock_client(&self, mac: &str) -> Result<(), Error> {
         let url = self.site_url("cmd/stamgr");
         debug!(mac, "unblocking client");
-        let _: Vec<serde_json::Value> = self.post(url, &json!({
-            "cmd": "unblock-sta",
-            "mac": mac,
-        })).await?;
+        let _: Vec<serde_json::Value> = self
+            .post(
+                url,
+                &json!({
+                    "cmd": "unblock-sta",
+                    "mac": mac,
+                }),
+            )
+            .await?;
         Ok(())
     }
 
@@ -52,10 +62,15 @@ impl LegacyClient {
     pub async fn kick_client(&self, mac: &str) -> Result<(), Error> {
         let url = self.site_url("cmd/stamgr");
         debug!(mac, "kicking client");
-        let _: Vec<serde_json::Value> = self.post(url, &json!({
-            "cmd": "kick-sta",
-            "mac": mac,
-        })).await?;
+        let _: Vec<serde_json::Value> = self
+            .post(
+                url,
+                &json!({
+                    "cmd": "kick-sta",
+                    "mac": mac,
+                }),
+            )
+            .await?;
         Ok(())
     }
 
@@ -65,10 +80,15 @@ impl LegacyClient {
     pub async fn forget_client(&self, mac: &str) -> Result<(), Error> {
         let url = self.site_url("cmd/stamgr");
         debug!(mac, "forgetting client");
-        let _: Vec<serde_json::Value> = self.post(url, &json!({
-            "cmd": "forget-sta",
-            "macs": [mac],
-        })).await?;
+        let _: Vec<serde_json::Value> = self
+            .post(
+                url,
+                &json!({
+                    "cmd": "forget-sta",
+                    "macs": [mac],
+                }),
+            )
+            .await?;
         Ok(())
     }
 

@@ -22,20 +22,45 @@ pub(crate) struct CommandEnvelope {
 #[derive(Debug, Clone)]
 pub enum Command {
     // ── Device operations ────────────────────────────────────────────
-    AdoptDevice { mac: MacAddress },
-    RemoveDevice { id: EntityId },
-    RestartDevice { id: EntityId },
-    LocateDevice { mac: MacAddress, enable: bool },
-    UpgradeDevice { mac: MacAddress, firmware_url: Option<String> },
-    ProvisionDevice { mac: MacAddress },
+    AdoptDevice {
+        mac: MacAddress,
+    },
+    RemoveDevice {
+        id: EntityId,
+    },
+    RestartDevice {
+        id: EntityId,
+    },
+    LocateDevice {
+        mac: MacAddress,
+        enable: bool,
+    },
+    UpgradeDevice {
+        mac: MacAddress,
+        firmware_url: Option<String>,
+    },
+    ProvisionDevice {
+        mac: MacAddress,
+    },
     SpeedtestDevice,
-    PowerCyclePort { device_id: EntityId, port_idx: u32 },
+    PowerCyclePort {
+        device_id: EntityId,
+        port_idx: u32,
+    },
 
     // ── Client operations ────────────────────────────────────────────
-    BlockClient { mac: MacAddress },
-    UnblockClient { mac: MacAddress },
-    KickClient { mac: MacAddress },
-    ForgetClient { mac: MacAddress },
+    BlockClient {
+        mac: MacAddress,
+    },
+    UnblockClient {
+        mac: MacAddress,
+    },
+    KickClient {
+        mac: MacAddress,
+    },
+    ForgetClient {
+        mac: MacAddress,
+    },
     AuthorizeGuest {
         client_id: EntityId,
         time_limit_minutes: Option<u32>,
@@ -43,61 +68,130 @@ pub enum Command {
         rx_rate_kbps: Option<u64>,
         tx_rate_kbps: Option<u64>,
     },
-    UnauthorizeGuest { client_id: EntityId },
+    UnauthorizeGuest {
+        client_id: EntityId,
+    },
 
     // ── Network CRUD ─────────────────────────────────────────────────
     CreateNetwork(CreateNetworkRequest),
-    UpdateNetwork { id: EntityId, update: UpdateNetworkRequest },
-    DeleteNetwork { id: EntityId, force: bool },
+    UpdateNetwork {
+        id: EntityId,
+        update: UpdateNetworkRequest,
+    },
+    DeleteNetwork {
+        id: EntityId,
+        force: bool,
+    },
 
     // ── WiFi CRUD ────────────────────────────────────────────────────
     CreateWifiBroadcast(CreateWifiBroadcastRequest),
-    UpdateWifiBroadcast { id: EntityId, update: UpdateWifiBroadcastRequest },
-    DeleteWifiBroadcast { id: EntityId, force: bool },
+    UpdateWifiBroadcast {
+        id: EntityId,
+        update: UpdateWifiBroadcastRequest,
+    },
+    DeleteWifiBroadcast {
+        id: EntityId,
+        force: bool,
+    },
 
     // ── Firewall ─────────────────────────────────────────────────────
     CreateFirewallPolicy(CreateFirewallPolicyRequest),
-    UpdateFirewallPolicy { id: EntityId, update: UpdateFirewallPolicyRequest },
-    DeleteFirewallPolicy { id: EntityId },
-    PatchFirewallPolicy { id: EntityId, enabled: bool },
-    ReorderFirewallPolicies { zone_pair: (EntityId, EntityId), ordered_ids: Vec<EntityId> },
+    UpdateFirewallPolicy {
+        id: EntityId,
+        update: UpdateFirewallPolicyRequest,
+    },
+    DeleteFirewallPolicy {
+        id: EntityId,
+    },
+    PatchFirewallPolicy {
+        id: EntityId,
+        enabled: bool,
+    },
+    ReorderFirewallPolicies {
+        zone_pair: (EntityId, EntityId),
+        ordered_ids: Vec<EntityId>,
+    },
     CreateFirewallZone(CreateFirewallZoneRequest),
-    UpdateFirewallZone { id: EntityId, update: UpdateFirewallZoneRequest },
-    DeleteFirewallZone { id: EntityId },
+    UpdateFirewallZone {
+        id: EntityId,
+        update: UpdateFirewallZoneRequest,
+    },
+    DeleteFirewallZone {
+        id: EntityId,
+    },
 
     // ── ACL ──────────────────────────────────────────────────────────
     CreateAclRule(CreateAclRuleRequest),
-    UpdateAclRule { id: EntityId, update: UpdateAclRuleRequest },
-    DeleteAclRule { id: EntityId },
-    ReorderAclRules { ordered_ids: Vec<EntityId> },
+    UpdateAclRule {
+        id: EntityId,
+        update: UpdateAclRuleRequest,
+    },
+    DeleteAclRule {
+        id: EntityId,
+    },
+    ReorderAclRules {
+        ordered_ids: Vec<EntityId>,
+    },
 
     // ── DNS ──────────────────────────────────────────────────────────
     CreateDnsPolicy(CreateDnsPolicyRequest),
-    UpdateDnsPolicy { id: EntityId, update: UpdateDnsPolicyRequest },
-    DeleteDnsPolicy { id: EntityId },
+    UpdateDnsPolicy {
+        id: EntityId,
+        update: UpdateDnsPolicyRequest,
+    },
+    DeleteDnsPolicy {
+        id: EntityId,
+    },
 
     // ── Traffic matching lists ───────────────────────────────────────
     CreateTrafficMatchingList(CreateTrafficMatchingListRequest),
-    UpdateTrafficMatchingList { id: EntityId, update: UpdateTrafficMatchingListRequest },
-    DeleteTrafficMatchingList { id: EntityId },
+    UpdateTrafficMatchingList {
+        id: EntityId,
+        update: UpdateTrafficMatchingListRequest,
+    },
+    DeleteTrafficMatchingList {
+        id: EntityId,
+    },
 
     // ── Hotspot / Vouchers ───────────────────────────────────────────
     CreateVouchers(CreateVouchersRequest),
-    DeleteVoucher { id: EntityId },
-    PurgeVouchers { filter: String },
+    DeleteVoucher {
+        id: EntityId,
+    },
+    PurgeVouchers {
+        filter: String,
+    },
 
     // ── System (Legacy) ──────────────────────────────────────────────
-    ArchiveAlarm { id: EntityId },
+    ArchiveAlarm {
+        id: EntityId,
+    },
     ArchiveAllAlarms,
-    CreateSite { name: String, description: String },
-    DeleteSite { name: String },
+    CreateSite {
+        name: String,
+        description: String,
+    },
+    DeleteSite {
+        name: String,
+    },
     CreateBackup,
-    DeleteBackup { filename: String },
+    DeleteBackup {
+        filename: String,
+    },
     RebootController,
     PoweroffController,
-    InviteAdmin { name: String, email: String, role: String },
-    RevokeAdmin { id: EntityId },
-    UpdateAdmin { id: EntityId, role: Option<String> },
+    InviteAdmin {
+        name: String,
+        email: String,
+        role: String,
+    },
+    RevokeAdmin {
+        id: EntityId,
+    },
+    UpdateAdmin {
+        id: EntityId,
+        role: Option<String>,
+    },
 }
 
 /// Result of a command execution.

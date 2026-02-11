@@ -4,13 +4,11 @@ use std::sync::Arc;
 
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{
-    Block, BorderType, Borders, Cell, Paragraph, Row, Table, TableState,
-};
-use ratatui::Frame;
+use ratatui::widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, Table, TableState};
 use tokio::sync::mpsc::UnboundedSender;
 
 use unifi_core::{Client, ClientType};
@@ -61,8 +59,15 @@ impl ClientsScreen {
                     return true;
                 }
                 c.name.as_deref().unwrap_or("").to_lowercase().contains(&q)
-                    || c.hostname.as_deref().unwrap_or("").to_lowercase().contains(&q)
-                    || c.ip.map(|ip| ip.to_string()).unwrap_or_default().contains(&q)
+                    || c.hostname
+                        .as_deref()
+                        .unwrap_or("")
+                        .to_lowercase()
+                        .contains(&q)
+                    || c.ip
+                        .map(|ip| ip.to_string())
+                        .unwrap_or_default()
+                        .contains(&q)
                     || c.mac.to_string().contains(&q)
             })
             .collect()
@@ -109,7 +114,10 @@ impl ClientsScreen {
             .as_deref()
             .or(client.hostname.as_deref())
             .unwrap_or("Unknown");
-        let ip = client.ip.map(|ip| ip.to_string()).unwrap_or_else(|| "─".into());
+        let ip = client
+            .ip
+            .map(|ip| ip.to_string())
+            .unwrap_or_else(|| "─".into());
         let mac = client.mac.to_string();
         let type_str = format!("{:?}", client.client_type);
 
@@ -146,8 +154,14 @@ impl ClientsScreen {
             .as_ref()
             .and_then(|w| w.ssid.as_deref())
             .unwrap_or("─");
-        let tx = client.tx_bytes.map(bytes_fmt::fmt_bytes_short).unwrap_or_else(|| "─".into());
-        let rx = client.rx_bytes.map(bytes_fmt::fmt_bytes_short).unwrap_or_else(|| "─".into());
+        let tx = client
+            .tx_bytes
+            .map(bytes_fmt::fmt_bytes_short)
+            .unwrap_or_else(|| "─".into());
+        let rx = client
+            .rx_bytes
+            .map(bytes_fmt::fmt_bytes_short)
+            .unwrap_or_else(|| "─".into());
         let duration = client
             .connected_at
             .map(|ts| {
@@ -159,30 +173,36 @@ impl ClientsScreen {
         let guest = if client.is_guest { "yes" } else { "no" };
         let blocked = if client.blocked { "yes" } else { "no" };
 
-        let detail_layout = Layout::vertical([
-            Constraint::Min(1),
-            Constraint::Length(1),
-        ])
-        .split(inner);
+        let detail_layout =
+            Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(inner);
 
         let lines = vec![
             Line::from(""),
             Line::from(vec![
                 Span::styled("  Network        ", Style::default().fg(theme::DIM_WHITE)),
                 Span::styled(network, Style::default().fg(theme::NEON_CYAN)),
-                Span::styled("       SSID         ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(
+                    "       SSID         ",
+                    Style::default().fg(theme::DIM_WHITE),
+                ),
                 Span::styled(ssid, Style::default().fg(theme::NEON_CYAN)),
             ]),
             Line::from(vec![
                 Span::styled("  Signal         ", Style::default().fg(theme::DIM_WHITE)),
                 Span::styled(&signal, Style::default().fg(theme::NEON_CYAN)),
-                Span::styled("       Channel      ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(
+                    "       Channel      ",
+                    Style::default().fg(theme::DIM_WHITE),
+                ),
                 Span::styled(&channel, Style::default().fg(theme::NEON_CYAN)),
             ]),
             Line::from(vec![
                 Span::styled("  TX             ", Style::default().fg(theme::DIM_WHITE)),
                 Span::styled(&tx, Style::default().fg(theme::CORAL)),
-                Span::styled("       RX           ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(
+                    "       RX           ",
+                    Style::default().fg(theme::DIM_WHITE),
+                ),
                 Span::styled(&rx, Style::default().fg(theme::CORAL)),
             ]),
             Line::from(vec![
@@ -192,8 +212,18 @@ impl ClientsScreen {
             Line::from(vec![
                 Span::styled("  Guest          ", Style::default().fg(theme::DIM_WHITE)),
                 Span::styled(guest, Style::default().fg(theme::DIM_WHITE)),
-                Span::styled("       Blocked      ", Style::default().fg(theme::DIM_WHITE)),
-                Span::styled(blocked, Style::default().fg(if client.blocked { theme::ERROR_RED } else { theme::DIM_WHITE })),
+                Span::styled(
+                    "       Blocked      ",
+                    Style::default().fg(theme::DIM_WHITE),
+                ),
+                Span::styled(
+                    blocked,
+                    Style::default().fg(if client.blocked {
+                        theme::ERROR_RED
+                    } else {
+                        theme::DIM_WHITE
+                    }),
+                ),
             ]),
         ];
         frame.render_widget(Paragraph::new(lines), detail_layout[0]);
@@ -223,6 +253,7 @@ impl ClientsScreen {
 }
 
 /// Client type icon with fallback letter.
+#[allow(dead_code)]
 fn client_type_span(client: &Client) -> Span<'static> {
     if client.is_guest {
         return Span::styled("G", Style::default().fg(theme::ELECTRIC_YELLOW));
@@ -402,11 +433,8 @@ impl Component for ClientsScreen {
 
         // Split for table + optional detail panel
         let (table_area, detail_area) = if self.detail_open {
-            let chunks = Layout::vertical([
-                Constraint::Percentage(50),
-                Constraint::Percentage(50),
-            ])
-            .split(inner);
+            let chunks = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .split(inner);
             (chunks[0], Some(chunks[1]))
         } else {
             (inner, None)
@@ -414,7 +442,7 @@ impl Component for ClientsScreen {
 
         let layout = Layout::vertical([
             Constraint::Length(1), // filter tabs
-            Constraint::Min(1),   // table
+            Constraint::Min(1),    // table
             Constraint::Length(1), // hints
         ])
         .split(table_area);

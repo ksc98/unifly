@@ -1,9 +1,4 @@
 // Integration tests for `LegacyClient` using wiremock.
-//
-// Note: For ClassicController with no path prefix, `site_url()` produces
-// a double-slash in the path (e.g. `//api/s/default/...`) due to the format
-// string appending to the base URL's trailing slash. The mock paths reflect
-// this actual client behavior.
 
 use serde_json::json;
 use url::Url;
@@ -26,9 +21,8 @@ async fn setup() -> (MockServer, LegacyClient) {
     (server, client)
 }
 
-/// ClassicController prefix is empty, so `site_url` produces `//api/s/{site}/...`
 fn site_path(suffix: &str) -> String {
-    format!("//api/s/default/{suffix}")
+    format!("/api/s/default/{suffix}")
 }
 
 // ── Authentication tests ────────────────────────────────────────────
@@ -181,8 +175,8 @@ async fn test_session_expired() {
     match result {
         Err(Error::Authentication { ref message }) => {
             assert!(
-                message.contains("session expired"),
-                "expected 'session expired' in message, got: {message}"
+                message.contains("session expired") || message.contains("insufficient permissions"),
+                "expected auth error message, got: {message}"
             );
         }
         other => panic!("expected Authentication error, got: {other:?}"),

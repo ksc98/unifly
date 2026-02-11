@@ -89,7 +89,9 @@ impl<T: Clone + Send + Sync + 'static> EntityCollection<T> {
     /// Look up an entity by its `EntityId` (secondary index).
     pub(crate) fn get_by_id(&self, id: &EntityId) -> Option<Arc<T>> {
         let key = self.id_to_key.get(id)?;
-        self.by_key.get(key.value().as_str()).map(|r| Arc::clone(r.value()))
+        self.by_key
+            .get(key.value().as_str())
+            .map(|r| Arc::clone(r.value()))
     }
 
     /// Get the current snapshot (cheap `Arc` clone).
@@ -103,6 +105,7 @@ impl<T: Clone + Send + Sync + 'static> EntityCollection<T> {
     }
 
     /// Remove all entities.
+    #[allow(dead_code)]
     pub(crate) fn clear(&self) {
         self.by_key.clear();
         self.id_to_key.clear();
@@ -115,6 +118,7 @@ impl<T: Clone + Send + Sync + 'static> EntityCollection<T> {
         self.by_key.len()
     }
 
+    #[allow(dead_code)]
     pub(crate) fn is_empty(&self) -> bool {
         self.by_key.is_empty()
     }

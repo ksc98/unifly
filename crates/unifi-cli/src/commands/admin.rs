@@ -72,9 +72,7 @@ pub async fn handle(
             if !util::confirm(&format!("Revoke admin access for {admin}?"), global.yes)? {
                 return Ok(());
             }
-            controller
-                .execute(CoreCommand::RevokeAdmin { id })
-                .await?;
+            controller.execute(CoreCommand::RevokeAdmin { id }).await?;
             if !global.quiet {
                 eprintln!("Admin access revoked");
             }

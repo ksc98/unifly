@@ -19,5 +19,6 @@ pub struct Site {
     pub client_count: Option<u32>,
 
     #[serde(skip)]
+    #[allow(dead_code)]
     pub(crate) source: DataSource,
 }

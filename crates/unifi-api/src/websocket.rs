@@ -14,7 +14,7 @@
 //! let cancel = CancellationToken::new();
 //! let ws_url = Url::parse("wss://192.168.1.1/proxy/network/wss/s/default/events")?;
 //!
-//! let handle = WebSocketHandle::connect(ws_url, ReconnectConfig::default(), cancel.clone()).await?;
+//! let handle = WebSocketHandle::connect(ws_url, ReconnectConfig::default(), cancel.clone(), None).await?;
 //! let mut rx = handle.subscribe();
 //!
 //! while let Ok(event) = rx.recv().await {
@@ -117,12 +117,13 @@ impl WebSocketHandle {
         ws_url: Url,
         reconnect: ReconnectConfig,
         cancel: CancellationToken,
+        cookie: Option<String>,
     ) -> Result<Self, Error> {
         let (event_tx, event_rx) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
 
         let task_cancel = cancel.clone();
         tokio::spawn(async move {
-            ws_loop(ws_url, event_tx, reconnect, task_cancel).await;
+            ws_loop(ws_url, event_tx, reconnect, task_cancel, cookie).await;
         });
 
         Ok(Self { event_rx, cancel })
@@ -150,6 +151,7 @@ async fn ws_loop(
     event_tx: broadcast::Sender<Arc<UnifiEvent>>,
     reconnect: ReconnectConfig,
     cancel: CancellationToken,
+    cookie: Option<String>,
 ) {
     let mut attempt: u32 = 0;
 
@@ -157,7 +159,7 @@ async fn ws_loop(
         tokio::select! {
             biased;
             _ = cancel.cancelled() => break,
-            result = connect_and_read(&ws_url, &event_tx, &cancel) => {
+            result = connect_and_read(&ws_url, &event_tx, &cancel, cookie.as_deref()) => {
                 match result {
                     // Clean disconnect (server close frame or stream ended).
                     // Reset attempt counter and reconnect immediately.
@@ -207,20 +209,26 @@ async fn ws_loop(
 // ── Single connection lifecycle ──────────────────────────────────────
 
 /// Establish a single WebSocket connection, read messages until it drops.
+///
+/// If `cookie` is provided, it's injected as a `Cookie` header on the
+/// WebSocket upgrade request (required for legacy cookie-based auth).
 async fn connect_and_read(
     url: &Url,
     event_tx: &broadcast::Sender<Arc<UnifiEvent>>,
     cancel: &CancellationToken,
+    cookie: Option<&str>,
 ) -> Result<(), Error> {
     tracing::info!(url = %url, "Connecting to WebSocket");
 
-    // Build a request from the URL -- tungstenite handles the upgrade
-    // headers automatically via IntoClientRequest.
-    let request = ClientRequestBuilder::new(
-        url.as_str()
-            .parse()
-            .map_err(|e: tungstenite::http::uri::InvalidUri| Error::WebSocketConnect(e.to_string()))?,
-    );
+    let uri: tungstenite::http::Uri = url
+        .as_str()
+        .parse()
+        .map_err(|e: tungstenite::http::uri::InvalidUri| Error::WebSocketConnect(e.to_string()))?;
+
+    let mut request = ClientRequestBuilder::new(uri);
+    if let Some(cookie_val) = cookie {
+        request = request.with_header("Cookie", cookie_val);
+    }
 
     let (ws_stream, _response) = tokio_tungstenite::connect_async(request)
         .await

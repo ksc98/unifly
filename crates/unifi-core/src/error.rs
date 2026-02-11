@@ -91,6 +91,12 @@ impl From<unifi_api::Error> for CoreError {
             unifi_api::Error::TwoFactorRequired => CoreError::AuthenticationFailed {
                 message: "Two-factor authentication token required".into(),
             },
+            unifi_api::Error::SessionExpired => CoreError::AuthenticationFailed {
+                message: "Session expired -- re-authentication required".into(),
+            },
+            unifi_api::Error::InvalidApiKey => CoreError::AuthenticationFailed {
+                message: "Invalid API key".into(),
+            },
             unifi_api::Error::WrongAuthStrategy { expected, got } => {
                 CoreError::AuthenticationFailed {
                     message: format!("Wrong auth strategy: expected {expected}, got {got}"),

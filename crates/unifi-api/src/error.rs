@@ -17,6 +17,14 @@ pub enum Error {
     #[error("Two-factor authentication token required")]
     TwoFactorRequired,
 
+    /// Session has expired (cookie expired or revoked).
+    #[error("Session expired -- re-authentication required")]
+    SessionExpired,
+
+    /// Invalid API key (rejected by controller).
+    #[error("Invalid API key")]
+    InvalidApiKey,
+
     /// Wrong credential type for the requested operation.
     #[error("Wrong auth strategy: expected {expected}, got {got}")]
     WrongAuthStrategy {
@@ -91,7 +99,7 @@ impl Error {
     /// Returns `true` if this error indicates auth has expired
     /// and re-authentication might resolve it.
     pub fn is_auth_expired(&self) -> bool {
-        matches!(self, Self::Authentication { .. })
+        matches!(self, Self::Authentication { .. } | Self::SessionExpired)
     }
 
     /// Returns `true` if this is a transient error worth retrying.

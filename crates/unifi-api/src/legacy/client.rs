@@ -5,9 +5,6 @@
 // (devices, clients, etc.) are implemented as inherent methods via
 // separate files to keep this module focused on transport mechanics.
 
-use std::sync::Arc;
-
-use reqwest::cookie::Jar;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tracing::debug;
@@ -16,6 +13,7 @@ use url::Url;
 use crate::auth::ControllerPlatform;
 use crate::error::Error;
 use crate::legacy::models::LegacyResponse;
+use crate::transport::TransportConfig;
 
 /// Raw HTTP client for the UniFi controller's legacy API.
 ///
@@ -31,25 +29,25 @@ pub struct LegacyClient {
 }
 
 impl LegacyClient {
-    /// Create a new legacy client.
+    /// Create a new legacy client from a `TransportConfig`.
     ///
-    /// Builds a `reqwest::Client` with cookie storage enabled. The `base_url`
-    /// should be the controller root (e.g. `https://192.168.1.1` for UniFi OS
-    /// or `https://controller:8443` for standalone).
-    pub fn new(base_url: Url, site: String, platform: ControllerPlatform) -> Self {
-        let jar = Arc::new(Jar::default());
-        let http = reqwest::Client::builder()
-            .cookie_provider(jar)
-            .danger_accept_invalid_certs(true)
-            .build()
-            .expect("failed to build reqwest client");
-
-        Self {
-            http,
-            base_url,
-            site,
-            platform,
-        }
+    /// If the config doesn't already include a cookie jar, one is created
+    /// automatically (legacy auth requires cookies). The `base_url` should be
+    /// the controller root (e.g. `https://192.168.1.1` for UniFi OS or
+    /// `https://controller:8443` for standalone).
+    pub fn new(
+        base_url: Url,
+        site: String,
+        platform: ControllerPlatform,
+        transport: &TransportConfig,
+    ) -> Result<Self, Error> {
+        let config = if transport.cookie_jar.is_some() {
+            transport.clone()
+        } else {
+            transport.clone().with_cookie_jar()
+        };
+        let http = config.build_client()?;
+        Ok(Self { http, base_url, site, platform })
     }
 
     /// Create a legacy client with a pre-built `reqwest::Client`.
@@ -145,6 +143,39 @@ impl LegacyClient {
             .http
             .post(url)
             .json(body)
+            .send()
+            .await
+            .map_err(Error::Transport)?;
+
+        self.parse_envelope(resp).await
+    }
+
+    /// Send a PUT request with JSON body and unwrap the legacy envelope.
+    pub(crate) async fn put<T: DeserializeOwned>(
+        &self,
+        url: Url,
+        body: &impl Serialize,
+    ) -> Result<Vec<T>, Error> {
+        debug!("PUT {}", url);
+
+        let resp = self
+            .http
+            .put(url)
+            .json(body)
+            .send()
+            .await
+            .map_err(Error::Transport)?;
+
+        self.parse_envelope(resp).await
+    }
+
+    /// Send a DELETE request and unwrap the legacy envelope.
+    pub(crate) async fn delete<T: DeserializeOwned>(&self, url: Url) -> Result<Vec<T>, Error> {
+        debug!("DELETE {}", url);
+
+        let resp = self
+            .http
+            .delete(url)
             .send()
             .await
             .map_err(Error::Transport)?;

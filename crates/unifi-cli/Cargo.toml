@@ -13,7 +13,8 @@ name = "unifi"
 path = "src/main.rs"
 
 [dependencies]
-unifi-core  = { workspace = true }
+unifi-core   = { workspace = true }
+unifi-config = { workspace = true }
 tokio       = { workspace = true, features = ["full"] }
 serde       = { workspace = true }
 serde_json  = { workspace = true }

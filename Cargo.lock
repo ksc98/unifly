@@ -4149,9 +4149,25 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
+ "unifi-config",
  "unifi-core",
  "url",
  "wiremock",
+]
+
+[[package]]
+name = "unifi-config"
+version = "0.1.0"
+dependencies = [
+ "directories",
+ "figment",
+ "keyring",
+ "secrecy",
+ "serde",
+ "thiserror 2.0.18",
+ "toml 0.8.23",
+ "unifi-core",
+ "url",
 ]
 
 [[package]]
@@ -4214,7 +4230,9 @@ dependencies = [
  "tui-scrollview",
  "tui-tree-widget",
  "tui-widget-list",
+ "unifi-config",
  "unifi-core",
+ "url",
  "uuid",
 ]
 

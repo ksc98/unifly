@@ -76,14 +76,26 @@ pub struct App {
 
 impl App {
     /// Create a new App with all screens. Optionally accepts a [`Controller`]
-    /// for live data — if `None`, the TUI starts in disconnected/demo mode.
+    /// for live data — if `None`, the TUI shows the onboarding wizard.
     pub fn new(controller: Option<Controller>) -> Self {
         let (action_tx, action_rx) = mpsc::unbounded_channel();
 
-        let screens: HashMap<ScreenId, Box<dyn Component>> = create_screens().into_iter().collect();
+        let mut screens: HashMap<ScreenId, Box<dyn Component>> =
+            create_screens().into_iter().collect();
+
+        // If no controller, show the onboarding wizard instead of the dashboard
+        let active_screen = if controller.is_none() {
+            screens.insert(
+                ScreenId::Setup,
+                Box::new(crate::screens::onboarding::OnboardingScreen::new()),
+            );
+            ScreenId::Setup
+        } else {
+            ScreenId::Dashboard
+        };
 
         Self {
-            active_screen: ScreenId::Dashboard,
+            active_screen,
             previous_screen: None,
             screens,
             running: true,
@@ -186,6 +198,17 @@ impl App {
     /// Map a key event to an action. Global keys are handled here;
     /// screen-specific keys are delegated to the active screen component.
     fn handle_key_event(&mut self, key: KeyEvent) -> Result<Option<Action>> {
+        // Onboarding wizard captures all keys except Ctrl+C
+        if self.active_screen == ScreenId::Setup {
+            if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('c') {
+                return Ok(Some(Action::Quit));
+            }
+            if let Some(screen) = self.screens.get_mut(&ScreenId::Setup) {
+                return screen.handle_key_event(key);
+            }
+            return Ok(None);
+        }
+
         // Confirmation dialog captures all input
         if self.pending_confirm.is_some() {
             return match key.code {
@@ -343,6 +366,12 @@ impl App {
                         self.notification = None;
                     }
                 }
+                // Forward ticks to setup screen for throbber animation
+                if self.active_screen == ScreenId::Setup {
+                    if let Some(screen) = self.screens.get_mut(&ScreenId::Setup) {
+                        let _ = screen.update(action);
+                    }
+                }
             }
 
             // Data updates go to ALL screens so they stay in sync
@@ -454,6 +483,41 @@ impl App {
             // Stats fetch
             Action::RequestStats(period) => {
                 self.fetch_stats(*period);
+            }
+
+            // ── Onboarding completion ─────────────────────────────────
+            Action::OnboardingComplete { config, .. } => {
+                // Remove the setup screen
+                self.screens.remove(&ScreenId::Setup);
+
+                // Create controller and store it
+                let controller = Controller::new(*config.clone());
+                self.controller = Some(controller.clone());
+
+                // Switch to dashboard
+                self.active_screen = ScreenId::Dashboard;
+                if let Some(screen) = self.screens.get_mut(&ScreenId::Dashboard) {
+                    screen.set_focused(true);
+                }
+
+                // Spawn data bridge
+                let cancel = self.data_cancel.clone();
+                let tx = self.action_tx.clone();
+                tokio::spawn(async move {
+                    crate::data_bridge::spawn_data_bridge(controller, tx, cancel).await;
+                });
+
+                self.action_tx
+                    .send(Action::Notify(Notification::success("Connected!")))?;
+            }
+
+            Action::OnboardingTestResult(_) => {
+                // Forward to the setup screen
+                if let Some(screen) = self.screens.get_mut(&ScreenId::Setup) {
+                    if let Some(follow_up) = screen.update(action)? {
+                        self.action_tx.send(follow_up)?;
+                    }
+                }
             }
 
             // Notifications
@@ -714,6 +778,14 @@ impl App {
     /// Render the full application frame.
     fn render(&self, frame: &mut Frame) {
         let area = frame.area();
+
+        // Onboarding gets the full frame — no tab bar or status bar
+        if self.active_screen == ScreenId::Setup {
+            if let Some(screen) = self.screens.get(&ScreenId::Setup) {
+                screen.render(frame, area);
+            }
+            return;
+        }
 
         // Layout: [screen content] [tab bar] [status bar]
         let layout = Layout::vertical([

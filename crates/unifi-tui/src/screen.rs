@@ -14,6 +14,8 @@ pub enum ScreenId {
     Topology, // 6
     Events,   // 7
     Stats,    // 8
+    /// Onboarding wizard — not in the tab bar, not navigable by number keys.
+    Setup,
 }
 
 impl ScreenId {
@@ -29,7 +31,7 @@ impl ScreenId {
         Self::Stats,
     ];
 
-    /// Numeric key (1-8) for this screen.
+    /// Numeric key (1-8) for this screen. Setup has no number key.
     pub fn number(self) -> u8 {
         match self {
             Self::Dashboard => 1,
@@ -40,6 +42,7 @@ impl ScreenId {
             Self::Topology => 6,
             Self::Events => 7,
             Self::Stats => 8,
+            Self::Setup => 0,
         }
     }
 
@@ -81,6 +84,7 @@ impl ScreenId {
             Self::Topology => "Topo",
             Self::Events => "Events",
             Self::Stats => "Stats",
+            Self::Setup => "Setup",
         }
     }
 }

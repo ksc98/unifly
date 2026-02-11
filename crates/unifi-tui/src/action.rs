@@ -284,4 +284,11 @@ pub enum Action {
     ScrollToBottom,
     PageUp,
     PageDown,
+
+    // ── Onboarding ─────────────────────────────────────────────────
+    OnboardingComplete {
+        profile_name: String,
+        config: Box<unifi_core::ControllerConfig>,
+    },
+    OnboardingTestResult(Result<(), String>),
 }

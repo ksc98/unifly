@@ -14,6 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 unifi-core           = { workspace = true }
+unifi-config         = { workspace = true }
 tokio                = { workspace = true, features = ["full"] }
 serde                = { workspace = true }
 serde_json           = { workspace = true }
@@ -41,6 +42,7 @@ bytesize             = { workspace = true }
 humantime            = { workspace = true }
 indexmap              = { workspace = true }
 secrecy              = { workspace = true }
+url                  = { workspace = true }
 
 [dev-dependencies]
 insta             = { workspace = true }

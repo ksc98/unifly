@@ -61,17 +61,9 @@ fn format_config_redacted(cfg: &Config) -> String {
     out
 }
 
-/// Serialize config to TOML and write to the canonical config path.
+/// Delegate to the shared config crate's save function.
 fn save_config(cfg: &Config) -> Result<(), CliError> {
-    let path = config::config_path();
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let toml_str = toml::to_string_pretty(cfg).map_err(|e| CliError::Validation {
-        field: "config".into(),
-        reason: format!("failed to serialize config: {e}"),
-    })?;
-    std::fs::write(&path, toml_str)?;
+    config::save_config(cfg)?;
     Ok(())
 }
 

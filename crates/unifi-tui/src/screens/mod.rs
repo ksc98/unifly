@@ -6,6 +6,7 @@ pub mod devices;
 pub mod events;
 pub mod firewall;
 pub mod networks;
+pub mod onboarding;
 pub mod stats;
 pub mod topology;
 

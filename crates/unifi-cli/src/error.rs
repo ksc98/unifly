@@ -173,6 +173,11 @@ pub enum CliError {
     #[error("Invalid JSON payload: {0}")]
     #[diagnostic(code(unifi::json), help("Check the JSON file contents and try again."))]
     Json(#[from] serde_json::Error),
+
+    // ── Config crate errors ──────────────────────────────────────────
+    #[error(transparent)]
+    #[diagnostic(code(unifi::config_error))]
+    ConfigError(#[from] unifi_config::ConfigError),
 }
 
 impl From<figment::Error> for CliError {

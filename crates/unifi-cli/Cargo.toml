@@ -33,6 +33,9 @@ directories = { workspace = true }
 dialoguer   = { workspace = true }
 indicatif   = { workspace = true }
 rpassword   = { workspace = true }
+secrecy     = { workspace = true }
+thiserror   = { workspace = true }
+url         = { workspace = true }
 
 [build-dependencies]
 clap_mangen = { workspace = true }

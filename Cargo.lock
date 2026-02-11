@@ -3679,6 +3679,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -4197,6 +4198,7 @@ dependencies = [
  "pretty_assertions",
  "ratatui 0.30.0",
  "ratatui-macros",
+ "secrecy",
  "serde",
  "serde_json",
  "tachyonfx",

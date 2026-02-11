@@ -13,7 +13,10 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Paragraph, Tabs},
 };
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
+
+use unifi_core::Controller;
 
 use crate::action::Action;
 use crate::component::Component;
@@ -55,11 +58,16 @@ pub struct App {
     action_tx: mpsc::UnboundedSender<Action>,
     /// Action receiver — main loop drains this.
     action_rx: mpsc::UnboundedReceiver<Action>,
+    /// Optional controller for live data.
+    controller: Option<Controller>,
+    /// Cancellation token for the data bridge task.
+    data_cancel: CancellationToken,
 }
 
 impl App {
-    /// Create a new App with all placeholder screens.
-    pub fn new() -> Self {
+    /// Create a new App with all screens. Optionally accepts a [`Controller`]
+    /// for live data — if `None`, the TUI starts in disconnected/demo mode.
+    pub fn new(controller: Option<Controller>) -> Self {
         let (action_tx, action_rx) = mpsc::unbounded_channel();
 
         let screens: HashMap<ScreenId, Box<dyn Component>> =
@@ -76,6 +84,8 @@ impl App {
             terminal_size: (0, 0),
             action_tx,
             action_rx,
+            controller,
+            data_cancel: CancellationToken::new(),
         }
     }
 
@@ -97,6 +107,15 @@ impl App {
         tui.enter()?;
         self.terminal_size = tui.size().unwrap_or((80, 24));
         self.init_screens()?;
+
+        // Spawn data bridge if we have a controller
+        if let Some(controller) = self.controller.clone() {
+            let cancel = self.data_cancel.clone();
+            let tx = self.action_tx.clone();
+            tokio::spawn(async move {
+                crate::data_bridge::spawn_data_bridge(controller, tx, cancel).await;
+            });
+        }
 
         let mut events = EventReader::new(
             Duration::from_millis(250), // 4 Hz tick
@@ -144,6 +163,8 @@ impl App {
             }
         }
 
+        // Cancel the data bridge and clean up
+        self.data_cancel.cancel();
         events.stop();
         info!("TUI event loop ended");
         Ok(())
@@ -279,7 +300,24 @@ impl App {
             // Render is handled in the main loop, not here
             Action::Render | Action::Tick => {}
 
-            // Propagate everything else to the active screen
+            // Data updates go to ALL screens so they stay in sync
+            Action::DevicesUpdated(_)
+            | Action::ClientsUpdated(_)
+            | Action::NetworksUpdated(_)
+            | Action::FirewallPoliciesUpdated(_)
+            | Action::FirewallZonesUpdated(_)
+            | Action::AclRulesUpdated(_)
+            | Action::WifiBroadcastsUpdated(_)
+            | Action::EventReceived(_)
+            | Action::SiteUpdated(_) => {
+                for screen in self.screens.values_mut() {
+                    if let Some(follow_up) = screen.update(action)? {
+                        self.action_tx.send(follow_up)?;
+                    }
+                }
+            }
+
+            // Everything else goes to the active screen only
             other => {
                 if let Some(screen) = self.screens.get_mut(&self.active_screen) {
                     if let Some(follow_up) = screen.update(other)? {

@@ -5,6 +5,7 @@
 mod action;
 mod app;
 mod component;
+mod data_bridge;
 mod event;
 mod screen;
 mod screens;
@@ -16,9 +17,12 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use color_eyre::eyre::Result;
+use secrecy::SecretString;
 use tracing::info;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
+
+use unifi_core::{AuthCredentials, Controller, ControllerConfig, TlsVerification};
 
 use crate::app::App;
 
@@ -84,6 +88,33 @@ fn setup_tracing(cli: &Cli) -> Result<WorkerGuard> {
     Ok(guard)
 }
 
+/// Build a [`Controller`] from CLI args, if a URL was provided.
+fn build_controller(cli: &Cli) -> Option<Controller> {
+    let url_str = cli.url.as_deref()?;
+    let url = url_str.parse().expect("invalid controller URL");
+
+    let auth = match &cli.api_key {
+        Some(key) => AuthCredentials::ApiKey(SecretString::from(key.clone())),
+        None => {
+            // No credentials — can't connect
+            return None;
+        }
+    };
+
+    let config = ControllerConfig {
+        url,
+        auth,
+        site: cli.site.clone(),
+        tls: TlsVerification::DangerAcceptInvalid,
+        timeout: std::time::Duration::from_secs(30),
+        refresh_interval_secs: 30,
+        websocket_enabled: false,
+        polling_interval_secs: 30,
+    };
+
+    Some(Controller::new(config))
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -100,7 +131,8 @@ async fn main() -> Result<()> {
         "starting unifi-tui"
     );
 
-    let mut app = App::new();
+    let controller = build_controller(&cli);
+    let mut app = App::new(controller);
     app.run().await?;
 
     Ok(())

@@ -1,9 +1,16 @@
-// unifi-core: Business logic and shared services
+// unifi-core: Reactive data layer between unifi-api and consumers (CLI/TUI).
 
+pub mod config;
 pub mod error;
 pub mod model;
+pub mod command;
+pub mod controller;
 
+// ── Primary re-exports ──────────────────────────────────────────────
+pub use config::{AuthCredentials, ControllerConfig, TlsVerification};
 pub use error::CoreError;
+pub use controller::Controller;
+pub use command::{Command, CommandResult};
 
 // Re-export the most commonly used model types at the crate root for ergonomics.
 pub use model::{

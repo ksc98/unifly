@@ -3,16 +3,29 @@
 use std::sync::Arc;
 
 use tabled::Tabled;
-use unifi_core::model::{FirewallPolicy, FirewallZone};
-use unifi_core::{Command as CoreCommand, Controller, EntityId};
+use unifi_core::model::{FirewallAction as ModelFirewallAction, FirewallPolicy, FirewallZone};
+use unifi_core::{
+    Command as CoreCommand, Controller, CreateFirewallPolicyRequest,
+    CreateFirewallZoneRequest, EntityId, UpdateFirewallPolicyRequest,
+    UpdateFirewallZoneRequest,
+};
 
 use crate::cli::{
-    FirewallArgs, FirewallCommand, FirewallPoliciesCommand, FirewallZonesCommand, GlobalOpts,
+    FirewallAction, FirewallArgs, FirewallCommand, FirewallPoliciesCommand,
+    FirewallZonesCommand, GlobalOpts,
 };
 use crate::error::CliError;
 use crate::output;
 
 use super::util;
+
+fn map_fw_action(a: FirewallAction) -> ModelFirewallAction {
+    match a {
+        FirewallAction::Allow => ModelFirewallAction::Allow,
+        FirewallAction::Block => ModelFirewallAction::Block,
+        FirewallAction::Reject => ModelFirewallAction::Reject,
+    }
+}
 
 // ── Policy table row ────────────────────────────────────────────────
 
@@ -151,30 +164,27 @@ async fn handle_policies(
             action,
             enabled,
             description,
-            logging,
+            logging: _,
         } => {
-            let data = if let Some(ref path) = from_file {
-                util::read_json_file(path)?
+            let req = if let Some(ref path) = from_file {
+                serde_json::from_value(util::read_json_file(path)?)?
             } else {
-                let mut map = serde_json::Map::new();
-                if let Some(name) = name {
-                    map.insert("name".into(), serde_json::json!(name));
+                CreateFirewallPolicyRequest {
+                    name: name.unwrap_or_default(),
+                    action: action.map(map_fw_action).unwrap_or(ModelFirewallAction::Block),
+                    source_zone_id: EntityId::from(""),
+                    destination_zone_id: EntityId::from(""),
+                    enabled,
+                    description,
+                    protocol: None,
+                    source_address: None,
+                    destination_address: None,
+                    destination_port: None,
                 }
-                if let Some(action) = action {
-                    map.insert("action".into(), serde_json::json!(format!("{action:?}")));
-                }
-                map.insert("enabled".into(), serde_json::json!(enabled));
-                if let Some(desc) = description {
-                    map.insert("description".into(), serde_json::json!(desc));
-                }
-                if logging {
-                    map.insert("logging".into(), serde_json::json!(true));
-                }
-                serde_json::Value::Object(map)
             };
 
             controller
-                .execute(CoreCommand::CreateFirewallPolicy { data })
+                .execute(CoreCommand::CreateFirewallPolicy(req))
                 .await?;
             if !global.quiet {
                 eprintln!("Firewall policy created");
@@ -183,14 +193,14 @@ async fn handle_policies(
         }
 
         FirewallPoliciesCommand::Update { id, from_file } => {
-            let data = if let Some(ref path) = from_file {
-                util::read_json_file(path)?
+            let update = if let Some(ref path) = from_file {
+                serde_json::from_value(util::read_json_file(path)?)?
             } else {
-                serde_json::json!({})
+                UpdateFirewallPolicyRequest::default()
             };
             let eid = EntityId::from(id);
             controller
-                .execute(CoreCommand::UpdateFirewallPolicy { id: eid, data })
+                .execute(CoreCommand::UpdateFirewallPolicy { id: eid, update })
                 .await?;
             if !global.quiet {
                 eprintln!("Firewall policy updated");
@@ -200,9 +210,8 @@ async fn handle_policies(
 
         FirewallPoliciesCommand::Patch { id, enabled } => {
             let eid = EntityId::from(id);
-            let data = serde_json::json!({ "enabled": enabled });
             controller
-                .execute(CoreCommand::UpdateFirewallPolicy { id: eid, data })
+                .execute(CoreCommand::PatchFirewallPolicy { id: eid, enabled })
                 .await?;
             if !global.quiet {
                 let state = if enabled { "enabled" } else { "disabled" };
@@ -293,11 +302,55 @@ async fn handle_zones(
             Ok(())
         }
 
-        FirewallZonesCommand::Create { name: _, networks: _ }
-        | FirewallZonesCommand::Update { id: _, name: _, networks: _ }
-        | FirewallZonesCommand::Delete { id: _ } => {
-            // Zone CRUD not yet in Command enum -- stub
-            util::legacy_stub("Firewall zone mutations")
+        FirewallZonesCommand::Create { name, networks } => {
+            let network_ids = networks
+                .unwrap_or_default()
+                .into_iter()
+                .map(EntityId::from)
+                .collect();
+            let req = CreateFirewallZoneRequest {
+                name,
+                description: None,
+                network_ids,
+            };
+            controller
+                .execute(CoreCommand::CreateFirewallZone(req))
+                .await?;
+            if !global.quiet {
+                eprintln!("Firewall zone created");
+            }
+            Ok(())
+        }
+
+        FirewallZonesCommand::Update { id, name, networks } => {
+            let eid = EntityId::from(id);
+            let update = UpdateFirewallZoneRequest {
+                name,
+                description: None,
+                network_ids: networks
+                    .map(|ns| ns.into_iter().map(EntityId::from).collect()),
+            };
+            controller
+                .execute(CoreCommand::UpdateFirewallZone { id: eid, update })
+                .await?;
+            if !global.quiet {
+                eprintln!("Firewall zone updated");
+            }
+            Ok(())
+        }
+
+        FirewallZonesCommand::Delete { id } => {
+            let eid = EntityId::from(id.clone());
+            if !util::confirm(&format!("Delete firewall zone {id}?"), global.yes)? {
+                return Ok(());
+            }
+            controller
+                .execute(CoreCommand::DeleteFirewallZone { id: eid })
+                .await?;
+            if !global.quiet {
+                eprintln!("Firewall zone deleted");
+            }
+            Ok(())
         }
     }
 }

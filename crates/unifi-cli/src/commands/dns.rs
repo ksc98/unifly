@@ -3,14 +3,28 @@
 use std::sync::Arc;
 
 use tabled::Tabled;
-use unifi_core::model::DnsPolicy;
-use unifi_core::{Command as CoreCommand, Controller, EntityId};
+use unifi_core::model::{DnsPolicy, DnsPolicyType};
+use unifi_core::{
+    Command as CoreCommand, Controller, CreateDnsPolicyRequest, EntityId, UpdateDnsPolicyRequest,
+};
 
-use crate::cli::{DnsArgs, DnsCommand, GlobalOpts};
+use crate::cli::{DnsArgs, DnsCommand, DnsRecordType, GlobalOpts};
 use crate::error::CliError;
 use crate::output;
 
 use super::util;
+
+fn map_dns_type(rt: DnsRecordType) -> DnsPolicyType {
+    match rt {
+        DnsRecordType::A => DnsPolicyType::ARecord,
+        DnsRecordType::Aaaa => DnsPolicyType::AaaaRecord,
+        DnsRecordType::Cname => DnsPolicyType::CnameRecord,
+        DnsRecordType::Mx => DnsPolicyType::MxRecord,
+        DnsRecordType::Txt => DnsPolicyType::TxtRecord,
+        DnsRecordType::Srv => DnsPolicyType::SrvRecord,
+        DnsRecordType::Forward => DnsPolicyType::ForwardDomain,
+    }
+}
 
 // ── Table row ───────────────────────────────────────────────────────
 
@@ -94,32 +108,24 @@ pub async fn handle(
             from_file,
             record_type,
             domain,
-            value,
-            ttl,
-            priority,
+            value: _,
+            ttl: _,
+            priority: _,
         } => {
-            let data = if let Some(ref path) = from_file {
-                util::read_json_file(path)?
+            let req = if let Some(ref path) = from_file {
+                serde_json::from_value(util::read_json_file(path)?)?
             } else {
-                let mut map = serde_json::Map::new();
-                if let Some(rt) = record_type {
-                    map.insert("record_type".into(), serde_json::json!(format!("{rt:?}")));
+                CreateDnsPolicyRequest {
+                    name: domain.clone().unwrap_or_default(),
+                    policy_type: record_type.map(map_dns_type).unwrap_or(DnsPolicyType::ARecord),
+                    enabled: true,
+                    domains: domain.map(|d| vec![d]),
+                    upstream: None,
                 }
-                if let Some(domain) = domain {
-                    map.insert("domain".into(), serde_json::json!(domain));
-                }
-                if let Some(value) = value {
-                    map.insert("value".into(), serde_json::json!(value));
-                }
-                map.insert("ttl".into(), serde_json::json!(ttl));
-                if let Some(priority) = priority {
-                    map.insert("priority".into(), serde_json::json!(priority));
-                }
-                serde_json::Value::Object(map)
             };
 
             controller
-                .execute(CoreCommand::CreateDnsPolicy { data })
+                .execute(CoreCommand::CreateDnsPolicy(req))
                 .await?;
             if !global.quiet {
                 eprintln!("DNS policy created");
@@ -128,14 +134,14 @@ pub async fn handle(
         }
 
         DnsCommand::Update { id, from_file } => {
-            let data = if let Some(ref path) = from_file {
-                util::read_json_file(path)?
+            let update = if let Some(ref path) = from_file {
+                serde_json::from_value(util::read_json_file(path)?)?
             } else {
-                serde_json::json!({})
+                UpdateDnsPolicyRequest::default()
             };
             let eid = EntityId::from(id);
             controller
-                .execute(CoreCommand::UpdateDnsPolicy { id: eid, data })
+                .execute(CoreCommand::UpdateDnsPolicy { id: eid, update })
                 .await?;
             if !global.quiet {
                 eprintln!("DNS policy updated");

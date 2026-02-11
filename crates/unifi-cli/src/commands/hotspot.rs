@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use tabled::Tabled;
 use unifi_core::model::Voucher;
-use unifi_core::{Command as CoreCommand, Controller, EntityId};
+use unifi_core::{Command as CoreCommand, Controller, CreateVouchersRequest, EntityId};
 
 use crate::cli::{GlobalOpts, HotspotArgs, HotspotCommand};
 use crate::error::CliError;
@@ -104,26 +104,18 @@ pub async fn handle(
             rx_limit_kbps,
             tx_limit_kbps,
         } => {
-            let mut map = serde_json::Map::new();
-            map.insert("name".into(), serde_json::json!(name));
-            map.insert("count".into(), serde_json::json!(count));
-            map.insert("time_limit_minutes".into(), serde_json::json!(minutes));
-            if let Some(gl) = guest_limit {
-                map.insert("guest_limit".into(), serde_json::json!(gl));
-            }
-            if let Some(dl) = data_limit_mb {
-                map.insert("data_limit_mb".into(), serde_json::json!(dl));
-            }
-            if let Some(rx) = rx_limit_kbps {
-                map.insert("rx_rate_limit_kbps".into(), serde_json::json!(rx));
-            }
-            if let Some(tx) = tx_limit_kbps {
-                map.insert("tx_rate_limit_kbps".into(), serde_json::json!(tx));
-            }
-            let data = serde_json::Value::Object(map);
+            let req = CreateVouchersRequest {
+                count,
+                name: Some(name),
+                time_limit_minutes: Some(minutes),
+                data_usage_limit_mb: data_limit_mb,
+                rx_rate_limit_kbps: rx_limit_kbps,
+                tx_rate_limit_kbps: tx_limit_kbps,
+                authorized_guest_limit: guest_limit,
+            };
 
             controller
-                .execute(CoreCommand::CreateVoucher { data })
+                .execute(CoreCommand::CreateVouchers(req))
                 .await?;
             if !global.quiet {
                 eprintln!("{count} voucher(s) created");

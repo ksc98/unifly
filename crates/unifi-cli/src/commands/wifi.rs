@@ -3,14 +3,29 @@
 use std::sync::Arc;
 
 use tabled::Tabled;
-use unifi_core::model::WifiBroadcast;
-use unifi_core::{Command as CoreCommand, Controller, EntityId};
+use unifi_core::model::{WifiBroadcast, WifiSecurityMode};
+use unifi_core::{
+    Command as CoreCommand, Controller, CreateWifiBroadcastRequest, EntityId,
+    UpdateWifiBroadcastRequest,
+};
 
-use crate::cli::{GlobalOpts, WifiArgs, WifiCommand};
+use crate::cli::{GlobalOpts, WifiArgs, WifiCommand, WifiSecurity};
 use crate::error::CliError;
 use crate::output;
 
 use super::util;
+
+fn map_security(s: WifiSecurity) -> WifiSecurityMode {
+    match s {
+        WifiSecurity::Open => WifiSecurityMode::Open,
+        WifiSecurity::Wpa2Personal => WifiSecurityMode::Wpa2Personal,
+        WifiSecurity::Wpa3Personal => WifiSecurityMode::Wpa3Personal,
+        WifiSecurity::Wpa2Wpa3Personal => WifiSecurityMode::Wpa2Wpa3Personal,
+        WifiSecurity::Wpa2Enterprise => WifiSecurityMode::Wpa2Enterprise,
+        WifiSecurity::Wpa3Enterprise => WifiSecurityMode::Wpa3Enterprise,
+        WifiSecurity::Wpa2Wpa3Enterprise => WifiSecurityMode::Wpa2Wpa3Enterprise,
+    }
+}
 
 // ── Table row ───────────────────────────────────────────────────────
 
@@ -107,47 +122,31 @@ pub async fn handle(
         WifiCommand::Create {
             from_file,
             name,
-            broadcast_type,
+            broadcast_type: _,
             network,
             security,
             passphrase,
-            frequencies,
+            frequencies: _,
             hidden,
-            band_steering,
-            fast_roaming,
+            band_steering: _,
+            fast_roaming: _,
         } => {
-            let data = if let Some(ref path) = from_file {
-                util::read_json_file(path)?
+            let req = if let Some(ref path) = from_file {
+                serde_json::from_value(util::read_json_file(path)?)?
             } else {
-                let mut map = serde_json::Map::new();
-                if let Some(name) = name {
-                    map.insert("name".into(), serde_json::json!(name));
+                CreateWifiBroadcastRequest {
+                    name: name.clone().unwrap_or_default(),
+                    ssid: name.unwrap_or_default(),
+                    security_mode: map_security(security),
+                    passphrase,
+                    enabled: true,
+                    network_id: network.map(EntityId::from),
+                    hide_ssid: hidden,
                 }
-                map.insert("broadcast_type".into(), serde_json::json!(format!("{broadcast_type:?}")));
-                if let Some(network) = network {
-                    map.insert("network_id".into(), serde_json::json!(network));
-                }
-                map.insert("security".into(), serde_json::json!(format!("{security:?}")));
-                if let Some(passphrase) = passphrase {
-                    map.insert("passphrase".into(), serde_json::json!(passphrase));
-                }
-                if let Some(freqs) = frequencies {
-                    map.insert("frequencies".into(), serde_json::json!(freqs));
-                }
-                if hidden {
-                    map.insert("hidden".into(), serde_json::json!(true));
-                }
-                if band_steering {
-                    map.insert("band_steering".into(), serde_json::json!(true));
-                }
-                if fast_roaming {
-                    map.insert("fast_roaming".into(), serde_json::json!(true));
-                }
-                serde_json::Value::Object(map)
             };
 
             controller
-                .execute(CoreCommand::CreateWifi { data })
+                .execute(CoreCommand::CreateWifiBroadcast(req))
                 .await?;
             if !global.quiet {
                 eprintln!("WiFi broadcast created");
@@ -162,25 +161,22 @@ pub async fn handle(
             passphrase,
             enabled,
         } => {
-            let data = if let Some(ref path) = from_file {
-                util::read_json_file(path)?
+            let update = if let Some(ref path) = from_file {
+                serde_json::from_value(util::read_json_file(path)?)?
             } else {
-                let mut map = serde_json::Map::new();
-                if let Some(name) = name {
-                    map.insert("name".into(), serde_json::json!(name));
+                UpdateWifiBroadcastRequest {
+                    name,
+                    ssid: None,
+                    security_mode: None,
+                    passphrase,
+                    enabled,
+                    hide_ssid: None,
                 }
-                if let Some(passphrase) = passphrase {
-                    map.insert("passphrase".into(), serde_json::json!(passphrase));
-                }
-                if let Some(enabled) = enabled {
-                    map.insert("enabled".into(), serde_json::json!(enabled));
-                }
-                serde_json::Value::Object(map)
             };
 
             let eid = EntityId::from(id);
             controller
-                .execute(CoreCommand::UpdateWifi { id: eid, data })
+                .execute(CoreCommand::UpdateWifiBroadcast { id: eid, update })
                 .await?;
             if !global.quiet {
                 eprintln!("WiFi broadcast updated");
@@ -188,13 +184,13 @@ pub async fn handle(
             Ok(())
         }
 
-        WifiCommand::Delete { id, force: _ } => {
+        WifiCommand::Delete { id, force } => {
             let eid = EntityId::from(id.clone());
             if !util::confirm(&format!("Delete WiFi broadcast {id}?"), global.yes)? {
                 return Ok(());
             }
             controller
-                .execute(CoreCommand::DeleteWifi { id: eid })
+                .execute(CoreCommand::DeleteWifiBroadcast { id: eid, force })
                 .await?;
             if !global.quiet {
                 eprintln!("WiFi broadcast deleted");

@@ -4,8 +4,12 @@
 // The controller routes each variant to the appropriate API backend
 // (Integration API preferred, Legacy API for legacy-only operations).
 
+pub mod requests;
+
 use crate::error::CoreError;
 use crate::model::*;
+
+pub use requests::*;
 
 /// A command envelope sent through the command channel.
 /// Contains the command and a oneshot response channel.
@@ -42,32 +46,43 @@ pub enum Command {
     UnauthorizeGuest { client_id: EntityId },
 
     // ── Network CRUD ─────────────────────────────────────────────────
-    CreateNetwork { data: serde_json::Value },
-    UpdateNetwork { id: EntityId, data: serde_json::Value },
-    DeleteNetwork { id: EntityId },
+    CreateNetwork(CreateNetworkRequest),
+    UpdateNetwork { id: EntityId, update: UpdateNetworkRequest },
+    DeleteNetwork { id: EntityId, force: bool },
 
     // ── WiFi CRUD ────────────────────────────────────────────────────
-    CreateWifi { data: serde_json::Value },
-    UpdateWifi { id: EntityId, data: serde_json::Value },
-    DeleteWifi { id: EntityId },
+    CreateWifiBroadcast(CreateWifiBroadcastRequest),
+    UpdateWifiBroadcast { id: EntityId, update: UpdateWifiBroadcastRequest },
+    DeleteWifiBroadcast { id: EntityId, force: bool },
 
     // ── Firewall ─────────────────────────────────────────────────────
-    CreateFirewallPolicy { data: serde_json::Value },
-    UpdateFirewallPolicy { id: EntityId, data: serde_json::Value },
+    CreateFirewallPolicy(CreateFirewallPolicyRequest),
+    UpdateFirewallPolicy { id: EntityId, update: UpdateFirewallPolicyRequest },
     DeleteFirewallPolicy { id: EntityId },
-    ReorderFirewallPolicies {
-        zone_pair: (EntityId, EntityId),
-        ordered_ids: Vec<EntityId>,
-    },
+    PatchFirewallPolicy { id: EntityId, enabled: bool },
+    ReorderFirewallPolicies { zone_pair: (EntityId, EntityId), ordered_ids: Vec<EntityId> },
+    CreateFirewallZone(CreateFirewallZoneRequest),
+    UpdateFirewallZone { id: EntityId, update: UpdateFirewallZoneRequest },
+    DeleteFirewallZone { id: EntityId },
+
+    // ── ACL ──────────────────────────────────────────────────────────
+    CreateAclRule(CreateAclRuleRequest),
+    UpdateAclRule { id: EntityId, update: UpdateAclRuleRequest },
+    DeleteAclRule { id: EntityId },
     ReorderAclRules { ordered_ids: Vec<EntityId> },
 
     // ── DNS ──────────────────────────────────────────────────────────
-    CreateDnsPolicy { data: serde_json::Value },
-    UpdateDnsPolicy { id: EntityId, data: serde_json::Value },
+    CreateDnsPolicy(CreateDnsPolicyRequest),
+    UpdateDnsPolicy { id: EntityId, update: UpdateDnsPolicyRequest },
     DeleteDnsPolicy { id: EntityId },
 
+    // ── Traffic matching lists ───────────────────────────────────────
+    CreateTrafficMatchingList(CreateTrafficMatchingListRequest),
+    UpdateTrafficMatchingList { id: EntityId, update: UpdateTrafficMatchingListRequest },
+    DeleteTrafficMatchingList { id: EntityId },
+
     // ── Hotspot / Vouchers ───────────────────────────────────────────
-    CreateVoucher { data: serde_json::Value },
+    CreateVouchers(CreateVouchersRequest),
     DeleteVoucher { id: EntityId },
     PurgeVouchers { filter: String },
 
@@ -82,6 +97,7 @@ pub enum Command {
     PoweroffController,
     InviteAdmin { name: String, email: String, role: String },
     RevokeAdmin { id: EntityId },
+    UpdateAdmin { id: EntityId, role: Option<String> },
 }
 
 /// Result of a command execution.
@@ -89,9 +105,13 @@ pub enum Command {
 pub enum CommandResult {
     Ok,
     Device(Device),
+    Client(Client),
     Network(Network),
     WifiBroadcast(WifiBroadcast),
     FirewallPolicy(FirewallPolicy),
+    FirewallZone(FirewallZone),
+    AclRule(AclRule),
     DnsPolicy(DnsPolicy),
     Vouchers(Vec<Voucher>),
+    TrafficMatchingList(TrafficMatchingList),
 }

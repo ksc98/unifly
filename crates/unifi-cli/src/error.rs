@@ -164,10 +164,14 @@ pub enum CliError {
     )]
     Timeout { seconds: u64 },
 
-    // ── IO ───────────────────────────────────────────────────────────
+    // ── IO / Serialization ────────────────────────────────────────────
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error("Invalid JSON payload: {0}")]
+    #[diagnostic(code(unifi::json), help("Check the JSON file contents and try again."))]
+    Json(#[from] serde_json::Error),
 }
 
 impl CliError {

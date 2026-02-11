@@ -39,9 +39,18 @@ pub async fn handle(
             Ok(())
         }
 
-        AdminCommand::Update { .. } => {
-            // Admin role update not yet in Command enum
-            util::legacy_stub("Admin role update")
+        AdminCommand::Update { admin, role } => {
+            let id = EntityId::from(admin);
+            controller
+                .execute(CoreCommand::UpdateAdmin {
+                    id,
+                    role: Some(role),
+                })
+                .await?;
+            if !global.quiet {
+                eprintln!("Admin role updated");
+            }
+            Ok(())
         }
     }
 }

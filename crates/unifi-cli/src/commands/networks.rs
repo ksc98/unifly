@@ -3,9 +3,12 @@
 use std::sync::Arc;
 
 use tabled::Tabled;
-use unifi_core::{Command as CoreCommand, Controller, EntityId, Network};
+use unifi_core::{
+    Command as CoreCommand, Controller, CreateNetworkRequest, EntityId, Network,
+    UpdateNetworkRequest,
+};
 
-use crate::cli::{GlobalOpts, NetworkManagement, NetworksArgs, NetworksCommand};
+use crate::cli::{GlobalOpts, NetworksArgs, NetworksCommand};
 use crate::error::CliError;
 use crate::output;
 
@@ -111,64 +114,33 @@ pub async fn handle(
         NetworksCommand::Create {
             from_file,
             name,
-            management,
+            management: _,
             vlan,
             enabled,
-            ipv4_host,
+            ipv4_host: _,
             dhcp,
-            dhcp_start,
-            dhcp_stop,
-            dhcp_lease,
-            zone,
-            isolated,
-            internet,
+            dhcp_start: _,
+            dhcp_stop: _,
+            dhcp_lease: _,
+            zone: _,
+            isolated: _,
+            internet: _,
         } => {
-            let data = if let Some(ref path) = from_file {
-                util::read_json_file(path)?
+            let req = if let Some(ref path) = from_file {
+                serde_json::from_value(util::read_json_file(path)?)?
             } else {
-                let mut map = serde_json::Map::new();
-                if let Some(name) = name {
-                    map.insert("name".into(), serde_json::json!(name));
+                CreateNetworkRequest {
+                    name: name.unwrap_or_default(),
+                    vlan_id: vlan,
+                    subnet: None,
+                    purpose: None,
+                    dhcp_enabled: dhcp,
+                    enabled,
                 }
-                if let Some(mgmt) = management {
-                    let val = match mgmt {
-                        NetworkManagement::Gateway => "GATEWAY",
-                        NetworkManagement::Switch => "SWITCH",
-                        NetworkManagement::Unmanaged => "UNMANAGED",
-                    };
-                    map.insert("management".into(), serde_json::json!(val));
-                }
-                if let Some(vlan) = vlan {
-                    map.insert("vlan".into(), serde_json::json!(vlan));
-                }
-                map.insert("enabled".into(), serde_json::json!(enabled));
-                if let Some(host) = ipv4_host {
-                    map.insert("ipv4_host_address".into(), serde_json::json!(host));
-                }
-                if dhcp {
-                    map.insert("dhcp_enabled".into(), serde_json::json!(true));
-                }
-                if let Some(start) = dhcp_start {
-                    map.insert("dhcp_start".into(), serde_json::json!(start));
-                }
-                if let Some(stop) = dhcp_stop {
-                    map.insert("dhcp_stop".into(), serde_json::json!(stop));
-                }
-                if let Some(lease) = dhcp_lease {
-                    map.insert("dhcp_lease".into(), serde_json::json!(lease));
-                }
-                if let Some(zone) = zone {
-                    map.insert("zone_id".into(), serde_json::json!(zone));
-                }
-                if isolated {
-                    map.insert("isolation_enabled".into(), serde_json::json!(true));
-                }
-                map.insert("internet_access_enabled".into(), serde_json::json!(internet));
-                serde_json::Value::Object(map)
             };
 
             controller
-                .execute(CoreCommand::CreateNetwork { data })
+                .execute(CoreCommand::CreateNetwork(req))
                 .await?;
             if !global.quiet {
                 eprintln!("Network created");
@@ -183,25 +155,21 @@ pub async fn handle(
             enabled,
             vlan,
         } => {
-            let data = if let Some(ref path) = from_file {
-                util::read_json_file(path)?
+            let update = if let Some(ref path) = from_file {
+                serde_json::from_value(util::read_json_file(path)?)?
             } else {
-                let mut map = serde_json::Map::new();
-                if let Some(name) = name {
-                    map.insert("name".into(), serde_json::json!(name));
+                UpdateNetworkRequest {
+                    name,
+                    vlan_id: vlan,
+                    subnet: None,
+                    dhcp_enabled: None,
+                    enabled,
                 }
-                if let Some(enabled) = enabled {
-                    map.insert("enabled".into(), serde_json::json!(enabled));
-                }
-                if let Some(vlan) = vlan {
-                    map.insert("vlan".into(), serde_json::json!(vlan));
-                }
-                serde_json::Value::Object(map)
             };
 
             let eid = EntityId::from(id);
             controller
-                .execute(CoreCommand::UpdateNetwork { id: eid, data })
+                .execute(CoreCommand::UpdateNetwork { id: eid, update })
                 .await?;
             if !global.quiet {
                 eprintln!("Network updated");
@@ -209,13 +177,13 @@ pub async fn handle(
             Ok(())
         }
 
-        NetworksCommand::Delete { id, force: _ } => {
+        NetworksCommand::Delete { id, force } => {
             let eid = EntityId::from(id.clone());
             if !util::confirm(&format!("Delete network {id}?"), global.yes)? {
                 return Ok(());
             }
             controller
-                .execute(CoreCommand::DeleteNetwork { id: eid })
+                .execute(CoreCommand::DeleteNetwork { id: eid, force })
                 .await?;
             if !global.quiet {
                 eprintln!("Network deleted");

@@ -1,3 +1,13 @@
+//! `unifi` — kubectl-style CLI for managing UniFi Network controllers.
+//!
+//! Powered by clap with subcommands for devices, clients, networks, Wi-Fi,
+//! firewall rules, events, and system info. Supports table, JSON, and YAML
+//! output modes. Run `unifi config init` for an interactive first-time
+//! setup wizard that creates a named controller profile.
+//!
+//! Connects to the controller via `unifi-core`'s [`Controller`], dispatches
+//! the requested command, then disconnects and exits.
+
 mod cli;
 mod commands;
 mod config;

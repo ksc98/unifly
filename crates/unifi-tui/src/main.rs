@@ -1,4 +1,13 @@
-//! unifi-tui — Terminal dashboard for UniFi network management.
+//! `unifi-tui` — Real-time terminal dashboard for UniFi network monitoring.
+//!
+//! Built on [ratatui](https://ratatui.rs) with reactive data from
+//! `unifi-core`'s [`EntityStream`](unifi_core::EntityStream). Screens are
+//! navigable via number keys (1-8): Dashboard, Devices, Clients, Networks,
+//! Firewall, Topology, Events, and Stats.
+//!
+//! Logs are written to a file (default `/tmp/unifi-tui.log`) to avoid
+//! corrupting the terminal UI. A background data bridge task continuously
+//! streams entity updates from the controller into the TUI action loop.
 //!
 //! Entry point: CLI argument parsing, tracing setup, panic hooks, and app launch.
 

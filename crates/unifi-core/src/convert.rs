@@ -12,6 +12,7 @@ use unifi_api::integration_types;
 use unifi_api::legacy::models::{
     LegacyAlarm, LegacyClientEntry, LegacyDevice, LegacyEvent, LegacySite,
 };
+use unifi_api::websocket::UnifiEvent;
 
 use crate::model::{
     client::{Client, ClientType, GuestAuth, WirelessInfo},
@@ -332,6 +333,69 @@ impl From<LegacyAlarm> for Alarm {
             archived: a.archived.unwrap_or(false),
             device_mac: None,
             site_id: None,
+        }
+    }
+}
+
+// ── WebSocket Event ──────────────────────────────────────────────
+
+/// Infer severity from a WebSocket event key.
+///
+/// Disconnect/Lost/Down keywords → Warning, Error/Fail → Error, else Info.
+fn infer_ws_severity(key: &str) -> EventSeverity {
+    let upper = key.to_uppercase();
+    if upper.contains("ERROR") || upper.contains("FAIL") {
+        EventSeverity::Error
+    } else if upper.contains("DISCONNECT")
+        || upper.contains("LOST")
+        || upper.contains("DOWN")
+    {
+        EventSeverity::Warning
+    } else {
+        EventSeverity::Info
+    }
+}
+
+impl From<UnifiEvent> for Event {
+    fn from(e: UnifiEvent) -> Self {
+        let category = map_event_category(&Some(e.subsystem.clone()));
+        let severity = infer_ws_severity(&e.key);
+
+        // Extract device MAC from common extra fields
+        let device_mac = e
+            .extra
+            .get("mac")
+            .or_else(|| e.extra.get("sw"))
+            .or_else(|| e.extra.get("ap"))
+            .and_then(|v| v.as_str())
+            .map(MacAddress::new);
+
+        // Extract client MAC from common extra fields
+        let client_mac = e
+            .extra
+            .get("user")
+            .or_else(|| e.extra.get("sta"))
+            .and_then(|v| v.as_str())
+            .map(MacAddress::new);
+
+        let site_id = if e.site_id.is_empty() {
+            None
+        } else {
+            Some(EntityId::Legacy(e.site_id))
+        };
+
+        Event {
+            id: None,
+            timestamp: parse_datetime(&e.datetime).unwrap_or_else(Utc::now),
+            category,
+            severity,
+            event_type: e.key.clone(),
+            message: e.message.unwrap_or_default(),
+            device_mac,
+            client_mac,
+            site_id,
+            raw_key: Some(e.key),
+            source: DataSource::LegacyApi,
         }
     }
 }

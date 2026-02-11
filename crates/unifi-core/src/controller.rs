@@ -20,6 +20,7 @@ use crate::store::DataStore;
 use crate::stream::EntityStream;
 
 use unifi_api::transport::{TlsMode, TransportConfig};
+use unifi_api::websocket::{ReconnectConfig, WebSocketHandle};
 use unifi_api::{IntegrationClient, LegacyClient};
 
 const COMMAND_CHANNEL_SIZE: usize = 64;
@@ -64,6 +65,8 @@ struct ControllerInner {
     integration_client: Mutex<Option<IntegrationClient>>,
     /// Resolved Integration API site UUID (populated on connect).
     site_id: Mutex<Option<uuid::Uuid>>,
+    /// WebSocket event stream handle (populated on connect if enabled).
+    ws_handle: Mutex<Option<WebSocketHandle>>,
     task_handles: Mutex<Vec<JoinHandle<()>>>,
 }
 
@@ -91,6 +94,7 @@ impl Controller {
                 legacy_client: Mutex::new(None),
                 integration_client: Mutex::new(None),
                 site_id: Mutex::new(None),
+                ws_handle: Mutex::new(None),
                 task_handles: Mutex::new(Vec::new()),
             }),
         }
@@ -234,13 +238,111 @@ impl Controller {
         let interval_secs = config.refresh_interval_secs;
         if interval_secs > 0 {
             let ctrl = self.clone();
-            let cancel = child;
+            let cancel = child.clone();
             handles.push(tokio::spawn(refresh_task(ctrl, interval_secs, cancel)));
+        }
+
+        // WebSocket event stream
+        if config.websocket_enabled {
+            self.spawn_websocket(&child, &mut handles).await;
         }
 
         let _ = self.inner.connection_state.send(ConnectionState::Connected);
         info!("connected to controller");
         Ok(())
+    }
+
+    /// Spawn the WebSocket event stream and a bridge task that converts
+    /// raw [`UnifiEvent`]s into domain [`Event`]s and broadcasts them.
+    ///
+    /// Non-fatal on failure — the TUI falls back to polling.
+    async fn spawn_websocket(
+        &self,
+        cancel: &CancellationToken,
+        handles: &mut Vec<JoinHandle<()>>,
+    ) {
+        let legacy_guard = self.inner.legacy_client.lock().await;
+        let Some(ref legacy) = *legacy_guard else {
+            debug!("no legacy client — WebSocket unavailable");
+            return;
+        };
+
+        let platform = legacy.platform();
+        let Some(ws_path_template) = platform.websocket_path() else {
+            debug!("platform does not support WebSocket");
+            return;
+        };
+
+        let ws_path = ws_path_template.replace("{site}", &self.inner.config.site);
+        let base_url = &self.inner.config.url;
+        let scheme = if base_url.scheme() == "https" { "wss" } else { "ws" };
+        let host = base_url.host_str().unwrap_or("localhost");
+        let ws_url_str = match base_url.port() {
+            Some(p) => format!("{scheme}://{host}:{p}{ws_path}"),
+            None => format!("{scheme}://{host}{ws_path}"),
+        };
+        let ws_url = match url::Url::parse(&ws_url_str) {
+            Ok(u) => u,
+            Err(e) => {
+                warn!(error = %e, url = %ws_url_str, "invalid WebSocket URL");
+                return;
+            }
+        };
+
+        let cookie = legacy.cookie_header();
+        drop(legacy_guard);
+
+        if cookie.is_none() {
+            warn!("no session cookie — WebSocket requires legacy auth (skipping)");
+            return;
+        }
+
+        let ws_cancel = cancel.child_token();
+        let handle = match WebSocketHandle::connect(
+            ws_url,
+            ReconnectConfig::default(),
+            ws_cancel.clone(),
+            cookie,
+        )
+        .await
+        {
+            Ok(h) => h,
+            Err(e) => {
+                warn!(error = %e, "WebSocket connection failed (non-fatal)");
+                return;
+            }
+        };
+
+        // Bridge task: WS events → domain Events → broadcast channel
+        let mut ws_rx = handle.subscribe();
+        let event_tx = self.inner.event_tx.clone();
+        let bridge_cancel = ws_cancel;
+
+        handles.push(tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    biased;
+                    _ = bridge_cancel.cancelled() => break,
+                    result = ws_rx.recv() => {
+                        match result {
+                            Ok(ws_event) => {
+                                let event = crate::model::event::Event::from(
+                                    (*ws_event).clone(),
+                                );
+                                let _ = event_tx.send(Arc::new(event));
+                            }
+                            Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                                warn!(skipped = n, "WS bridge: receiver lagged");
+                            }
+                            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                        }
+                    }
+                }
+            }
+        }));
+
+        *self.inner.ws_handle.lock().await = Some(handle);
+        info!("WebSocket event stream spawned (handshake in progress)");
     }
 
     /// Disconnect from the controller.
@@ -267,6 +369,11 @@ impl Controller {
                     warn!(error = %e, "logout failed (non-fatal)");
                 }
             }
+        }
+
+        // Shut down WebSocket if active
+        if let Some(handle) = self.inner.ws_handle.lock().await.take() {
+            handle.shutdown();
         }
 
         *self.inner.legacy_client.lock().await = None;
@@ -866,10 +973,12 @@ impl Controller {
     pub async fn get_site_stats(
         &self,
         interval: &str,
+        start: Option<i64>,
+        end: Option<i64>,
     ) -> Result<Vec<serde_json::Value>, CoreError> {
         let guard = self.inner.legacy_client.lock().await;
         let legacy = require_legacy(&guard)?;
-        Ok(legacy.get_site_stats(interval).await?)
+        Ok(legacy.get_site_stats(interval, start, end).await?)
     }
 
     /// Fetch per-device historical statistics.
@@ -898,10 +1007,12 @@ impl Controller {
     pub async fn get_gateway_stats(
         &self,
         interval: &str,
+        start: Option<i64>,
+        end: Option<i64>,
     ) -> Result<Vec<serde_json::Value>, CoreError> {
         let guard = self.inner.legacy_client.lock().await;
         let legacy = require_legacy(&guard)?;
-        Ok(legacy.get_gateway_stats(interval).await?)
+        Ok(legacy.get_gateway_stats(interval, start, end).await?)
     }
 
     /// Fetch DPI statistics.

@@ -35,7 +35,7 @@ pub async fn handle(
     let data = match args.command {
         StatsCommand::Site(query) => {
             let interval = interval_str(&query.interval);
-            controller.get_site_stats(interval).await?
+            controller.get_site_stats(interval, None, None).await?
         }
         StatsCommand::Device(query) => {
             let interval = interval_str(&query.interval);
@@ -51,7 +51,7 @@ pub async fn handle(
         }
         StatsCommand::Gateway(query) => {
             let interval = interval_str(&query.interval);
-            controller.get_gateway_stats(interval).await?
+            controller.get_gateway_stats(interval, None, None).await?
         }
         StatsCommand::Dpi { group_by, .. } => {
             let gb = match group_by {

@@ -207,7 +207,8 @@ impl StatsScreen {
 }
 
 impl Component for StatsScreen {
-    fn init(&mut self, _action_tx: UnboundedSender<Action>) -> Result<()> {
+    fn init(&mut self, action_tx: UnboundedSender<Action>) -> Result<()> {
+        let _ = action_tx.send(Action::RequestStats(self.period));
         Ok(())
     }
 
@@ -215,27 +216,36 @@ impl Component for StatsScreen {
         match key.code {
             KeyCode::Char('1') => {
                 self.period = StatsPeriod::OneHour;
-                Ok(Some(Action::SetStatsPeriod(StatsPeriod::OneHour)))
+                Ok(Some(Action::RequestStats(StatsPeriod::OneHour)))
             }
             KeyCode::Char('2') => {
                 self.period = StatsPeriod::TwentyFourHours;
-                Ok(Some(Action::SetStatsPeriod(StatsPeriod::TwentyFourHours)))
+                Ok(Some(Action::RequestStats(StatsPeriod::TwentyFourHours)))
             }
             KeyCode::Char('3') => {
                 self.period = StatsPeriod::SevenDays;
-                Ok(Some(Action::SetStatsPeriod(StatsPeriod::SevenDays)))
+                Ok(Some(Action::RequestStats(StatsPeriod::SevenDays)))
             }
             KeyCode::Char('4') => {
                 self.period = StatsPeriod::ThirtyDays;
-                Ok(Some(Action::SetStatsPeriod(StatsPeriod::ThirtyDays)))
+                Ok(Some(Action::RequestStats(StatsPeriod::ThirtyDays)))
             }
             _ => Ok(None),
         }
     }
 
     fn update(&mut self, action: &Action) -> Result<Option<Action>> {
-        if let Action::SetStatsPeriod(period) = action {
-            self.period = *period;
+        match action {
+            Action::SetStatsPeriod(period) => {
+                self.period = *period;
+            }
+            Action::StatsUpdated(data) => {
+                self.bandwidth_tx = data.bandwidth_tx.clone();
+                self.bandwidth_rx = data.bandwidth_rx.clone();
+                self.client_counts = data.client_counts.clone();
+                self.dpi_apps = data.dpi_apps.clone();
+            }
+            _ => {}
         }
         Ok(None)
     }

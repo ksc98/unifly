@@ -55,6 +55,41 @@ pub enum StatsPeriod {
     ThirtyDays,
 }
 
+impl StatsPeriod {
+    /// Legacy API interval string for `stat/report` endpoints.
+    pub fn api_interval(self) -> &'static str {
+        match self {
+            Self::OneHour | Self::TwentyFourHours => "5minutes",
+            Self::SevenDays => "hourly",
+            Self::ThirtyDays => "daily",
+        }
+    }
+
+    /// Duration of this period in seconds, used to compute the `start` epoch
+    /// for `stat/report` requests.
+    pub fn duration_secs(self) -> i64 {
+        match self {
+            Self::OneHour => 3_600,
+            Self::TwentyFourHours => 86_400,
+            Self::SevenDays => 7 * 86_400,
+            Self::ThirtyDays => 30 * 86_400,
+        }
+    }
+}
+
+/// Historical stats data fetched from the controller.
+#[derive(Debug, Clone, Default)]
+pub struct StatsData {
+    /// WAN TX bandwidth: `(epoch_secs, bytes_per_sec)`
+    pub bandwidth_tx: Vec<(f64, f64)>,
+    /// WAN RX bandwidth: `(epoch_secs, bytes_per_sec)`
+    pub bandwidth_rx: Vec<(f64, f64)>,
+    /// Client count over time: `(epoch_secs, count)`
+    pub client_counts: Vec<(f64, f64)>,
+    /// Top DPI applications: `(name, percentage)`
+    pub dpi_apps: Vec<(String, f64)>,
+}
+
 /// Sort field for table columns.
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -227,6 +262,8 @@ pub enum Action {
 
     // ── Stats ─────────────────────────────────────────────────────
     SetStatsPeriod(StatsPeriod),
+    RequestStats(StatsPeriod),
+    StatsUpdated(StatsData),
 
     // ── Topology ──────────────────────────────────────────────────
     TopologyPan(i16, i16),

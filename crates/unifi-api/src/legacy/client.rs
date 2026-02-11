@@ -5,8 +5,9 @@
 // (devices, clients, etc.) are implemented as inherent methods via
 // separate files to keep this module focused on transport mechanics.
 
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
+use reqwest::cookie::{CookieStore, Jar};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use tracing::{debug, trace};
@@ -44,6 +45,8 @@ pub struct LegacyClient {
     /// through the `/proxy/network/` path. Captured from login response
     /// headers and rotated via `X-Updated-CSRF-Token`.
     csrf_token: RwLock<Option<String>>,
+    /// Cookie jar reference for extracting session cookies (e.g. for WebSocket auth).
+    cookie_jar: Option<Arc<Jar>>,
 }
 
 impl LegacyClient {
@@ -64,6 +67,7 @@ impl LegacyClient {
         } else {
             transport.clone().with_cookie_jar()
         };
+        let cookie_jar = config.cookie_jar.clone();
         let http = config.build_client()?;
         Ok(Self {
             http,
@@ -71,6 +75,7 @@ impl LegacyClient {
             site,
             platform,
             csrf_token: RwLock::new(None),
+            cookie_jar,
         })
     }
 
@@ -90,6 +95,7 @@ impl LegacyClient {
             site,
             platform,
             csrf_token: RwLock::new(None),
+            cookie_jar: None,
         }
     }
 
@@ -111,6 +117,16 @@ impl LegacyClient {
     /// The detected controller platform.
     pub fn platform(&self) -> ControllerPlatform {
         self.platform
+    }
+
+    /// Extract the session cookie header value for WebSocket auth.
+    ///
+    /// Returns the `Cookie` header string (e.g. `"TOKEN=abc123"`) if a
+    /// cookie jar is available and contains cookies for the controller URL.
+    pub fn cookie_header(&self) -> Option<String> {
+        let jar = self.cookie_jar.as_ref()?;
+        let cookies = jar.cookies(&self.base_url)?;
+        cookies.to_str().ok().map(String::from)
     }
 
     // ── CSRF token management ─────────────────────────────────────────

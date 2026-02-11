@@ -17,16 +17,27 @@ impl LegacyClient {
     ///
     /// The `interval` parameter should be one of: `"5minutes"`, `"hourly"`, `"daily"`.
     /// Returns loosely-typed JSON because the field set varies by report type.
-    pub async fn get_site_stats(&self, interval: &str) -> Result<Vec<serde_json::Value>, Error> {
+    pub async fn get_site_stats(
+        &self,
+        interval: &str,
+        start: Option<i64>,
+        end: Option<i64>,
+    ) -> Result<Vec<serde_json::Value>, Error> {
         let path = format!("stat/report/{}.site", interval);
         let url = self.site_url(&path);
-        debug!(interval, "fetching site stats");
+        debug!(interval, ?start, ?end, "fetching site stats");
 
         // The report endpoint requires a POST with attribute selection.
         // Requesting common attributes; the API ignores unknown ones.
-        let body = json!({
+        let mut body = json!({
             "attrs": ["bytes", "num_sta", "time", "wlan-num_sta", "lan-num_sta"],
         });
+        if let Some(s) = start {
+            body["start"] = json!(s);
+        }
+        if let Some(e) = end {
+            body["end"] = json!(e);
+        }
 
         self.post(url, &body).await
     }
@@ -82,14 +93,25 @@ impl LegacyClient {
     /// Fetch gateway historical statistics.
     ///
     /// `POST /api/s/{site}/stat/report/{interval}.gw`
-    pub async fn get_gateway_stats(&self, interval: &str) -> Result<Vec<serde_json::Value>, Error> {
+    pub async fn get_gateway_stats(
+        &self,
+        interval: &str,
+        start: Option<i64>,
+        end: Option<i64>,
+    ) -> Result<Vec<serde_json::Value>, Error> {
         let path = format!("stat/report/{}.gw", interval);
         let url = self.site_url(&path);
-        debug!(interval, "fetching gateway stats");
+        debug!(interval, ?start, ?end, "fetching gateway stats");
 
-        let body = json!({
+        let mut body = json!({
             "attrs": ["bytes", "time", "wan-tx_bytes", "wan-rx_bytes", "lan-rx_bytes", "lan-tx_bytes"],
         });
+        if let Some(s) = start {
+            body["start"] = json!(s);
+        }
+        if let Some(e) = end {
+            body["end"] = json!(e);
+        }
 
         self.post(url, &body).await
     }

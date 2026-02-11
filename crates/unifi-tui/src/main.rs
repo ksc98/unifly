@@ -120,7 +120,7 @@ fn build_controller(cli: &Cli) -> Option<Controller> {
         tls: TlsVerification::DangerAcceptInvalid,
         timeout: std::time::Duration::from_secs(30),
         refresh_interval_secs: 30,
-        websocket_enabled: false,
+        websocket_enabled: true,
         polling_interval_secs: 30,
     };
 

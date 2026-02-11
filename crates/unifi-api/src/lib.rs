@@ -7,3 +7,5 @@ pub mod websocket;
 
 pub use error::Error;
 pub use auth::{AuthStrategy, Credentials, ControllerPlatform};
+pub use legacy::LegacyClient;
+pub use legacy::models as legacy_models;

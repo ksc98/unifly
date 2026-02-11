@@ -12,18 +12,13 @@ pub enum EntityOrigin {
 }
 
 /// Which API provided this data (internal bookkeeping, not exposed in display).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum DataSource {
+    #[default]
     IntegrationApi,
     LegacyApi,
     WebSocket,
     Merged,
-}
-
-impl Default for DataSource {
-    fn default() -> Self {
-        Self::IntegrationApi
-    }
 }
 
 /// Bandwidth measurement.

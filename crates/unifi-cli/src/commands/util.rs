@@ -57,7 +57,7 @@ pub fn confirm(message: &str, yes_flag: bool) -> Result<bool, CliError> {
         .with_prompt(message)
         .default(false)
         .interact()
-        .map_err(|e| CliError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        .map_err(|e| CliError::Io(std::io::Error::other(e)))?;
     Ok(confirmed)
 }
 

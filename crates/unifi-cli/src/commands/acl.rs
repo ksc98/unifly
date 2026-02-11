@@ -41,7 +41,7 @@ impl From<&Arc<AclRule>> for AclRow {
 }
 
 fn detail(r: &Arc<AclRule>) -> String {
-    vec![
+    [
         format!("ID:      {}", r.id),
         format!("Name:    {}", r.name),
         format!("Enabled: {}", r.enabled),

@@ -46,7 +46,7 @@ where
         OutputFormat::Json => render_json(data, false),
         OutputFormat::JsonCompact => render_json(data, true),
         OutputFormat::Yaml => render_yaml(data),
-        OutputFormat::Plain => data.iter().map(|item| id_fn(item)).collect::<Vec<_>>().join("\n"),
+        OutputFormat::Plain => data.iter().map(&id_fn).collect::<Vec<_>>().join("\n"),
     }
 }
 

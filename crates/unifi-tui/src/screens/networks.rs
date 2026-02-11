@@ -342,7 +342,7 @@ impl Component for NetworksScreen {
             .header(header)
             .row_highlight_style(theme::table_selected());
 
-        let mut state = self.table_state.clone();
+        let mut state = self.table_state;
         frame.render_stateful_widget(table, layout[0], &mut state);
 
         // Hints

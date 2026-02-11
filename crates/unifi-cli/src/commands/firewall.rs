@@ -59,7 +59,7 @@ impl From<&Arc<FirewallPolicy>> for PolicyRow {
 }
 
 fn policy_detail(p: &Arc<FirewallPolicy>) -> String {
-    vec![
+    [
         format!("ID:          {}", p.id),
         format!("Name:        {}", p.name),
         format!("Description: {}", p.description.as_deref().unwrap_or("-")),

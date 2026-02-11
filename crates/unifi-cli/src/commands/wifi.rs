@@ -64,7 +64,7 @@ impl From<&Arc<WifiBroadcast>> for WifiRow {
 }
 
 fn detail(w: &Arc<WifiBroadcast>) -> String {
-    vec![
+    [
         format!("ID:         {}", w.id),
         format!("SSID:       {}", w.name),
         format!("Enabled:    {}", w.enabled),

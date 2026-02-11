@@ -174,7 +174,7 @@ impl FirewallScreen {
             .header(header)
             .row_highlight_style(theme::table_selected());
 
-        let mut state = self.policy_table.clone();
+        let mut state = self.policy_table;
         frame.render_stateful_widget(table, area, &mut state);
     }
 
@@ -222,7 +222,7 @@ impl FirewallScreen {
             .header(header)
             .row_highlight_style(theme::table_selected());
 
-        let mut state = self.zone_table.clone();
+        let mut state = self.zone_table;
         frame.render_stateful_widget(table, area, &mut state);
     }
 
@@ -293,7 +293,7 @@ impl FirewallScreen {
             .header(header)
             .row_highlight_style(theme::table_selected());
 
-        let mut state = self.acl_table.clone();
+        let mut state = self.acl_table;
         frame.render_stateful_widget(table, area, &mut state);
     }
 }

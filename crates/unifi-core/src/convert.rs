@@ -103,8 +103,10 @@ impl From<LegacyDevice> for Device {
 
         // Build stats from sys_stats + uptime
         let stats = {
-            let mut s = DeviceStats::default();
-            s.uptime_secs = d.uptime.and_then(|u| u.try_into().ok());
+            let mut s = DeviceStats {
+                uptime_secs: d.uptime.and_then(|u| u.try_into().ok()),
+                ..Default::default()
+            };
             if let Some(ref sys) = d.sys_stats {
                 s.load_average_1m = sys.load_1.as_deref().and_then(|v| v.parse().ok());
                 s.load_average_5m = sys.load_5.as_deref().and_then(|v| v.parse().ok());

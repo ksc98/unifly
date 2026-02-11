@@ -8,27 +8,32 @@ use chrono::Utc;
 use super::DataStore;
 use crate::model::*;
 
+/// All collections fetched during a single Integration API refresh cycle.
+///
+/// Bundles the 12 entity vectors that `apply_integration_snapshot` needs,
+/// keeping the function signature manageable.
+pub(crate) struct RefreshSnapshot {
+    pub devices: Vec<Device>,
+    pub clients: Vec<Client>,
+    pub networks: Vec<Network>,
+    pub wifi: Vec<WifiBroadcast>,
+    pub policies: Vec<FirewallPolicy>,
+    pub zones: Vec<FirewallZone>,
+    pub acls: Vec<AclRule>,
+    pub dns: Vec<DnsPolicy>,
+    pub vouchers: Vec<Voucher>,
+    pub sites: Vec<Site>,
+    pub events: Vec<Event>,
+    pub traffic_matching_lists: Vec<TrafficMatchingList>,
+}
+
 impl DataStore {
     /// Apply a full Integration API data refresh.
     ///
     /// Clears all collections and repopulates from the provided data.
     /// Devices and clients are keyed by MAC address; other entities use
     /// synthetic `"prefix:{id}"` keys.
-    pub(crate) fn apply_integration_snapshot(
-        &self,
-        devices: Vec<Device>,
-        clients: Vec<Client>,
-        networks: Vec<Network>,
-        wifi: Vec<WifiBroadcast>,
-        policies: Vec<FirewallPolicy>,
-        zones: Vec<FirewallZone>,
-        acls: Vec<AclRule>,
-        dns: Vec<DnsPolicy>,
-        vouchers: Vec<Voucher>,
-        sites: Vec<Site>,
-        events: Vec<Event>,
-        traffic_matching_lists: Vec<TrafficMatchingList>,
-    ) {
+    pub(crate) fn apply_integration_snapshot(&self, snap: RefreshSnapshot) {
         self.devices.clear();
         self.clients.clear();
         self.networks.clear();
@@ -42,67 +47,67 @@ impl DataStore {
         self.events.clear();
         self.traffic_matching_lists.clear();
 
-        for device in devices {
+        for device in snap.devices {
             let key = device.mac.as_str().to_owned();
             let id = device.id.clone();
             self.devices.upsert(key, id, device);
         }
 
-        for client in clients {
+        for client in snap.clients {
             let key = client.mac.as_str().to_owned();
             let id = client.id.clone();
             self.clients.upsert(key, id, client);
         }
 
-        for network in networks {
+        for network in snap.networks {
             let key = format!("net:{}", network.id);
             let id = network.id.clone();
             self.networks.upsert(key, id, network);
         }
 
-        for wb in wifi {
+        for wb in snap.wifi {
             let key = format!("wifi:{}", wb.id);
             let id = wb.id.clone();
             self.wifi_broadcasts.upsert(key, id, wb);
         }
 
-        for policy in policies {
+        for policy in snap.policies {
             let key = format!("fwp:{}", policy.id);
             let id = policy.id.clone();
             self.firewall_policies.upsert(key, id, policy);
         }
 
-        for zone in zones {
+        for zone in snap.zones {
             let key = format!("fwz:{}", zone.id);
             let id = zone.id.clone();
             self.firewall_zones.upsert(key, id, zone);
         }
 
-        for acl in acls {
+        for acl in snap.acls {
             let key = format!("acl:{}", acl.id);
             let id = acl.id.clone();
             self.acl_rules.upsert(key, id, acl);
         }
 
-        for dns_policy in dns {
+        for dns_policy in snap.dns {
             let key = format!("dns:{}", dns_policy.id);
             let id = dns_policy.id.clone();
             self.dns_policies.upsert(key, id, dns_policy);
         }
 
-        for voucher in vouchers {
+        for voucher in snap.vouchers {
             let key = format!("vch:{}", voucher.id);
             let id = voucher.id.clone();
             self.vouchers.upsert(key, id, voucher);
         }
 
-        for site in sites {
+        for site in snap.sites {
             let key = format!("site:{}", site.id);
             let id = site.id.clone();
             self.sites.upsert(key, id, site);
         }
 
-        for event in events {
+        for event in snap.events {
             let key = event
                 .id
                 .as_ref()
@@ -112,7 +117,7 @@ impl DataStore {
             self.events.upsert(key, id, event);
         }
 
-        for tml in traffic_matching_lists {
+        for tml in snap.traffic_matching_lists {
             let key = format!("tml:{}", tml.id);
             let id = tml.id.clone();
             self.traffic_matching_lists.upsert(key, id, tml);

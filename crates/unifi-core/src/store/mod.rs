@@ -7,3 +7,4 @@ mod data_store;
 mod refresh;
 
 pub use data_store::DataStore;
+pub(crate) use refresh::RefreshSnapshot;

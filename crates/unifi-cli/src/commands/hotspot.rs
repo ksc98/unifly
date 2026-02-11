@@ -44,7 +44,7 @@ impl From<&Arc<Voucher>> for VoucherRow {
 }
 
 fn detail(v: &Arc<Voucher>) -> String {
-    vec![
+    [
         format!("ID:         {}", v.id),
         format!("Code:       {}", v.code),
         format!("Name:       {}", v.name.as_deref().unwrap_or("-")),

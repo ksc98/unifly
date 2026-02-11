@@ -652,7 +652,7 @@ impl Component for DevicesScreen {
             .header(header)
             .row_highlight_style(theme::table_selected());
 
-        let mut state = self.table_state.clone();
+        let mut state = self.table_state;
         frame.render_stateful_widget(table, header_layout[1], &mut state);
 
         // Key hints

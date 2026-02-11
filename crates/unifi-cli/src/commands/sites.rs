@@ -37,7 +37,7 @@ impl From<&Arc<Site>> for SiteRow {
 }
 
 fn detail(s: &Arc<Site>) -> String {
-    vec![
+    [
         format!("ID:            {}", s.id),
         format!("Name:          {}", s.name),
         format!("Internal Name: {}", s.internal_name),

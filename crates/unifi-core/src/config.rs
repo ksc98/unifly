@@ -29,13 +29,14 @@ pub enum AuthCredentials {
 }
 
 /// TLS verification strategy.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum TlsVerification {
     /// System CA store (strict).
     SystemDefaults,
     /// Custom CA certificate file.
     CustomCa(std::path::PathBuf),
     /// Skip verification (self-signed certs). Default for local controllers.
+    #[default]
     DangerAcceptInvalid,
 }
 
@@ -51,12 +52,6 @@ impl PartialEq for TlsVerification {
 }
 
 impl Eq for TlsVerification {}
-
-impl Default for TlsVerification {
-    fn default() -> Self {
-        Self::DangerAcceptInvalid
-    }
-}
 
 /// Configuration for connecting to a single controller.
 ///

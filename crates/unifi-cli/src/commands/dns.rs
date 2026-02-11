@@ -55,7 +55,7 @@ impl From<&Arc<DnsPolicy>> for DnsRow {
 }
 
 fn detail(d: &Arc<DnsPolicy>) -> String {
-    vec![
+    [
         format!("ID:     {}", d.id),
         format!("Type:   {:?}", d.policy_type),
         format!("Domain: {}", d.domain),

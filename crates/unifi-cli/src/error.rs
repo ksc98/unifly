@@ -151,7 +151,7 @@ pub enum CliError {
 
     #[error(transparent)]
     #[diagnostic(code(unifi::config))]
-    Config(#[from] figment::Error),
+    Config(Box<figment::Error>),
 
     // ── Interactive ──────────────────────────────────────────────────
 
@@ -179,6 +179,12 @@ pub enum CliError {
     #[error("Invalid JSON payload: {0}")]
     #[diagnostic(code(unifi::json), help("Check the JSON file contents and try again."))]
     Json(#[from] serde_json::Error),
+}
+
+impl From<figment::Error> for CliError {
+    fn from(err: figment::Error) -> Self {
+        Self::Config(Box::new(err))
+    }
 }
 
 impl CliError {

@@ -328,10 +328,10 @@ impl Controller {
                 None => Vec::new(),
             };
 
-            self.inner.store.apply_integration_snapshot(
+            self.inner.store.apply_integration_snapshot(crate::store::RefreshSnapshot {
                 devices, clients, networks, wifi, policies, zones, acls, dns, vouchers,
-                sites, legacy_events, traffic_matching_lists,
-            );
+                sites, events: legacy_events, traffic_matching_lists,
+            });
         } else {
             // ── Legacy-only path ─────────────────────────────────
             drop(integration_guard);
@@ -357,20 +357,20 @@ impl Controller {
                 let _ = self.inner.event_tx.send(Arc::new(event.clone()));
             }
 
-            self.inner.store.apply_integration_snapshot(
+            self.inner.store.apply_integration_snapshot(crate::store::RefreshSnapshot {
                 devices,
                 clients,
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(), // sites
-                events,     // events
-                Vec::new(), // traffic_matching_lists
-            );
+                networks: Vec::new(),
+                wifi: Vec::new(),
+                policies: Vec::new(),
+                zones: Vec::new(),
+                acls: Vec::new(),
+                dns: Vec::new(),
+                vouchers: Vec::new(),
+                sites: Vec::new(),
+                events,
+                traffic_matching_lists: Vec::new(),
+            });
         }
 
         debug!(

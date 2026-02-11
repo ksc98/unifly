@@ -6,12 +6,17 @@ pub mod error;
 pub mod model;
 pub mod command;
 pub mod controller;
+pub mod store;
+pub mod stream;
 
 // ── Primary re-exports ──────────────────────────────────────────────
 pub use config::{AuthCredentials, ControllerConfig, TlsVerification};
 pub use error::CoreError;
 pub use controller::Controller;
 pub use command::{Command, CommandResult};
+pub use command::requests::*;
+pub use store::DataStore;
+pub use stream::EntityStream;
 
 // Re-export the most commonly used model types at the crate root for ergonomics.
 pub use model::{

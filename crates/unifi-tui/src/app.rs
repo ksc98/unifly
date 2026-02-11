@@ -19,7 +19,7 @@ use crate::action::Action;
 use crate::component::Component;
 use crate::event::{Event, EventReader};
 use crate::screen::ScreenId;
-use crate::screens::{PlaceholderScreen, create_screens};
+use crate::screens::create_screens;
 use crate::theme;
 use crate::tui::Tui;
 
@@ -40,7 +40,7 @@ pub struct App {
     /// Previous screen for GoBack.
     previous_screen: Option<ScreenId>,
     /// All screen components, keyed by ScreenId.
-    screens: HashMap<ScreenId, PlaceholderScreen>,
+    screens: HashMap<ScreenId, Box<dyn Component>>,
     /// Whether the app should keep running.
     running: bool,
     /// Connection status indicator.
@@ -62,7 +62,7 @@ impl App {
     pub fn new() -> Self {
         let (action_tx, action_rx) = mpsc::unbounded_channel();
 
-        let screens: HashMap<ScreenId, PlaceholderScreen> =
+        let screens: HashMap<ScreenId, Box<dyn Component>> =
             create_screens().into_iter().collect();
 
         Self {

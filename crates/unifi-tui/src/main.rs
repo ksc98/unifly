@@ -10,6 +10,7 @@ mod screen;
 mod screens;
 mod theme;
 mod tui;
+mod widgets;
 
 use std::path::PathBuf;
 

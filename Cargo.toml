@@ -102,11 +102,6 @@ futures-util = "0.3"
 async-stream = "0.3"
 indexmap = "2"
 
-# ── Code generation (build) ──
-progenitor = "0.9"
-progenitor-client = "0.9"
-openapiv3 = "2"
-
 # ── Dev / testing ──
 wiremock = "0.6"
 assert_cmd = "2"

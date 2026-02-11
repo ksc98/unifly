@@ -43,6 +43,15 @@ impl LegacyClient {
         self.post(url, &json!({ "cmd": "list-backups" })).await
     }
 
+    /// List site admins.
+    ///
+    /// `GET /api/s/{site}/cmd/sitemgr` (returns admin user list).
+    pub async fn list_admins(&self) -> Result<Vec<serde_json::Value>, Error> {
+        let url = self.site_url("cmd/sitemgr");
+        debug!("listing admins");
+        self.post(url, &json!({ "cmd": "get-admins" })).await
+    }
+
     /// Create a new controller backup.
     ///
     /// `POST /api/s/{site}/cmd/backup` with `{"cmd": "backup"}`

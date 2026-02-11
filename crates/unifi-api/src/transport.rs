@@ -70,6 +70,43 @@ impl TransportConfig {
             .map_err(|e| crate::error::Error::Tls(format!("failed to build HTTP client: {e}")))
     }
 
+    /// Build a `reqwest::Client` with additional default headers.
+    ///
+    /// Used by the Integration API client to inject the `X-API-KEY` header.
+    pub fn build_client_with_headers(
+        &self,
+        headers: reqwest::header::HeaderMap,
+    ) -> Result<reqwest::Client, crate::error::Error> {
+        let mut builder = reqwest::Client::builder()
+            .timeout(self.timeout)
+            .user_agent("unifi-cli/0.1.0")
+            .default_headers(headers);
+
+        match &self.tls {
+            TlsMode::System => {}
+            TlsMode::CustomCa(path) => {
+                let cert_pem = std::fs::read(path).map_err(|e| {
+                    crate::error::Error::Tls(format!("failed to read CA cert: {e}"))
+                })?;
+                let cert = reqwest::Certificate::from_pem(&cert_pem).map_err(|e| {
+                    crate::error::Error::Tls(format!("invalid CA cert: {e}"))
+                })?;
+                builder = builder.add_root_certificate(cert);
+            }
+            TlsMode::DangerAcceptInvalid => {
+                builder = builder.danger_accept_invalid_certs(true);
+            }
+        }
+
+        if let Some(ref jar) = self.cookie_jar {
+            builder = builder.cookie_provider(Arc::clone(jar));
+        }
+
+        builder
+            .build()
+            .map_err(|e| crate::error::Error::Tls(format!("failed to build HTTP client: {e}")))
+    }
+
     /// Create a config with a fresh cookie jar (for session auth).
     pub fn with_cookie_jar(mut self) -> Self {
         self.cookie_jar = Some(Arc::new(Jar::default()));

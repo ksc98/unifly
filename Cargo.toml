@@ -34,7 +34,7 @@ tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 url = { version = "2", features = ["serde"] }
 
 # ── Serialization ──
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
 serde_yaml = "0.9"
 toml = "0.8"

@@ -1,0 +1,161 @@
+//! Hotspot voucher command handlers.
+
+use std::sync::Arc;
+
+use tabled::Tabled;
+use unifi_core::model::Voucher;
+use unifi_core::{Command as CoreCommand, Controller, EntityId};
+
+use crate::cli::{GlobalOpts, HotspotArgs, HotspotCommand};
+use crate::error::CliError;
+use crate::output;
+
+use super::util;
+
+// ── Table row ───────────────────────────────────────────────────────
+
+#[derive(Tabled)]
+struct VoucherRow {
+    #[tabled(rename = "ID")]
+    id: String,
+    #[tabled(rename = "Code")]
+    code: String,
+    #[tabled(rename = "Name")]
+    name: String,
+    #[tabled(rename = "Minutes")]
+    minutes: String,
+    #[tabled(rename = "Expired")]
+    expired: String,
+}
+
+impl From<&Arc<Voucher>> for VoucherRow {
+    fn from(v: &Arc<Voucher>) -> Self {
+        Self {
+            id: v.id.to_string(),
+            code: v.code.clone(),
+            name: v.name.clone().unwrap_or_default(),
+            minutes: v
+                .time_limit_minutes
+                .map(|m| m.to_string())
+                .unwrap_or_default(),
+            expired: if v.expired { "yes" } else { "no" }.into(),
+        }
+    }
+}
+
+fn detail(v: &Arc<Voucher>) -> String {
+    vec![
+        format!("ID:         {}", v.id),
+        format!("Code:       {}", v.code),
+        format!("Name:       {}", v.name.as_deref().unwrap_or("-")),
+        format!("Expired:    {}", v.expired),
+        format!("Minutes:    {}", v.time_limit_minutes.map(|m: u32| m.to_string()).unwrap_or_else(|| "-".into())),
+        format!("Data Limit: {} MB", v.data_usage_limit_mb.map(|m: u64| m.to_string()).unwrap_or_else(|| "-".into())),
+        format!("Guests:     {}/{}", v.authorized_guest_count.unwrap_or(0), v.authorized_guest_limit.map(|l: u32| l.to_string()).unwrap_or_else(|| "unlimited".into())),
+    ]
+    .join("\n")
+}
+
+// ── Handler ─────────────────────────────────────────────────────────
+
+pub async fn handle(
+    controller: &Controller,
+    args: HotspotArgs,
+    global: &GlobalOpts,
+) -> Result<(), CliError> {
+    match args.command {
+        HotspotCommand::List { .. } => {
+            let snap = controller.vouchers_snapshot();
+            let out = output::render_list(
+                &global.output,
+                &snap,
+                |v| VoucherRow::from(v),
+                |v| v.id.to_string(),
+            );
+            output::print_output(&out, global.quiet);
+            Ok(())
+        }
+
+        HotspotCommand::Get { id } => {
+            let snap = controller.vouchers_snapshot();
+            let found = snap.iter().find(|v| v.id.to_string() == id);
+            match found {
+                Some(v) => {
+                    let out = output::render_single(&global.output, v, detail, |v| v.id.to_string());
+                    output::print_output(&out, global.quiet);
+                }
+                None => {
+                    return Err(CliError::NotFound {
+                        resource_type: "voucher".into(),
+                        identifier: id,
+                        list_command: "hotspot list".into(),
+                    })
+                }
+            }
+            Ok(())
+        }
+
+        HotspotCommand::Create {
+            name,
+            count,
+            minutes,
+            guest_limit,
+            data_limit_mb,
+            rx_limit_kbps,
+            tx_limit_kbps,
+        } => {
+            let mut map = serde_json::Map::new();
+            map.insert("name".into(), serde_json::json!(name));
+            map.insert("count".into(), serde_json::json!(count));
+            map.insert("time_limit_minutes".into(), serde_json::json!(minutes));
+            if let Some(gl) = guest_limit {
+                map.insert("guest_limit".into(), serde_json::json!(gl));
+            }
+            if let Some(dl) = data_limit_mb {
+                map.insert("data_limit_mb".into(), serde_json::json!(dl));
+            }
+            if let Some(rx) = rx_limit_kbps {
+                map.insert("rx_rate_limit_kbps".into(), serde_json::json!(rx));
+            }
+            if let Some(tx) = tx_limit_kbps {
+                map.insert("tx_rate_limit_kbps".into(), serde_json::json!(tx));
+            }
+            let data = serde_json::Value::Object(map);
+
+            controller
+                .execute(CoreCommand::CreateVoucher { data })
+                .await?;
+            if !global.quiet {
+                eprintln!("{count} voucher(s) created");
+            }
+            Ok(())
+        }
+
+        HotspotCommand::Delete { id } => {
+            let eid = EntityId::from(id.clone());
+            if !util::confirm(&format!("Delete voucher {id}?"), global.yes)? {
+                return Ok(());
+            }
+            controller
+                .execute(CoreCommand::DeleteVoucher { id: eid })
+                .await?;
+            if !global.quiet {
+                eprintln!("Voucher deleted");
+            }
+            Ok(())
+        }
+
+        HotspotCommand::Purge { filter } => {
+            if !util::confirm("Purge vouchers matching filter?", global.yes)? {
+                return Ok(());
+            }
+            controller
+                .execute(CoreCommand::PurgeVouchers { filter })
+                .await?;
+            if !global.quiet {
+                eprintln!("Vouchers purged");
+            }
+            Ok(())
+        }
+    }
+}

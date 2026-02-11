@@ -52,6 +52,8 @@ pub struct App {
     help_visible: bool,
     /// Search overlay visibility.
     search_active: bool,
+    /// Current search query.
+    search_query: String,
     /// Terminal size for responsive layout.
     terminal_size: (u16, u16),
     /// Action sender — components can dispatch actions through this.
@@ -81,6 +83,7 @@ impl App {
             connection_status: ConnectionStatus::default(),
             help_visible: false,
             search_active: false,
+            search_query: String::new(),
             terminal_size: (0, 0),
             action_tx,
             action_rx,
@@ -175,10 +178,21 @@ impl App {
     fn handle_key_event(&mut self, key: KeyEvent) -> Result<Option<Action>> {
         // Global keys always take priority (except when search is active)
         if self.search_active {
-            // In search mode, only Esc exits. Everything else goes to search.
             return match key.code {
-                KeyCode::Esc => Ok(Some(Action::CloseSearch)),
-                _ => Ok(None), // search input handling would go here
+                KeyCode::Esc => {
+                    self.search_query.clear();
+                    Ok(Some(Action::CloseSearch))
+                }
+                KeyCode::Enter => Ok(Some(Action::SearchSubmit)),
+                KeyCode::Backspace => {
+                    self.search_query.pop();
+                    Ok(Some(Action::SearchInput(self.search_query.clone())))
+                }
+                KeyCode::Char(c) => {
+                    self.search_query.push(c);
+                    Ok(Some(Action::SearchInput(self.search_query.clone())))
+                }
+                _ => Ok(None),
             };
         }
 
@@ -279,10 +293,12 @@ impl App {
 
             Action::OpenSearch => {
                 self.search_active = true;
+                self.search_query.clear();
             }
 
             Action::CloseSearch => {
                 self.search_active = false;
+                self.search_query.clear();
             }
 
             Action::Connected => {
@@ -394,6 +410,17 @@ impl App {
 
     /// Render the bottom status bar with connection status and key hints.
     fn render_status_bar(&self, frame: &mut Frame, area: Rect) {
+        if self.search_active {
+            let line = Line::from(vec![
+                Span::styled(" / ", Style::default().fg(theme::ELECTRIC_PURPLE)),
+                Span::styled(&self.search_query, Style::default().fg(theme::NEON_CYAN)),
+                Span::styled("█", Style::default().fg(theme::NEON_CYAN)),
+                Span::styled("  Esc cancel  Enter submit", theme::key_hint()),
+            ]);
+            frame.render_widget(Paragraph::new(line), area);
+            return;
+        }
+
         let connection_indicator = match &self.connection_status {
             ConnectionStatus::Connected => {
                 Span::styled("● connected", Style::default().fg(theme::SUCCESS_GREEN))

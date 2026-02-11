@@ -27,6 +27,7 @@ pub struct DevicesScreen {
     table_state: TableState,
     detail_open: bool,
     detail_tab: DeviceDetailTab,
+    search_query: String,
 }
 
 impl DevicesScreen {
@@ -38,6 +39,24 @@ impl DevicesScreen {
             table_state: TableState::default(),
             detail_open: false,
             detail_tab: DeviceDetailTab::default(),
+            search_query: String::new(),
+        }
+    }
+
+    fn filtered_devices(&self) -> Vec<&Arc<Device>> {
+        if self.search_query.is_empty() {
+            self.devices.iter().collect()
+        } else {
+            let q = self.search_query.to_lowercase();
+            self.devices
+                .iter()
+                .filter(|d| {
+                    d.name.as_deref().unwrap_or("").to_lowercase().contains(&q)
+                        || d.model.as_deref().unwrap_or("").to_lowercase().contains(&q)
+                        || d.ip.map(|ip| ip.to_string()).unwrap_or_default().contains(&q)
+                        || d.mac.to_string().contains(&q)
+                })
+                .collect()
         }
     }
 
@@ -46,24 +65,23 @@ impl DevicesScreen {
     }
 
     fn selected_device(&self) -> Option<&Arc<Device>> {
-        self.devices.get(self.selected_index())
+        let filtered = self.filtered_devices();
+        filtered.get(self.selected_index()).copied()
     }
 
     fn select(&mut self, idx: usize) {
-        let clamped = if self.devices.is_empty() {
-            0
-        } else {
-            idx.min(self.devices.len() - 1)
-        };
+        let len = self.filtered_devices().len();
+        let clamped = if len == 0 { 0 } else { idx.min(len - 1) };
         self.table_state.select(Some(clamped));
     }
 
     fn move_selection(&mut self, delta: isize) {
-        if self.devices.is_empty() {
+        let len = self.filtered_devices().len();
+        if len == 0 {
             return;
         }
         let current = self.selected_index() as isize;
-        let next = (current + delta).clamp(0, self.devices.len() as isize - 1);
+        let next = (current + delta).clamp(0, len as isize - 1);
         self.select(next as usize);
     }
 
@@ -486,9 +504,9 @@ impl Component for DevicesScreen {
         match action {
             Action::DevicesUpdated(devices) => {
                 self.devices = Arc::clone(devices);
-                // Clamp selection
-                if !self.devices.is_empty() && self.selected_index() >= self.devices.len() {
-                    self.select(self.devices.len() - 1);
+                let len = self.filtered_devices().len();
+                if len > 0 && self.selected_index() >= len {
+                    self.select(len - 1);
                 }
             }
             Action::CloseDetail => {
@@ -497,14 +515,27 @@ impl Component for DevicesScreen {
             Action::DeviceDetailTab(tab) => {
                 self.detail_tab = *tab;
             }
+            Action::SearchInput(query) => {
+                self.search_query = query.clone();
+                self.table_state.select(Some(0));
+            }
+            Action::CloseSearch => {
+                self.search_query.clear();
+            }
             _ => {}
         }
         Ok(None)
     }
 
     fn render(&self, frame: &mut Frame, area: Rect) {
-        let device_count = self.devices.len();
-        let title = format!(" Devices ({device_count}) ");
+        let filtered = self.filtered_devices();
+        let total = self.devices.len();
+        let shown = filtered.len();
+        let title = if self.search_query.is_empty() {
+            format!(" Devices ({total}) ")
+        } else {
+            format!(" Devices ({shown}/{total}) ")
+        };
         let block = Block::default()
             .title(title)
             .title_style(theme::title_style())
@@ -539,13 +570,18 @@ impl Component for DevicesScreen {
         ])
         .split(table_area);
 
+        let filter_text = if self.search_query.is_empty() {
+            Span::styled("[all]", Style::default().fg(theme::NEON_CYAN))
+        } else {
+            Span::styled(format!("[\"{}\" ]", self.search_query), Style::default().fg(theme::ELECTRIC_YELLOW))
+        };
         let filter_line = Line::from(vec![
             Span::styled(" Filter: ", Style::default().fg(theme::DIM_WHITE)),
-            Span::styled("[all]", Style::default().fg(theme::NEON_CYAN)),
+            filter_text,
             Span::styled("  Sort: ", Style::default().fg(theme::DIM_WHITE)),
             Span::styled("[name ↑]", Style::default().fg(theme::NEON_CYAN)),
             Span::styled(
-                format!("  {:>width$}", format!("{device_count} devices"), width = 20),
+                format!("  {:>width$}", format!("{shown} devices"), width = 20),
                 Style::default().fg(theme::DIM_WHITE),
             ),
         ]);
@@ -564,8 +600,7 @@ impl Component for DevicesScreen {
         ]);
 
         // Table rows
-        let rows: Vec<Row> = self
-            .devices
+        let rows: Vec<Row> = filtered
             .iter()
             .enumerate()
             .map(|(i, dev)| {

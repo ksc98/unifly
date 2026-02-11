@@ -26,6 +26,9 @@ pub struct ClientsScreen {
     clients: Arc<Vec<Arc<Client>>>,
     table_state: TableState,
     filter: ClientTypeFilter,
+    search_query: String,
+    detail_open: bool,
+    detail_client_idx: usize,
 }
 
 impl ClientsScreen {
@@ -36,10 +39,14 @@ impl ClientsScreen {
             clients: Arc::new(Vec::new()),
             table_state: TableState::default(),
             filter: ClientTypeFilter::All,
+            search_query: String::new(),
+            detail_open: false,
+            detail_client_idx: 0,
         }
     }
 
     fn filtered_clients(&self) -> Vec<&Arc<Client>> {
+        let q = self.search_query.to_lowercase();
         self.clients
             .iter()
             .filter(|c| match self.filter {
@@ -48,6 +55,15 @@ impl ClientsScreen {
                 ClientTypeFilter::Wired => c.client_type == ClientType::Wired,
                 ClientTypeFilter::Vpn => c.client_type == ClientType::Vpn,
                 ClientTypeFilter::Guest => c.is_guest,
+            })
+            .filter(|c| {
+                if q.is_empty() {
+                    return true;
+                }
+                c.name.as_deref().unwrap_or("").to_lowercase().contains(&q)
+                    || c.hostname.as_deref().unwrap_or("").to_lowercase().contains(&q)
+                    || c.ip.map(|ip| ip.to_string()).unwrap_or_default().contains(&q)
+                    || c.mac.to_string().contains(&q)
             })
             .collect()
     }
@@ -87,6 +103,114 @@ impl ClientsScreen {
         self.table_state.select(Some(0));
     }
 
+    fn render_detail(&self, frame: &mut Frame, area: Rect, client: &Client) {
+        let name = client
+            .name
+            .as_deref()
+            .or(client.hostname.as_deref())
+            .unwrap_or("Unknown");
+        let ip = client.ip.map(|ip| ip.to_string()).unwrap_or_else(|| "─".into());
+        let mac = client.mac.to_string();
+        let type_str = format!("{:?}", client.client_type);
+
+        let title = format!(" {name}  ·  {type_str}  ·  {ip}  ·  {mac} ");
+        let block = Block::default()
+            .title(title)
+            .title_style(theme::title_style())
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(theme::border_focused());
+
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+
+        let network = client
+            .network_id
+            .as_ref()
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| "─".into());
+        let signal = client
+            .wireless
+            .as_ref()
+            .and_then(|w| w.signal_dbm)
+            .map(|dbm| format!("{dbm} dBm"))
+            .unwrap_or_else(|| "─".into());
+        let channel = client
+            .wireless
+            .as_ref()
+            .and_then(|w| w.channel)
+            .map(|ch| ch.to_string())
+            .unwrap_or_else(|| "─".into());
+        let ssid = client
+            .wireless
+            .as_ref()
+            .and_then(|w| w.ssid.as_deref())
+            .unwrap_or("─");
+        let tx = client.tx_bytes.map(bytes_fmt::fmt_bytes_short).unwrap_or_else(|| "─".into());
+        let rx = client.rx_bytes.map(bytes_fmt::fmt_bytes_short).unwrap_or_else(|| "─".into());
+        let duration = client
+            .connected_at
+            .map(|ts| {
+                let dur = chrono::Utc::now().signed_duration_since(ts);
+                let secs = dur.num_seconds().max(0) as u64;
+                bytes_fmt::fmt_uptime(secs)
+            })
+            .unwrap_or_else(|| "─".into());
+        let guest = if client.is_guest { "yes" } else { "no" };
+        let blocked = if client.blocked { "yes" } else { "no" };
+
+        let detail_layout = Layout::vertical([
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
+        .split(inner);
+
+        let lines = vec![
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  Network        ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(network, Style::default().fg(theme::NEON_CYAN)),
+                Span::styled("       SSID         ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(ssid, Style::default().fg(theme::NEON_CYAN)),
+            ]),
+            Line::from(vec![
+                Span::styled("  Signal         ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(&signal, Style::default().fg(theme::NEON_CYAN)),
+                Span::styled("       Channel      ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(&channel, Style::default().fg(theme::NEON_CYAN)),
+            ]),
+            Line::from(vec![
+                Span::styled("  TX             ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(&tx, Style::default().fg(theme::CORAL)),
+                Span::styled("       RX           ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(&rx, Style::default().fg(theme::CORAL)),
+            ]),
+            Line::from(vec![
+                Span::styled("  Duration       ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(&duration, Style::default().fg(theme::NEON_CYAN)),
+            ]),
+            Line::from(vec![
+                Span::styled("  Guest          ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(guest, Style::default().fg(theme::DIM_WHITE)),
+                Span::styled("       Blocked      ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(blocked, Style::default().fg(if client.blocked { theme::ERROR_RED } else { theme::DIM_WHITE })),
+            ]),
+        ];
+        frame.render_widget(Paragraph::new(lines), detail_layout[0]);
+
+        let hints = Line::from(vec![
+            Span::styled("  b ", theme::key_hint_key()),
+            Span::styled("block  ", theme::key_hint()),
+            Span::styled("B ", theme::key_hint_key()),
+            Span::styled("unblock  ", theme::key_hint()),
+            Span::styled("x ", theme::key_hint_key()),
+            Span::styled("kick  ", theme::key_hint()),
+            Span::styled("Esc ", theme::key_hint_key()),
+            Span::styled("back", theme::key_hint()),
+        ]);
+        frame.render_widget(Paragraph::new(hints), detail_layout[1]);
+    }
+
     fn filter_index(&self) -> usize {
         match self.filter {
             ClientTypeFilter::All => 0,
@@ -119,6 +243,40 @@ impl Component for ClientsScreen {
     }
 
     fn handle_key_event(&mut self, key: KeyEvent) -> Result<Option<Action>> {
+        if self.detail_open {
+            return match key.code {
+                KeyCode::Esc => {
+                    self.detail_open = false;
+                    Ok(Some(Action::CloseDetail))
+                }
+                KeyCode::Char('b') => {
+                    let filtered = self.filtered_clients();
+                    if let Some(client) = filtered.get(self.detail_client_idx) {
+                        Ok(Some(Action::RequestBlockClient(client.id.clone())))
+                    } else {
+                        Ok(None)
+                    }
+                }
+                KeyCode::Char('B') => {
+                    let filtered = self.filtered_clients();
+                    if let Some(client) = filtered.get(self.detail_client_idx) {
+                        Ok(Some(Action::RequestUnblockClient(client.id.clone())))
+                    } else {
+                        Ok(None)
+                    }
+                }
+                KeyCode::Char('x') => {
+                    let filtered = self.filtered_clients();
+                    if let Some(client) = filtered.get(self.detail_client_idx) {
+                        Ok(Some(Action::RequestKickClient(client.id.clone())))
+                    } else {
+                        Ok(None)
+                    }
+                }
+                _ => Ok(None),
+            };
+        }
+
         match key.code {
             KeyCode::Char('j') | KeyCode::Down => {
                 self.move_selection(1);
@@ -152,9 +310,12 @@ impl Component for ClientsScreen {
                 Ok(Some(Action::FilterClientType(self.filter)))
             }
             KeyCode::Enter => {
-                let filtered = self.filtered_clients();
-                if let Some(client) = filtered.get(self.selected_index()) {
-                    Ok(Some(Action::OpenClientDetail(client.id.clone())))
+                let idx = self.selected_index();
+                let id = self.filtered_clients().get(idx).map(|c| c.id.clone());
+                if let Some(id) = id {
+                    self.detail_open = true;
+                    self.detail_client_idx = idx;
+                    Ok(Some(Action::OpenClientDetail(id)))
                 } else {
                     Ok(None)
                 }
@@ -200,6 +361,16 @@ impl Component for ClientsScreen {
                 self.filter = *filter;
                 self.table_state.select(Some(0));
             }
+            Action::SearchInput(query) => {
+                self.search_query = query.clone();
+                self.table_state.select(Some(0));
+            }
+            Action::CloseSearch => {
+                self.search_query.clear();
+            }
+            Action::CloseDetail => {
+                self.detail_open = false;
+            }
             _ => {}
         }
         Ok(None)
@@ -210,7 +381,11 @@ impl Component for ClientsScreen {
         let total = self.clients.len();
         let shown = filtered.len();
 
-        let title = format!(" Clients ({shown}/{total}) ");
+        let title = if self.search_query.is_empty() {
+            format!(" Clients ({shown}/{total}) ")
+        } else {
+            format!(" Clients ({shown}/{total}) [\"{}\" ] ", self.search_query)
+        };
         let block = Block::default()
             .title(title)
             .title_style(theme::title_style())
@@ -225,12 +400,24 @@ impl Component for ClientsScreen {
         let inner = block.inner(area);
         frame.render_widget(block, area);
 
+        // Split for table + optional detail panel
+        let (table_area, detail_area) = if self.detail_open {
+            let chunks = Layout::vertical([
+                Constraint::Percentage(50),
+                Constraint::Percentage(50),
+            ])
+            .split(inner);
+            (chunks[0], Some(chunks[1]))
+        } else {
+            (inner, None)
+        };
+
         let layout = Layout::vertical([
             Constraint::Length(1), // filter tabs
             Constraint::Min(1),   // table
             Constraint::Length(1), // hints
         ])
-        .split(inner);
+        .split(table_area);
 
         // Filter tab bar
         let filter_labels = &["All", "Wireless", "Wired", "VPN", "Guest"];
@@ -405,6 +592,13 @@ impl Component for ClientsScreen {
             Span::styled("kick", theme::key_hint()),
         ]);
         frame.render_widget(Paragraph::new(hints), layout[2]);
+
+        // Render detail panel if open
+        if let Some(detail_area) = detail_area {
+            if let Some(client) = filtered.get(self.detail_client_idx) {
+                self.render_detail(frame, detail_area, client);
+            }
+        }
     }
 
     fn focused(&self) -> bool {

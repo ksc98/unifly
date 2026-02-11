@@ -369,6 +369,21 @@ impl Component for FirewallScreen {
             Action::FirewallSubTab(tab) => {
                 self.sub_tab = *tab;
             }
+            Action::ReorderPolicy(idx, direction) => {
+                let len = self.policies.len();
+                if len < 2 {
+                    return Ok(None);
+                }
+                let target = match direction {
+                    Direction::Up if *idx > 0 => idx - 1,
+                    Direction::Down if *idx + 1 < len => idx + 1,
+                    _ => return Ok(None),
+                };
+                // Swap in a mutable copy
+                let policies = Arc::make_mut(&mut self.policies);
+                policies.swap(*idx, target);
+                self.select(target);
+            }
             _ => {}
         }
         Ok(None)

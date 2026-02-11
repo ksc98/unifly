@@ -12,6 +12,7 @@
 //! └───────────────┘  └────────────────────────────────┘
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
@@ -42,6 +43,8 @@ pub struct DashboardScreen {
     /// Ring buffer of bandwidth samples (tx_bps, rx_bps) for sparklines.
     bandwidth_tx: Vec<u64>,
     bandwidth_rx: Vec<u64>,
+    /// Tracks when we last received a data update (for refresh indicator).
+    last_data_update: Option<Instant>,
 }
 
 impl DashboardScreen {
@@ -53,6 +56,24 @@ impl DashboardScreen {
             events: Vec::new(),
             bandwidth_tx: Vec::new(),
             bandwidth_rx: Vec::new(),
+            last_data_update: None,
+        }
+    }
+
+    /// Format the data age as a human-readable string for the title bar.
+    fn refresh_age_str(&self) -> String {
+        match self.last_data_update {
+            Some(t) => {
+                let secs = t.elapsed().as_secs();
+                if secs < 5 {
+                    "just now".into()
+                } else if secs < 60 {
+                    format!("{secs}s ago")
+                } else {
+                    format!("{}m ago", secs / 60)
+                }
+            }
+            None => "no data".into(),
         }
     }
 
@@ -426,6 +447,7 @@ impl Component for DashboardScreen {
         match action {
             Action::DevicesUpdated(devices) => {
                 self.devices = Arc::clone(devices);
+                self.last_data_update = Some(Instant::now());
                 // Extract bandwidth from gateway stats for sparkline
                 if let Some(gw) = self
                     .devices
@@ -459,9 +481,17 @@ impl Component for DashboardScreen {
     }
 
     fn render(&self, frame: &mut Frame, area: Rect) {
+        let refresh_str = self.refresh_age_str();
+        let title_line = Line::from(vec![
+            Span::styled(" UniFi Dashboard ", theme::title_style()),
+            Span::styled(
+                format!(" [{refresh_str}] "),
+                Style::default().fg(theme::BORDER_GRAY),
+            ),
+        ]);
+
         let block = Block::default()
-            .title(" UniFi Dashboard ")
-            .title_style(theme::title_style())
+            .title(title_line)
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(if self.focused {

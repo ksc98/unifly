@@ -21,6 +21,7 @@ pub mod exit_code {
 }
 
 #[derive(Debug, Error, Diagnostic)]
+#[allow(dead_code, unused_assignments)]
 pub enum CliError {
     // ── Connection ───────────────────────────────────────────────────
 

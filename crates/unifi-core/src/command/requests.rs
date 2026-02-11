@@ -22,6 +22,16 @@ pub struct CreateNetworkRequest {
     pub purpose: Option<NetworkPurpose>,
     pub dhcp_enabled: bool,
     pub enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dhcp_range_start: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dhcp_range_stop: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dhcp_lease_time: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub firewall_zone_id: Option<String>,
+    pub isolation_enabled: bool,
+    pub internet_access_enabled: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -78,6 +88,7 @@ pub struct CreateFirewallPolicyRequest {
     pub source_zone_id: EntityId,
     pub destination_zone_id: EntityId,
     pub enabled: bool,
+    pub logging_enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

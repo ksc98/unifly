@@ -3,10 +3,30 @@
 // Applies bulk data snapshots from the Integration and Legacy APIs
 // into the DataStore. Integration data is primary; Legacy fills gaps.
 
+use std::collections::HashSet;
+
 use chrono::Utc;
 
 use super::DataStore;
+use super::collection::EntityCollection;
 use crate::model::*;
+
+/// Upsert all incoming entities, then prune any existing keys not in the
+/// incoming set. This avoids the brief empty state that `clear()` causes.
+fn upsert_and_prune<T: Clone + Send + Sync + 'static>(
+    collection: &EntityCollection<T>,
+    items: Vec<(String, EntityId, T)>,
+) {
+    let incoming_keys: HashSet<String> = items.iter().map(|(k, _, _)| k.clone()).collect();
+    for (key, id, entity) in items {
+        collection.upsert(key, id, entity);
+    }
+    for existing_key in collection.keys() {
+        if !incoming_keys.contains(&existing_key) {
+            collection.remove(&existing_key);
+        }
+    }
+}
 
 /// All collections fetched during a single Integration API refresh cycle.
 ///
@@ -30,98 +50,160 @@ pub(crate) struct RefreshSnapshot {
 impl DataStore {
     /// Apply a full Integration API data refresh.
     ///
-    /// Clears all collections and repopulates from the provided data.
-    /// Devices and clients are keyed by MAC address; other entities use
-    /// synthetic `"prefix:{id}"` keys.
+    /// Uses upsert-then-prune: incoming entities are upserted first, then
+    /// any keys not present in the incoming set are removed. This avoids the
+    /// brief "empty" state that a clear-then-insert approach would cause.
     pub(crate) fn apply_integration_snapshot(&self, snap: RefreshSnapshot) {
-        self.devices.clear();
-        self.clients.clear();
-        self.networks.clear();
-        self.wifi_broadcasts.clear();
-        self.firewall_policies.clear();
-        self.firewall_zones.clear();
-        self.acl_rules.clear();
-        self.dns_policies.clear();
-        self.vouchers.clear();
-        self.sites.clear();
-        self.events.clear();
-        self.traffic_matching_lists.clear();
+        upsert_and_prune(
+            &self.devices,
+            snap.devices
+                .into_iter()
+                .map(|d| {
+                    let key = d.mac.as_str().to_owned();
+                    let id = d.id.clone();
+                    (key, id, d)
+                })
+                .collect(),
+        );
 
-        for device in snap.devices {
-            let key = device.mac.as_str().to_owned();
-            let id = device.id.clone();
-            self.devices.upsert(key, id, device);
-        }
+        upsert_and_prune(
+            &self.clients,
+            snap.clients
+                .into_iter()
+                .map(|c| {
+                    let key = c.mac.as_str().to_owned();
+                    let id = c.id.clone();
+                    (key, id, c)
+                })
+                .collect(),
+        );
 
-        for client in snap.clients {
-            let key = client.mac.as_str().to_owned();
-            let id = client.id.clone();
-            self.clients.upsert(key, id, client);
-        }
+        upsert_and_prune(
+            &self.networks,
+            snap.networks
+                .into_iter()
+                .map(|n| {
+                    let key = format!("net:{}", n.id);
+                    let id = n.id.clone();
+                    (key, id, n)
+                })
+                .collect(),
+        );
 
-        for network in snap.networks {
-            let key = format!("net:{}", network.id);
-            let id = network.id.clone();
-            self.networks.upsert(key, id, network);
-        }
+        upsert_and_prune(
+            &self.wifi_broadcasts,
+            snap.wifi
+                .into_iter()
+                .map(|wb| {
+                    let key = format!("wifi:{}", wb.id);
+                    let id = wb.id.clone();
+                    (key, id, wb)
+                })
+                .collect(),
+        );
 
-        for wb in snap.wifi {
-            let key = format!("wifi:{}", wb.id);
-            let id = wb.id.clone();
-            self.wifi_broadcasts.upsert(key, id, wb);
-        }
+        upsert_and_prune(
+            &self.firewall_policies,
+            snap.policies
+                .into_iter()
+                .map(|p| {
+                    let key = format!("fwp:{}", p.id);
+                    let id = p.id.clone();
+                    (key, id, p)
+                })
+                .collect(),
+        );
 
-        for policy in snap.policies {
-            let key = format!("fwp:{}", policy.id);
-            let id = policy.id.clone();
-            self.firewall_policies.upsert(key, id, policy);
-        }
+        upsert_and_prune(
+            &self.firewall_zones,
+            snap.zones
+                .into_iter()
+                .map(|z| {
+                    let key = format!("fwz:{}", z.id);
+                    let id = z.id.clone();
+                    (key, id, z)
+                })
+                .collect(),
+        );
 
-        for zone in snap.zones {
-            let key = format!("fwz:{}", zone.id);
-            let id = zone.id.clone();
-            self.firewall_zones.upsert(key, id, zone);
-        }
+        upsert_and_prune(
+            &self.acl_rules,
+            snap.acls
+                .into_iter()
+                .map(|a| {
+                    let key = format!("acl:{}", a.id);
+                    let id = a.id.clone();
+                    (key, id, a)
+                })
+                .collect(),
+        );
 
-        for acl in snap.acls {
-            let key = format!("acl:{}", acl.id);
-            let id = acl.id.clone();
-            self.acl_rules.upsert(key, id, acl);
-        }
+        upsert_and_prune(
+            &self.dns_policies,
+            snap.dns
+                .into_iter()
+                .map(|d| {
+                    let key = format!("dns:{}", d.id);
+                    let id = d.id.clone();
+                    (key, id, d)
+                })
+                .collect(),
+        );
 
-        for dns_policy in snap.dns {
-            let key = format!("dns:{}", dns_policy.id);
-            let id = dns_policy.id.clone();
-            self.dns_policies.upsert(key, id, dns_policy);
-        }
+        upsert_and_prune(
+            &self.vouchers,
+            snap.vouchers
+                .into_iter()
+                .map(|v| {
+                    let key = format!("vch:{}", v.id);
+                    let id = v.id.clone();
+                    (key, id, v)
+                })
+                .collect(),
+        );
 
-        for voucher in snap.vouchers {
-            let key = format!("vch:{}", voucher.id);
-            let id = voucher.id.clone();
-            self.vouchers.upsert(key, id, voucher);
-        }
+        upsert_and_prune(
+            &self.sites,
+            snap.sites
+                .into_iter()
+                .map(|s| {
+                    let key = format!("site:{}", s.id);
+                    let id = s.id.clone();
+                    (key, id, s)
+                })
+                .collect(),
+        );
 
-        for site in snap.sites {
-            let key = format!("site:{}", site.id);
-            let id = site.id.clone();
-            self.sites.upsert(key, id, site);
-        }
+        upsert_and_prune(
+            &self.events,
+            snap.events
+                .into_iter()
+                .map(|e| {
+                    let key = e
+                        .id
+                        .as_ref()
+                        .map(|id| id.to_string())
+                        .unwrap_or_else(|| format!("evt:{}", e.timestamp.timestamp_millis()));
+                    let id = e
+                        .id
+                        .clone()
+                        .unwrap_or_else(|| EntityId::Legacy(key.clone()));
+                    (key, id, e)
+                })
+                .collect(),
+        );
 
-        for event in snap.events {
-            let key = event
-                .id
-                .as_ref()
-                .map(|id| id.to_string())
-                .unwrap_or_else(|| format!("evt:{}", event.timestamp.timestamp_millis()));
-            let id = event.id.clone().unwrap_or_else(|| EntityId::Legacy(key.clone()));
-            self.events.upsert(key, id, event);
-        }
-
-        for tml in snap.traffic_matching_lists {
-            let key = format!("tml:{}", tml.id);
-            let id = tml.id.clone();
-            self.traffic_matching_lists.upsert(key, id, tml);
-        }
+        upsert_and_prune(
+            &self.traffic_matching_lists,
+            snap.traffic_matching_lists
+                .into_iter()
+                .map(|t| {
+                    let key = format!("tml:{}", t.id);
+                    let id = t.id.clone();
+                    (key, id, t)
+                })
+                .collect(),
+        );
 
         let _ = self.last_full_refresh.send(Some(Utc::now()));
     }

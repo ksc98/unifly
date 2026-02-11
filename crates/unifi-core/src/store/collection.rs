@@ -119,6 +119,11 @@ impl<T: Clone + Send + Sync + 'static> EntityCollection<T> {
         self.by_key.is_empty()
     }
 
+    /// Return all current primary keys in the collection.
+    pub(crate) fn keys(&self) -> Vec<String> {
+        self.by_key.iter().map(|r| r.key().clone()).collect()
+    }
+
     // ── Private helpers ──────────────────────────────────────────────
 
     /// Collect all values into a snapshot vec and broadcast to subscribers.

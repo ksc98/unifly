@@ -164,7 +164,7 @@ async fn handle_policies(
             action,
             enabled,
             description,
-            logging: _,
+            logging,
         } => {
             let req = if let Some(ref path) = from_file {
                 serde_json::from_value(util::read_json_file(path)?)?
@@ -175,6 +175,7 @@ async fn handle_policies(
                     source_zone_id: EntityId::from(""),
                     destination_zone_id: EntityId::from(""),
                     enabled,
+                    logging_enabled: logging,
                     description,
                     protocol: None,
                     source_address: None,

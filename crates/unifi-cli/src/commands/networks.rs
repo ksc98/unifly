@@ -114,17 +114,17 @@ pub async fn handle(
         NetworksCommand::Create {
             from_file,
             name,
-            management: _,
+            management: _, // Integration API uses different type system
             vlan,
             enabled,
-            ipv4_host: _,
+            ipv4_host,
             dhcp,
-            dhcp_start: _,
-            dhcp_stop: _,
-            dhcp_lease: _,
-            zone: _,
-            isolated: _,
-            internet: _,
+            dhcp_start,
+            dhcp_stop,
+            dhcp_lease,
+            zone,
+            isolated,
+            internet,
         } => {
             let req = if let Some(ref path) = from_file {
                 serde_json::from_value(util::read_json_file(path)?)?
@@ -132,10 +132,16 @@ pub async fn handle(
                 CreateNetworkRequest {
                     name: name.unwrap_or_default(),
                     vlan_id: vlan,
-                    subnet: None,
+                    subnet: ipv4_host,
                     purpose: None,
                     dhcp_enabled: dhcp,
                     enabled,
+                    dhcp_range_start: dhcp_start,
+                    dhcp_range_stop: dhcp_stop,
+                    dhcp_lease_time: dhcp_lease,
+                    firewall_zone_id: zone,
+                    isolation_enabled: isolated,
+                    internet_access_enabled: internet,
                 }
             };
 

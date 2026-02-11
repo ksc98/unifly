@@ -48,8 +48,12 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        AlarmsCommand::List { unarchived: _, limit: _ } => {
-            let alarms = controller.list_alarms().await?;
+        AlarmsCommand::List { unarchived, limit } => {
+            let mut alarms = controller.list_alarms().await?;
+            if unarchived {
+                alarms.retain(|a| !a.archived);
+            }
+            alarms.truncate(limit as usize);
             let out = output::render_list(
                 &global.output,
                 &alarms,

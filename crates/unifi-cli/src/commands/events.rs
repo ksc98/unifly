@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use chrono::Utc;
 use tabled::Tabled;
 use unifi_core::{Controller, Event};
 
@@ -44,12 +45,17 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        EventsCommand::List { limit, within: _ } => {
+        EventsCommand::List { limit, within } => {
             let snap = controller.events_snapshot();
-            let events = &snap[..snap.len().min(limit as usize)];
+            let cutoff = Utc::now() - chrono::TimeDelta::hours(within as i64);
+            let filtered: Vec<_> = snap.iter()
+                .filter(|e| e.timestamp >= cutoff)
+                .take(limit as usize)
+                .cloned()
+                .collect();
             let out = output::render_list(
                 &global.output,
-                events,
+                &filtered,
                 |e| EventRow::from(e),
                 |e| e.id.as_ref().map(|id| id.to_string()).unwrap_or_default(),
             );

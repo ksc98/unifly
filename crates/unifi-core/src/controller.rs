@@ -1253,7 +1253,7 @@ async fn route_command(
                 source: serde_json::json!({ "zoneId": req.source_zone_id.to_string() }),
                 destination: serde_json::json!({ "zoneId": req.destination_zone_id.to_string() }),
                 ip_protocol_scope: serde_json::json!("ALL"),
-                logging_enabled: false,
+                logging_enabled: req.logging_enabled,
                 ipsec_filter: None,
                 schedule: None,
                 connection_state_filter: None,

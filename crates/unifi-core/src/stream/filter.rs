@@ -9,6 +9,7 @@ pub enum DeviceFilter {
     All,
     ByType(DeviceType),
     ByState(DeviceState),
+    BySite(EntityId),
     Online,
     Offline,
     Custom(Box<dyn Fn(&Device) -> bool + Send + Sync>),
@@ -20,6 +21,10 @@ impl DeviceFilter {
             Self::All => true,
             Self::ByType(dt) => device.device_type == *dt,
             Self::ByState(ds) => device.state == *ds,
+            // All devices in the DataStore belong to the configured site,
+            // so BySite is effectively a no-op in single-site mode.
+            // Multi-site support would require adding site_id to Device.
+            Self::BySite(_sid) => true,
             Self::Online => device.state.is_online(),
             Self::Offline => matches!(device.state, DeviceState::Offline),
             Self::Custom(f) => f(device),

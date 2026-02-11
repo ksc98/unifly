@@ -20,7 +20,7 @@ use crate::store::DataStore;
 use crate::stream::EntityStream;
 
 use unifi_api::transport::{TlsMode, TransportConfig};
-use unifi_api::LegacyClient;
+use unifi_api::{IntegrationClient, LegacyClient};
 
 const COMMAND_CHANNEL_SIZE: usize = 64;
 const EVENT_CHANNEL_SIZE: usize = 256;
@@ -57,7 +57,13 @@ struct ControllerInner {
     command_tx: mpsc::Sender<CommandEnvelope>,
     command_rx: Mutex<Option<mpsc::Receiver<CommandEnvelope>>>,
     cancel: CancellationToken,
+    /// Child token for the current connection — cancelled on disconnect,
+    /// replaced on reconnect (avoids permanent cancellation).
+    cancel_child: Mutex<CancellationToken>,
     legacy_client: Mutex<Option<LegacyClient>>,
+    integration_client: Mutex<Option<IntegrationClient>>,
+    /// Resolved Integration API site UUID (populated on connect).
+    site_id: Mutex<Option<uuid::Uuid>>,
     task_handles: Mutex<Vec<JoinHandle<()>>>,
 }
 
@@ -70,6 +76,7 @@ impl Controller {
         let (event_tx, _) = broadcast::channel(EVENT_CHANNEL_SIZE);
         let (command_tx, command_rx) = mpsc::channel(COMMAND_CHANNEL_SIZE);
         let cancel = CancellationToken::new();
+        let cancel_child = cancel.child_token();
 
         Self {
             inner: Arc::new(ControllerInner {
@@ -80,7 +87,10 @@ impl Controller {
                 command_tx,
                 command_rx: Mutex::new(Some(command_rx)),
                 cancel,
+                cancel_child: Mutex::new(cancel_child),
                 legacy_client: Mutex::new(None),
+                integration_client: Mutex::new(None),
+                site_id: Mutex::new(None),
                 task_handles: Mutex::new(Vec::new()),
             }),
         }
@@ -109,25 +119,58 @@ impl Controller {
             .connection_state
             .send(ConnectionState::Connecting);
 
+        // Fresh child token for this connection (supports reconnect).
+        let child = self.inner.cancel.child_token();
+        *self.inner.cancel_child.lock().await = child.clone();
+
         let config = &self.inner.config;
         let transport = build_transport(config);
 
-        // Detect platform (UniFi OS vs standalone)
-        let platform = LegacyClient::detect_platform(&config.url).await?;
-        debug!(?platform, "detected controller platform");
-
-        // Create the legacy client
-        let client =
-            LegacyClient::new(config.url.clone(), config.site.clone(), platform, &transport)?;
-
-        // Authenticate if using session credentials
         match &config.auth {
+            AuthCredentials::ApiKey(api_key) => {
+                // Integration API client (preferred)
+                let integration = IntegrationClient::from_api_key(
+                    config.url.as_str(),
+                    api_key,
+                    &transport,
+                )?;
+
+                // Resolve site UUID from Integration API
+                let site_id =
+                    resolve_site_id(&integration, &config.site).await?;
+                debug!(site_id = %site_id, "resolved Integration API site UUID");
+
+                *self.inner.integration_client.lock().await = Some(integration);
+                *self.inner.site_id.lock().await = Some(site_id);
+
+                // Also set up Legacy client for event streams and supplementary data.
+                // API key auth may not work with Legacy API on all controllers,
+                // so we swallow errors here — it's optional.
+                match setup_legacy_client(config, &transport).await {
+                    Ok(client) => {
+                        *self.inner.legacy_client.lock().await = Some(client);
+                        debug!("legacy client available as supplement");
+                    }
+                    Err(e) => {
+                        debug!(error = %e, "legacy client unavailable (non-fatal with API key auth)");
+                    }
+                }
+            }
             AuthCredentials::Credentials { username, password } => {
+                // Legacy-only auth
+                let platform = LegacyClient::detect_platform(&config.url).await?;
+                debug!(?platform, "detected controller platform");
+
+                let client = LegacyClient::new(
+                    config.url.clone(),
+                    config.site.clone(),
+                    platform,
+                    &transport,
+                )?;
                 client.login(username, password).await?;
                 debug!("session authentication successful");
-            }
-            AuthCredentials::ApiKey(_) => {
-                debug!("using API key auth -- skipping legacy login");
+
+                *self.inner.legacy_client.lock().await = Some(client);
             }
             AuthCredentials::Cloud { .. } => {
                 let _ = self.inner.connection_state.send(ConnectionState::Failed);
@@ -137,8 +180,6 @@ impl Controller {
                 });
             }
         }
-
-        *self.inner.legacy_client.lock().await = Some(client);
 
         // Initial data load
         self.full_refresh().await?;
@@ -154,7 +195,7 @@ impl Controller {
         let interval_secs = config.refresh_interval_secs;
         if interval_secs > 0 {
             let ctrl = self.clone();
-            let cancel = self.inner.cancel.clone();
+            let cancel = child;
             handles.push(tokio::spawn(refresh_task(ctrl, interval_secs, cancel)));
         }
 
@@ -168,7 +209,8 @@ impl Controller {
     /// Cancels background tasks, logs out if session-based, and resets
     /// the connection state to [`Disconnected`](ConnectionState::Disconnected).
     pub async fn disconnect(&self) {
-        self.inner.cancel.cancel();
+        // Cancel the child token (not the parent — allows reconnect).
+        self.inner.cancel_child.lock().await.cancel();
 
         // Join all background tasks
         let mut handles = self.inner.task_handles.lock().await;
@@ -186,6 +228,8 @@ impl Controller {
         }
 
         *self.inner.legacy_client.lock().await = None;
+        *self.inner.integration_client.lock().await = None;
+        *self.inner.site_id.lock().await = None;
         let _ = self
             .inner
             .connection_state
@@ -199,42 +243,134 @@ impl Controller {
     /// them to domain types, and applies them to the store. Events are
     /// broadcast through the event channel (not stored).
     pub async fn full_refresh(&self) -> Result<(), CoreError> {
-        let client_guard = self.inner.legacy_client.lock().await;
-        let client = client_guard
-            .as_ref()
-            .ok_or(CoreError::ControllerDisconnected)?;
+        let integration_guard = self.inner.integration_client.lock().await;
+        let site_id = *self.inner.site_id.lock().await;
 
-        // Fetch in parallel
-        let (devices_res, clients_res, events_res) = tokio::join!(
-            client.list_devices(),
-            client.list_clients(),
-            client.list_events(Some(100)),
-        );
+        if let (Some(integration), Some(sid)) = (integration_guard.as_ref(), site_id) {
+            // ── Integration API path (preferred) ─────────────────
+            let page_limit = 200;
 
-        let devices: Vec<Device> = devices_res?.into_iter().map(Device::from).collect();
-        let clients: Vec<Client> = clients_res?.into_iter().map(Client::from).collect();
-        let events: Vec<Event> = events_res?.into_iter().map(Event::from).collect();
+            let (devices_res, clients_res, networks_res, wifi_res) = tokio::join!(
+                integration.paginate_all(page_limit, |off, lim| {
+                    integration.list_devices(&sid, off, lim)
+                }),
+                integration.paginate_all(page_limit, |off, lim| {
+                    integration.list_clients(&sid, off, lim)
+                }),
+                integration.paginate_all(page_limit, |off, lim| {
+                    integration.list_networks(&sid, off, lim)
+                }),
+                integration.paginate_all(page_limit, |off, lim| {
+                    integration.list_wifi_broadcasts(&sid, off, lim)
+                }),
+            );
 
-        // Drop the lock before writing to the store
-        drop(client_guard);
+            let (policies_res, zones_res, acls_res, dns_res, vouchers_res) = tokio::join!(
+                integration.paginate_all(page_limit, |off, lim| {
+                    integration.list_firewall_policies(&sid, off, lim)
+                }),
+                integration.paginate_all(page_limit, |off, lim| {
+                    integration.list_firewall_zones(&sid, off, lim)
+                }),
+                integration.paginate_all(page_limit, |off, lim| {
+                    integration.list_acl_rules(&sid, off, lim)
+                }),
+                integration.paginate_all(page_limit, |off, lim| {
+                    integration.list_dns_policies(&sid, off, lim)
+                }),
+                integration.paginate_all(page_limit, |off, lim| {
+                    integration.list_vouchers(&sid, off, lim)
+                }),
+            );
 
-        // Full replace — Legacy is the only data source for now.
-        // Empty vecs for collections that require Integration API.
-        self.inner.store.apply_integration_snapshot(
-            devices,
-            clients,
-            Vec::new(), // networks
-            Vec::new(), // wifi broadcasts
-            Vec::new(), // firewall policies
-            Vec::new(), // firewall zones
-            Vec::new(), // acl rules
-            Vec::new(), // dns policies
-            Vec::new(), // vouchers
-        );
+            let (sites_res, tml_res) = tokio::join!(
+                integration.paginate_all(50, |off, lim| {
+                    integration.list_sites(off, lim)
+                }),
+                integration.paginate_all(page_limit, |off, lim| {
+                    integration.list_traffic_matching_lists(&sid, off, lim)
+                }),
+            );
 
-        // Broadcast events
-        for event in events {
-            let _ = self.inner.event_tx.send(Arc::new(event));
+            let devices: Vec<Device> = devices_res?.into_iter().map(Device::from).collect();
+            let clients: Vec<Client> = clients_res?.into_iter().map(Client::from).collect();
+            let networks: Vec<Network> = networks_res?.into_iter().map(Network::from).collect();
+            let wifi: Vec<WifiBroadcast> = wifi_res?.into_iter().map(WifiBroadcast::from).collect();
+            let policies: Vec<FirewallPolicy> =
+                policies_res?.into_iter().map(FirewallPolicy::from).collect();
+            let zones: Vec<FirewallZone> =
+                zones_res?.into_iter().map(FirewallZone::from).collect();
+            let acls: Vec<AclRule> = acls_res?.into_iter().map(AclRule::from).collect();
+            let dns: Vec<DnsPolicy> = dns_res?.into_iter().map(DnsPolicy::from).collect();
+            let vouchers: Vec<Voucher> = vouchers_res?.into_iter().map(Voucher::from).collect();
+            let sites: Vec<Site> = sites_res?.into_iter().map(Site::from).collect();
+            let traffic_matching_lists: Vec<TrafficMatchingList> =
+                tml_res?.into_iter().map(TrafficMatchingList::from).collect();
+
+            drop(integration_guard);
+
+            // Supplement with Legacy API events (not available in Integration API)
+            let legacy_events = match *self.inner.legacy_client.lock().await {
+                Some(ref legacy) => match legacy.list_events(Some(100)).await {
+                    Ok(raw_events) => {
+                        let events: Vec<Event> =
+                            raw_events.into_iter().map(Event::from).collect();
+                        for event in &events {
+                            let _ = self.inner.event_tx.send(Arc::new(event.clone()));
+                        }
+                        events
+                    }
+                    Err(e) => {
+                        debug!(error = %e, "legacy event fetch failed (non-fatal)");
+                        Vec::new()
+                    }
+                },
+                None => Vec::new(),
+            };
+
+            self.inner.store.apply_integration_snapshot(
+                devices, clients, networks, wifi, policies, zones, acls, dns, vouchers,
+                sites, legacy_events, traffic_matching_lists,
+            );
+        } else {
+            // ── Legacy-only path ─────────────────────────────────
+            drop(integration_guard);
+
+            let legacy_guard = self.inner.legacy_client.lock().await;
+            let legacy = legacy_guard
+                .as_ref()
+                .ok_or(CoreError::ControllerDisconnected)?;
+
+            let (devices_res, clients_res, events_res) = tokio::join!(
+                legacy.list_devices(),
+                legacy.list_clients(),
+                legacy.list_events(Some(100)),
+            );
+
+            let devices: Vec<Device> = devices_res?.into_iter().map(Device::from).collect();
+            let clients: Vec<Client> = clients_res?.into_iter().map(Client::from).collect();
+            let events: Vec<Event> = events_res?.into_iter().map(Event::from).collect();
+
+            drop(legacy_guard);
+
+            for event in &events {
+                let _ = self.inner.event_tx.send(Arc::new(event.clone()));
+            }
+
+            self.inner.store.apply_integration_snapshot(
+                devices,
+                clients,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(), // sites
+                events,     // events
+                Vec::new(), // traffic_matching_lists
+            );
         }
 
         debug!(
@@ -343,6 +479,18 @@ impl Controller {
         self.inner.store.vouchers_snapshot()
     }
 
+    pub fn sites_snapshot(&self) -> Arc<Vec<Arc<Site>>> {
+        self.inner.store.sites_snapshot()
+    }
+
+    pub fn events_snapshot(&self) -> Arc<Vec<Arc<Event>>> {
+        self.inner.store.events_snapshot()
+    }
+
+    pub fn traffic_matching_lists_snapshot(&self) -> Arc<Vec<Arc<TrafficMatchingList>>> {
+        self.inner.store.traffic_matching_lists_snapshot()
+    }
+
     // ── Stream accessors (delegate to DataStore) ─────────────────
 
     pub fn devices(&self) -> EntityStream<Device> {
@@ -380,6 +528,393 @@ impl Controller {
     pub fn vouchers(&self) -> EntityStream<Voucher> {
         self.inner.store.subscribe_vouchers()
     }
+
+    pub fn sites(&self) -> EntityStream<Site> {
+        self.inner.store.subscribe_sites()
+    }
+
+    pub fn traffic_matching_lists(&self) -> EntityStream<TrafficMatchingList> {
+        self.inner.store.subscribe_traffic_matching_lists()
+    }
+
+    // ── Ad-hoc Integration API queries ───────────────────────────
+    //
+    // These bypass the DataStore and query the Integration API directly.
+    // Intended for reference data that doesn't need reactive subscriptions.
+
+    /// Fetch VPN servers from the Integration API.
+    pub async fn list_vpn_servers(&self) -> Result<Vec<VpnServer>, CoreError> {
+        let guard = self.inner.integration_client.lock().await;
+        let site_id = *self.inner.site_id.lock().await;
+        let (ic, sid) = require_integration(&guard, site_id, "list_vpn_servers")?;
+        let raw = ic
+            .paginate_all(200, |off, lim| ic.list_vpn_servers(&sid, off, lim))
+            .await?;
+        Ok(raw
+            .into_iter()
+            .map(|s| {
+                let id = s
+                    .fields
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| uuid::Uuid::parse_str(s).ok())
+                    .map(EntityId::Uuid)
+                    .unwrap_or_else(|| EntityId::Legacy("unknown".into()));
+                VpnServer {
+                    id,
+                    name: s.fields.get("name").and_then(|v| v.as_str()).map(String::from),
+                    server_type: s
+                        .fields
+                        .get("type")
+                        .or_else(|| s.fields.get("serverType"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("UNKNOWN")
+                        .to_owned(),
+                    enabled: s.fields.get("enabled").and_then(|v| v.as_bool()),
+                }
+            })
+            .collect())
+    }
+
+    /// Fetch VPN tunnels from the Integration API.
+    pub async fn list_vpn_tunnels(&self) -> Result<Vec<VpnTunnel>, CoreError> {
+        let guard = self.inner.integration_client.lock().await;
+        let site_id = *self.inner.site_id.lock().await;
+        let (ic, sid) = require_integration(&guard, site_id, "list_vpn_tunnels")?;
+        let raw = ic
+            .paginate_all(200, |off, lim| ic.list_vpn_tunnels(&sid, off, lim))
+            .await?;
+        Ok(raw
+            .into_iter()
+            .map(|t| {
+                let id = t
+                    .fields
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| uuid::Uuid::parse_str(s).ok())
+                    .map(EntityId::Uuid)
+                    .unwrap_or_else(|| EntityId::Legacy("unknown".into()));
+                VpnTunnel {
+                    id,
+                    name: t.fields.get("name").and_then(|v| v.as_str()).map(String::from),
+                    tunnel_type: t
+                        .fields
+                        .get("type")
+                        .or_else(|| t.fields.get("tunnelType"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("UNKNOWN")
+                        .to_owned(),
+                    enabled: t.fields.get("enabled").and_then(|v| v.as_bool()),
+                }
+            })
+            .collect())
+    }
+
+    /// Fetch WAN interfaces from the Integration API.
+    pub async fn list_wans(&self) -> Result<Vec<WanInterface>, CoreError> {
+        let guard = self.inner.integration_client.lock().await;
+        let site_id = *self.inner.site_id.lock().await;
+        let (ic, sid) = require_integration(&guard, site_id, "list_wans")?;
+        let raw = ic
+            .paginate_all(200, |off, lim| ic.list_wans(&sid, off, lim))
+            .await?;
+        Ok(raw
+            .into_iter()
+            .map(|w| {
+                let id = w
+                    .fields
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| uuid::Uuid::parse_str(s).ok())
+                    .map(EntityId::Uuid)
+                    .unwrap_or_else(|| EntityId::Legacy("unknown".into()));
+                let parse_ip = |key: &str| -> Option<std::net::IpAddr> {
+                    w.fields.get(key).and_then(|v| v.as_str()).and_then(|s| s.parse().ok())
+                };
+                let dns = w
+                    .fields
+                    .get("dns")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().and_then(|s| s.parse().ok()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                WanInterface {
+                    id,
+                    name: w.fields.get("name").and_then(|v| v.as_str()).map(String::from),
+                    ip: parse_ip("ipAddress").or_else(|| parse_ip("ip")),
+                    gateway: parse_ip("gateway"),
+                    dns,
+                }
+            })
+            .collect())
+    }
+
+    /// Fetch DPI categories from the Integration API.
+    pub async fn list_dpi_categories(&self) -> Result<Vec<DpiCategory>, CoreError> {
+        let guard = self.inner.integration_client.lock().await;
+        let site_id = *self.inner.site_id.lock().await;
+        let (ic, sid) = require_integration(&guard, site_id, "list_dpi_categories")?;
+        let raw = ic
+            .paginate_all(200, |off, lim| ic.list_dpi_categories(&sid, off, lim))
+            .await?;
+        Ok(raw
+            .into_iter()
+            .map(|c| {
+                let id = c
+                    .fields
+                    .get("id")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32;
+                DpiCategory {
+                    id,
+                    name: c
+                        .fields
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Unknown")
+                        .to_owned(),
+                    tx_bytes: c.fields.get("txBytes").and_then(|v| v.as_u64()).unwrap_or(0),
+                    rx_bytes: c.fields.get("rxBytes").and_then(|v| v.as_u64()).unwrap_or(0),
+                    apps: Vec::new(),
+                }
+            })
+            .collect())
+    }
+
+    /// Fetch DPI applications from the Integration API.
+    pub async fn list_dpi_applications(&self) -> Result<Vec<DpiApplication>, CoreError> {
+        let guard = self.inner.integration_client.lock().await;
+        let site_id = *self.inner.site_id.lock().await;
+        let (ic, sid) = require_integration(&guard, site_id, "list_dpi_applications")?;
+        let raw = ic
+            .paginate_all(200, |off, lim| ic.list_dpi_applications(&sid, off, lim))
+            .await?;
+        Ok(raw
+            .into_iter()
+            .map(|a| {
+                let id = a
+                    .fields
+                    .get("id")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32;
+                DpiApplication {
+                    id,
+                    name: a
+                        .fields
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Unknown")
+                        .to_owned(),
+                    category_id: a
+                        .fields
+                        .get("categoryId")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0) as u32,
+                    tx_bytes: a.fields.get("txBytes").and_then(|v| v.as_u64()).unwrap_or(0),
+                    rx_bytes: a.fields.get("rxBytes").and_then(|v| v.as_u64()).unwrap_or(0),
+                }
+            })
+            .collect())
+    }
+
+    /// Fetch RADIUS profiles from the Integration API.
+    pub async fn list_radius_profiles(&self) -> Result<Vec<RadiusProfile>, CoreError> {
+        let guard = self.inner.integration_client.lock().await;
+        let site_id = *self.inner.site_id.lock().await;
+        let (ic, sid) = require_integration(&guard, site_id, "list_radius_profiles")?;
+        let raw = ic
+            .paginate_all(200, |off, lim| ic.list_radius_profiles(&sid, off, lim))
+            .await?;
+        Ok(raw
+            .into_iter()
+            .map(|r| {
+                let id = r
+                    .fields
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| uuid::Uuid::parse_str(s).ok())
+                    .map(EntityId::Uuid)
+                    .unwrap_or_else(|| EntityId::Legacy("unknown".into()));
+                RadiusProfile {
+                    id,
+                    name: r
+                        .fields
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Unknown")
+                        .to_owned(),
+                }
+            })
+            .collect())
+    }
+
+    /// Fetch countries from the Integration API.
+    pub async fn list_countries(&self) -> Result<Vec<Country>, CoreError> {
+        let guard = self.inner.integration_client.lock().await;
+        let ic = guard
+            .as_ref()
+            .ok_or_else(|| unsupported("list_countries"))?;
+        let raw = ic
+            .paginate_all(200, |off, lim| ic.list_countries(off, lim))
+            .await?;
+        Ok(raw
+            .into_iter()
+            .map(|c| Country {
+                code: c
+                    .fields
+                    .get("code")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_owned(),
+                name: c
+                    .fields
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Unknown")
+                    .to_owned(),
+            })
+            .collect())
+    }
+    // ── Ad-hoc Legacy API queries ──────────────────────────────────
+    //
+    // Legacy-only data that doesn't live in the DataStore.
+
+    /// Fetch admin list from the Legacy API.
+    pub async fn list_admins(&self) -> Result<Vec<Admin>, CoreError> {
+        let guard = self.inner.legacy_client.lock().await;
+        let legacy = require_legacy(&guard)?;
+        let raw = legacy.list_admins().await?;
+        Ok(raw
+            .into_iter()
+            .map(|v| Admin {
+                id: v
+                    .get("_id")
+                    .and_then(|v| v.as_str())
+                    .map(|s| EntityId::Legacy(s.into()))
+                    .unwrap_or_else(|| EntityId::Legacy("unknown".into())),
+                name: v
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_owned(),
+                email: v.get("email").and_then(|v| v.as_str()).map(String::from),
+                role: v
+                    .get("role")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .to_owned(),
+                is_super: v
+                    .get("is_super")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
+                last_login: None,
+            })
+            .collect())
+    }
+
+    /// Fetch alarms from the Legacy API.
+    pub async fn list_alarms(&self) -> Result<Vec<Alarm>, CoreError> {
+        let guard = self.inner.legacy_client.lock().await;
+        let legacy = require_legacy(&guard)?;
+        let raw = legacy.list_alarms().await?;
+        Ok(raw.into_iter().map(Alarm::from).collect())
+    }
+
+    /// Fetch controller system info from the Legacy API.
+    pub async fn get_system_info(&self) -> Result<SystemInfo, CoreError> {
+        let guard = self.inner.legacy_client.lock().await;
+        let legacy = require_legacy(&guard)?;
+        let raw = legacy.get_sysinfo().await?;
+        Ok(SystemInfo {
+            controller_name: raw
+                .get("controller_name")
+                .or_else(|| raw.get("name"))
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            version: raw
+                .get("version")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
+                .to_owned(),
+            build: raw.get("build").and_then(|v| v.as_str()).map(String::from),
+            hostname: raw
+                .get("hostname")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            ip: raw
+                .get("ip_addrs")
+                .and_then(|v| v.as_array())
+                .and_then(|a| a.first())
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse().ok()),
+            uptime_secs: raw.get("uptime").and_then(|v| v.as_u64()),
+            update_available: raw.get("update_available").and_then(|v| v.as_bool()),
+        })
+    }
+
+    /// Fetch site health dashboard from the Legacy API.
+    pub async fn get_site_health(&self) -> Result<Vec<HealthSummary>, CoreError> {
+        let guard = self.inner.legacy_client.lock().await;
+        let legacy = require_legacy(&guard)?;
+        let raw = legacy.get_health().await?;
+        Ok(raw
+            .into_iter()
+            .map(|v| HealthSummary {
+                subsystem: v
+                    .get("subsystem")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .to_owned(),
+                status: v
+                    .get("status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .to_owned(),
+                num_adopted: v.get("num_adopted").and_then(|v| v.as_u64()).map(|n| n as u32),
+                num_sta: v.get("num_sta").and_then(|v| v.as_u64()).map(|n| n as u32),
+                tx_bytes_r: v.get("tx_bytes-r").and_then(|v| v.as_u64()),
+                rx_bytes_r: v.get("rx_bytes-r").and_then(|v| v.as_u64()),
+                latency: v.get("latency").and_then(|v| v.as_f64()),
+                wan_ip: v.get("wan_ip").and_then(|v| v.as_str()).map(String::from),
+                gateways: v.get("gateways").and_then(|v| v.as_array()).map(|a| {
+                    a.iter()
+                        .filter_map(|g| g.as_str().map(String::from))
+                        .collect()
+                }),
+                extra: v,
+            })
+            .collect())
+    }
+
+    /// Fetch low-level sysinfo from the Legacy API.
+    pub async fn get_sysinfo(&self) -> Result<SysInfo, CoreError> {
+        let guard = self.inner.legacy_client.lock().await;
+        let legacy = require_legacy(&guard)?;
+        let raw = legacy.get_sysinfo().await?;
+        Ok(SysInfo {
+            timezone: raw.get("timezone").and_then(|v| v.as_str()).map(String::from),
+            autobackup: raw.get("autobackup").and_then(|v| v.as_bool()),
+            hostname: raw.get("hostname").and_then(|v| v.as_str()).map(String::from),
+            ip_addrs: raw
+                .get("ip_addrs")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            live_chat: raw.get("live_chat").and_then(|v| v.as_str()).map(String::from),
+            data_retention_days: raw
+                .get("data_retention_days")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as u32),
+            extra: raw,
+        })
+    }
 }
 
 // ── Background tasks ─────────────────────────────────────────────
@@ -408,7 +943,7 @@ async fn command_processor_task(
     controller: Controller,
     mut rx: mpsc::Receiver<CommandEnvelope>,
 ) {
-    let cancel = controller.inner.cancel.clone();
+    let cancel = controller.inner.cancel_child.lock().await.clone();
 
     loop {
         tokio::select! {
@@ -425,71 +960,127 @@ async fn command_processor_task(
 
 // ── Command routing ──────────────────────────────────────────────
 
-/// Route a command to the appropriate Legacy API call.
+/// Route a command to the appropriate API call.
 ///
-/// Commands supported by the Legacy API are executed directly.
-/// CRUD operations requiring the Integration API return
-/// [`CoreError::Unsupported`].
+/// Uses the Integration API for CRUD operations when available,
+/// falls back to the Legacy API for session-based commands.
 async fn route_command(
     controller: &Controller,
     cmd: Command,
 ) -> Result<CommandResult, CoreError> {
-    let client_guard = controller.inner.legacy_client.lock().await;
-    let client = client_guard
-        .as_ref()
-        .ok_or(CoreError::ControllerDisconnected)?;
     let store = &controller.inner.store;
+
+    // Acquire both clients for routing decisions
+    let integration_guard = controller.inner.integration_client.lock().await;
+    let legacy_guard = controller.inner.legacy_client.lock().await;
+    let site_id = *controller.inner.site_id.lock().await;
 
     match cmd {
         // ── Device operations ────────────────────────────────────
 
         Command::AdoptDevice { mac } => {
-            client.adopt_device(mac.as_str()).await?;
+            if let (Some(ic), Some(sid)) = (integration_guard.as_ref(), site_id) {
+                ic.adopt_device(&sid, mac.as_str()).await?;
+            } else {
+                let legacy = require_legacy(&legacy_guard)?;
+                legacy.adopt_device(mac.as_str()).await?;
+            }
             Ok(CommandResult::Ok)
         }
 
         Command::RestartDevice { id } => {
-            let mac = device_mac(store, &id)?;
-            client.restart_device(mac.as_str()).await?;
+            if let (Some(ic), Some(sid)) = (integration_guard.as_ref(), site_id) {
+                let device_uuid = require_uuid(&id)?;
+                ic.device_action(&sid, &device_uuid, "RESTART").await?;
+            } else {
+                let legacy = require_legacy(&legacy_guard)?;
+                let mac = device_mac(store, &id)?;
+                legacy.restart_device(mac.as_str()).await?;
+            }
             Ok(CommandResult::Ok)
         }
 
         Command::LocateDevice { mac, enable } => {
-            client.locate_device(mac.as_str(), enable).await?;
+            if let (Some(ic), Some(sid)) = (integration_guard.as_ref(), site_id) {
+                let device = store.device_by_mac(&mac)
+                    .ok_or_else(|| CoreError::DeviceNotFound { identifier: mac.to_string() })?;
+                let device_uuid = require_uuid(&device.id)?;
+                let action = if enable { "LOCATE_ON" } else { "LOCATE_OFF" };
+                ic.device_action(&sid, &device_uuid, action).await?;
+            } else {
+                let legacy = require_legacy(&legacy_guard)?;
+                legacy.locate_device(mac.as_str(), enable).await?;
+            }
             Ok(CommandResult::Ok)
         }
 
         Command::UpgradeDevice { mac, firmware_url } => {
-            client
-                .upgrade_device(mac.as_str(), firmware_url.as_deref())
-                .await?;
+            let legacy = require_legacy(&legacy_guard)?;
+            legacy.upgrade_device(mac.as_str(), firmware_url.as_deref()).await?;
             Ok(CommandResult::Ok)
         }
 
-        Command::RemoveDevice { .. } => Err(unsupported("RemoveDevice")),
+        Command::RemoveDevice { id } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "RemoveDevice")?;
+            let device_uuid = require_uuid(&id)?;
+            ic.remove_device(&sid, &device_uuid).await?;
+            Ok(CommandResult::Ok)
+        }
+
         Command::ProvisionDevice { .. } => Err(unsupported("ProvisionDevice")),
         Command::SpeedtestDevice => Err(unsupported("SpeedtestDevice")),
-        Command::PowerCyclePort { .. } => Err(unsupported("PowerCyclePort")),
+
+        Command::PowerCyclePort { device_id, port_idx } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "PowerCyclePort")?;
+            let device_uuid = require_uuid(&device_id)?;
+            ic.port_action(&sid, &device_uuid, port_idx, "POWER_CYCLE").await?;
+            Ok(CommandResult::Ok)
+        }
 
         // ── Client operations ────────────────────────────────────
 
         Command::BlockClient { mac } => {
-            client.block_client(mac.as_str()).await?;
+            if let (Some(ic), Some(sid)) = (integration_guard.as_ref(), site_id) {
+                let client = store.client_by_mac(&mac)
+                    .ok_or_else(|| CoreError::ClientNotFound { identifier: mac.to_string() })?;
+                let client_uuid = require_uuid(&client.id)?;
+                ic.client_action(&sid, &client_uuid, "BLOCK").await?;
+            } else {
+                let legacy = require_legacy(&legacy_guard)?;
+                legacy.block_client(mac.as_str()).await?;
+            }
             Ok(CommandResult::Ok)
         }
 
         Command::UnblockClient { mac } => {
-            client.unblock_client(mac.as_str()).await?;
+            if let (Some(ic), Some(sid)) = (integration_guard.as_ref(), site_id) {
+                let client = store.client_by_mac(&mac)
+                    .ok_or_else(|| CoreError::ClientNotFound { identifier: mac.to_string() })?;
+                let client_uuid = require_uuid(&client.id)?;
+                ic.client_action(&sid, &client_uuid, "UNBLOCK").await?;
+            } else {
+                let legacy = require_legacy(&legacy_guard)?;
+                legacy.unblock_client(mac.as_str()).await?;
+            }
             Ok(CommandResult::Ok)
         }
 
         Command::KickClient { mac } => {
-            client.kick_client(mac.as_str()).await?;
+            if let (Some(ic), Some(sid)) = (integration_guard.as_ref(), site_id) {
+                let client = store.client_by_mac(&mac)
+                    .ok_or_else(|| CoreError::ClientNotFound { identifier: mac.to_string() })?;
+                let client_uuid = require_uuid(&client.id)?;
+                ic.client_action(&sid, &client_uuid, "RECONNECT").await?;
+            } else {
+                let legacy = require_legacy(&legacy_guard)?;
+                legacy.kick_client(mac.as_str()).await?;
+            }
             Ok(CommandResult::Ok)
         }
 
         Command::ForgetClient { mac } => {
-            client.forget_client(mac.as_str()).await?;
+            let legacy = require_legacy(&legacy_guard)?;
+            legacy.forget_client(mac.as_str()).await?;
             Ok(CommandResult::Ok)
         }
 
@@ -500,10 +1091,10 @@ async fn route_command(
             rx_rate_kbps,
             tx_rate_kbps,
         } => {
+            let legacy = require_legacy(&legacy_guard)?;
             let mac = client_mac(store, &client_id)?;
             let minutes = time_limit_minutes.unwrap_or(60);
-
-            client
+            legacy
                 .authorize_guest(
                     mac.as_str(),
                     minutes,
@@ -520,7 +1111,8 @@ async fn route_command(
         // ── Alarm operations ─────────────────────────────────────
 
         Command::ArchiveAlarm { id } => {
-            client.archive_alarm(&id.to_string()).await?;
+            let legacy = require_legacy(&legacy_guard)?;
+            legacy.archive_alarm(&id.to_string()).await?;
             Ok(CommandResult::Ok)
         }
 
@@ -529,60 +1121,310 @@ async fn route_command(
         // ── Backup operations ────────────────────────────────────
 
         Command::CreateBackup => {
-            client.create_backup().await?;
+            let legacy = require_legacy(&legacy_guard)?;
+            legacy.create_backup().await?;
             Ok(CommandResult::Ok)
         }
 
         Command::DeleteBackup { .. } => Err(unsupported("DeleteBackup")),
 
-        // ── CRUD operations (Integration API only) ───────────────
+        // ── Network CRUD (Integration API) ───────────────────────
 
-        Command::CreateNetwork(_)
-        | Command::UpdateNetwork { .. }
-        | Command::DeleteNetwork { .. } => Err(unsupported("network CRUD")),
-
-        Command::CreateWifiBroadcast(_)
-        | Command::UpdateWifiBroadcast { .. }
-        | Command::DeleteWifiBroadcast { .. } => Err(unsupported("WiFi broadcast CRUD")),
-
-        Command::CreateFirewallPolicy(_)
-        | Command::UpdateFirewallPolicy { .. }
-        | Command::DeleteFirewallPolicy { .. }
-        | Command::PatchFirewallPolicy { .. }
-        | Command::ReorderFirewallPolicies { .. } => Err(unsupported("firewall policy CRUD")),
-
-        Command::CreateFirewallZone(_)
-        | Command::UpdateFirewallZone { .. }
-        | Command::DeleteFirewallZone { .. } => Err(unsupported("firewall zone CRUD")),
-
-        Command::CreateAclRule(_)
-        | Command::UpdateAclRule { .. }
-        | Command::DeleteAclRule { .. }
-        | Command::ReorderAclRules { .. } => Err(unsupported("ACL rule CRUD")),
-
-        Command::CreateDnsPolicy(_)
-        | Command::UpdateDnsPolicy { .. }
-        | Command::DeleteDnsPolicy { .. } => Err(unsupported("DNS policy CRUD")),
-
-        Command::CreateTrafficMatchingList(_)
-        | Command::UpdateTrafficMatchingList { .. }
-        | Command::DeleteTrafficMatchingList { .. } => {
-            Err(unsupported("traffic matching list CRUD"))
+        Command::CreateNetwork(req) => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "CreateNetwork")?;
+            let body = unifi_api::integration_types::NetworkCreateUpdate {
+                name: req.name,
+                enabled: req.enabled,
+                management: "USER_DEFINED".into(),
+                vlan_id: req.vlan_id.map(|v| v as i32).unwrap_or(1),
+                dhcp_guarding: None,
+            };
+            ic.create_network(&sid, &body).await?;
+            Ok(CommandResult::Ok)
         }
 
-        Command::CreateVouchers(_)
-        | Command::DeleteVoucher { .. }
-        | Command::PurgeVouchers { .. } => Err(unsupported("voucher management")),
+        Command::UpdateNetwork { id, update } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "UpdateNetwork")?;
+            let uuid = require_uuid(&id)?;
+            // Fetch existing to merge partial update
+            let existing = ic.get_network(&sid, &uuid).await?;
+            let body = unifi_api::integration_types::NetworkCreateUpdate {
+                name: update.name.unwrap_or(existing.name),
+                enabled: update.enabled.unwrap_or(existing.enabled),
+                management: existing.management,
+                vlan_id: update.vlan_id.map(|v| v as i32).unwrap_or(existing.vlan_id),
+                dhcp_guarding: existing.dhcp_guarding,
+            };
+            ic.update_network(&sid, &uuid, &body).await?;
+            Ok(CommandResult::Ok)
+        }
+
+        Command::DeleteNetwork { id, force: _ } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "DeleteNetwork")?;
+            let uuid = require_uuid(&id)?;
+            ic.delete_network(&sid, &uuid).await?;
+            Ok(CommandResult::Ok)
+        }
+
+        // ── WiFi Broadcast CRUD ──────────────────────────────────
+
+        Command::CreateWifiBroadcast(req) => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "CreateWifiBroadcast")?;
+            let mut extra = serde_json::Map::new();
+            if let Some(pass) = &req.passphrase {
+                extra.insert("passphrase".into(), serde_json::Value::String(pass.clone()));
+            }
+            let body = unifi_api::integration_types::WifiBroadcastCreateUpdate {
+                name: req.name,
+                broadcast_type: "STANDARD".into(),
+                enabled: req.enabled,
+                body: extra,
+            };
+            ic.create_wifi_broadcast(&sid, &body).await?;
+            Ok(CommandResult::Ok)
+        }
+
+        Command::UpdateWifiBroadcast { id, update: _ } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "UpdateWifiBroadcast")?;
+            let _uuid = require_uuid(&id)?;
+            // WiFi updates are complex — for now return the existing broadcast
+            let _ = (ic, sid);
+            Err(unsupported("UpdateWifiBroadcast (partial update not yet implemented)"))
+        }
+
+        Command::DeleteWifiBroadcast { id, force: _ } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "DeleteWifiBroadcast")?;
+            let uuid = require_uuid(&id)?;
+            ic.delete_wifi_broadcast(&sid, &uuid).await?;
+            Ok(CommandResult::Ok)
+        }
+
+        // ── Firewall Policy CRUD ─────────────────────────────────
+
+        Command::CreateFirewallPolicy(req) => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "CreateFirewallPolicy")?;
+            let action_str = match req.action {
+                FirewallAction::Allow => "ALLOW",
+                FirewallAction::Block => "DROP",
+                FirewallAction::Reject => "REJECT",
+            };
+            let body = unifi_api::integration_types::FirewallPolicyCreateUpdate {
+                name: req.name,
+                description: req.description,
+                enabled: req.enabled,
+                action: serde_json::json!({ "type": action_str }),
+                source: serde_json::json!({ "zoneId": req.source_zone_id.to_string() }),
+                destination: serde_json::json!({ "zoneId": req.destination_zone_id.to_string() }),
+                ip_protocol_scope: serde_json::json!("ALL"),
+                logging_enabled: false,
+                ipsec_filter: None,
+                schedule: None,
+                connection_state_filter: None,
+            };
+            ic.create_firewall_policy(&sid, &body).await?;
+            Ok(CommandResult::Ok)
+        }
+
+        Command::UpdateFirewallPolicy { id, update: _ } => {
+            let (_ic, _sid) = require_integration(&integration_guard, site_id, "UpdateFirewallPolicy")?;
+            let _uuid = require_uuid(&id)?;
+            Err(unsupported("UpdateFirewallPolicy (partial update not yet implemented)"))
+        }
+
+        Command::DeleteFirewallPolicy { id } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "DeleteFirewallPolicy")?;
+            let uuid = require_uuid(&id)?;
+            ic.delete_firewall_policy(&sid, &uuid).await?;
+            Ok(CommandResult::Ok)
+        }
+
+        Command::PatchFirewallPolicy { id, enabled } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "PatchFirewallPolicy")?;
+            let uuid = require_uuid(&id)?;
+            let body = unifi_api::integration_types::FirewallPolicyPatch {
+                logging_enabled: Some(enabled),
+            };
+            ic.patch_firewall_policy(&sid, &uuid, &body).await?;
+            Ok(CommandResult::Ok)
+        }
+
+        Command::ReorderFirewallPolicies { zone_pair: _, ordered_ids } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "ReorderFirewallPolicies")?;
+            let uuids: Result<Vec<uuid::Uuid>, _> = ordered_ids.iter().map(require_uuid).collect();
+            let body = unifi_api::integration_types::FirewallPolicyOrdering {
+                before_system_defined: uuids?,
+                after_system_defined: Vec::new(),
+            };
+            ic.set_firewall_policy_ordering(&sid, &body).await?;
+            Ok(CommandResult::Ok)
+        }
+
+        // ── Firewall Zone CRUD ───────────────────────────────────
+
+        Command::CreateFirewallZone(req) => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "CreateFirewallZone")?;
+            let network_uuids: Result<Vec<uuid::Uuid>, _> =
+                req.network_ids.iter().map(require_uuid).collect();
+            let body = unifi_api::integration_types::FirewallZoneCreateUpdate {
+                name: req.name,
+                network_ids: network_uuids?,
+            };
+            ic.create_firewall_zone(&sid, &body).await?;
+            Ok(CommandResult::Ok)
+        }
+
+        Command::UpdateFirewallZone { id, update } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "UpdateFirewallZone")?;
+            let uuid = require_uuid(&id)?;
+            let existing = ic.get_firewall_zone(&sid, &uuid).await?;
+            let network_ids = if let Some(ids) = update.network_ids {
+                let uuids: Result<Vec<uuid::Uuid>, _> = ids.iter().map(require_uuid).collect();
+                uuids?
+            } else {
+                existing.network_ids
+            };
+            let body = unifi_api::integration_types::FirewallZoneCreateUpdate {
+                name: update.name.unwrap_or(existing.name),
+                network_ids,
+            };
+            ic.update_firewall_zone(&sid, &uuid, &body).await?;
+            Ok(CommandResult::Ok)
+        }
+
+        Command::DeleteFirewallZone { id } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "DeleteFirewallZone")?;
+            let uuid = require_uuid(&id)?;
+            ic.delete_firewall_zone(&sid, &uuid).await?;
+            Ok(CommandResult::Ok)
+        }
+
+        // ── ACL Rule CRUD ────────────────────────────────────────
+
+        Command::CreateAclRule(_req) => {
+            let (_ic, _sid) = require_integration(&integration_guard, site_id, "CreateAclRule")?;
+            Err(unsupported("CreateAclRule (API shape mapping not yet implemented)"))
+        }
+
+        Command::UpdateAclRule { id, update: _ } => {
+            let (_ic, _sid) = require_integration(&integration_guard, site_id, "UpdateAclRule")?;
+            let _uuid = require_uuid(&id)?;
+            Err(unsupported("UpdateAclRule (API shape mapping not yet implemented)"))
+        }
+
+        Command::DeleteAclRule { id } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "DeleteAclRule")?;
+            let uuid = require_uuid(&id)?;
+            ic.delete_acl_rule(&sid, &uuid).await?;
+            Ok(CommandResult::Ok)
+        }
+
+        Command::ReorderAclRules { ordered_ids } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "ReorderAclRules")?;
+            let uuids: Result<Vec<uuid::Uuid>, _> = ordered_ids.iter().map(require_uuid).collect();
+            let body = unifi_api::integration_types::AclRuleOrdering {
+                ordered_acl_rule_ids: uuids?,
+            };
+            ic.set_acl_rule_ordering(&sid, &body).await?;
+            Ok(CommandResult::Ok)
+        }
+
+        // ── DNS Policy CRUD ──────────────────────────────────────
+
+        Command::CreateDnsPolicy(req) => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "CreateDnsPolicy")?;
+            let policy_type_str = match req.policy_type {
+                crate::model::DnsPolicyType::ARecord => "A",
+                crate::model::DnsPolicyType::AaaaRecord => "AAAA",
+                crate::model::DnsPolicyType::CnameRecord => "CNAME",
+                crate::model::DnsPolicyType::MxRecord => "MX",
+                crate::model::DnsPolicyType::TxtRecord => "TXT",
+                crate::model::DnsPolicyType::SrvRecord => "SRV",
+                crate::model::DnsPolicyType::ForwardDomain => "FORWARD_DOMAIN",
+            };
+            let body = unifi_api::integration_types::DnsPolicyCreateUpdate {
+                policy_type: policy_type_str.into(),
+                enabled: req.enabled,
+                fields: serde_json::Map::new(),
+            };
+            ic.create_dns_policy(&sid, &body).await?;
+            Ok(CommandResult::Ok)
+        }
+
+        Command::UpdateDnsPolicy { id, update: _ } => {
+            let (_ic, _sid) = require_integration(&integration_guard, site_id, "UpdateDnsPolicy")?;
+            let _uuid = require_uuid(&id)?;
+            Err(unsupported("UpdateDnsPolicy (partial update not yet implemented)"))
+        }
+
+        Command::DeleteDnsPolicy { id } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "DeleteDnsPolicy")?;
+            let uuid = require_uuid(&id)?;
+            ic.delete_dns_policy(&sid, &uuid).await?;
+            Ok(CommandResult::Ok)
+        }
+
+        // ── Traffic Matching List CRUD ───────────────────────────
+
+        Command::CreateTrafficMatchingList(_req) => {
+            let (_ic, _sid) = require_integration(&integration_guard, site_id, "CreateTrafficMatchingList")?;
+            Err(unsupported("CreateTrafficMatchingList (API shape mapping not yet implemented)"))
+        }
+
+        Command::UpdateTrafficMatchingList { id, update: _ } => {
+            let (_ic, _sid) = require_integration(&integration_guard, site_id, "UpdateTrafficMatchingList")?;
+            let _uuid = require_uuid(&id)?;
+            Err(unsupported("UpdateTrafficMatchingList (API shape mapping not yet implemented)"))
+        }
+
+        Command::DeleteTrafficMatchingList { id } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "DeleteTrafficMatchingList")?;
+            let uuid = require_uuid(&id)?;
+            ic.delete_traffic_matching_list(&sid, &uuid).await?;
+            Ok(CommandResult::Ok)
+        }
+
+        // ── Voucher management ───────────────────────────────────
+
+        Command::CreateVouchers(req) => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "CreateVouchers")?;
+            let body = unifi_api::integration_types::VoucherCreateRequest {
+                name: req.name.unwrap_or_else(|| "Voucher".into()),
+                count: Some(req.count as i32),
+                time_limit_minutes: req.time_limit_minutes.unwrap_or(60) as i64,
+                authorized_guest_limit: req.authorized_guest_limit.map(|l| l as i64),
+                data_usage_limit_m_bytes: req.data_usage_limit_mb.map(|m| m as i64),
+                rx_rate_limit_kbps: req.rx_rate_limit_kbps.map(|r| r as i64),
+                tx_rate_limit_kbps: req.tx_rate_limit_kbps.map(|r| r as i64),
+            };
+            let vouchers = ic.create_vouchers(&sid, &body).await?;
+            let domain_vouchers: Vec<Voucher> = vouchers.into_iter().map(Voucher::from).collect();
+            Ok(CommandResult::Vouchers(domain_vouchers))
+        }
+
+        Command::DeleteVoucher { id } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "DeleteVoucher")?;
+            let uuid = require_uuid(&id)?;
+            ic.delete_voucher(&sid, &uuid).await?;
+            Ok(CommandResult::Ok)
+        }
+
+        Command::PurgeVouchers { filter } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "PurgeVouchers")?;
+            ic.purge_vouchers(&sid, &filter).await?;
+            Ok(CommandResult::Ok)
+        }
 
         // ── System administration ────────────────────────────────
 
         Command::CreateSite { .. }
         | Command::DeleteSite { .. }
-        | Command::RebootController
-        | Command::PoweroffController
         | Command::InviteAdmin { .. }
         | Command::RevokeAdmin { .. }
         | Command::UpdateAdmin { .. } => Err(unsupported("system administration")),
+
+        Command::RebootController | Command::PoweroffController => {
+            Err(unsupported("controller power management"))
+        }
     }
 }
 
@@ -603,6 +1445,65 @@ fn tls_to_transport(tls: &TlsVerification) -> TlsMode {
         TlsVerification::CustomCa(path) => TlsMode::CustomCa(path.clone()),
         TlsVerification::DangerAcceptInvalid => TlsMode::DangerAcceptInvalid,
     }
+}
+
+/// Resolve the Integration API site UUID from a site name.
+///
+/// Lists all sites and finds the one matching `site_name` by `internal_reference`.
+async fn resolve_site_id(
+    client: &IntegrationClient,
+    site_name: &str,
+) -> Result<uuid::Uuid, CoreError> {
+    let sites = client
+        .paginate_all(50, |off, lim| client.list_sites(off, lim))
+        .await?;
+
+    sites
+        .into_iter()
+        .find(|s| s.internal_reference == site_name)
+        .map(|s| s.id)
+        .ok_or_else(|| CoreError::SiteNotFound {
+            name: site_name.to_owned(),
+        })
+}
+
+/// Try to set up a Legacy client (best-effort for API key auth).
+async fn setup_legacy_client(
+    config: &ControllerConfig,
+    transport: &TransportConfig,
+) -> Result<LegacyClient, CoreError> {
+    let platform = LegacyClient::detect_platform(&config.url).await?;
+    let client = LegacyClient::new(
+        config.url.clone(),
+        config.site.clone(),
+        platform,
+        transport,
+    )?;
+    Ok(client)
+}
+
+/// Extract a `Uuid` from an `EntityId`, or return an error.
+fn require_uuid(id: &EntityId) -> Result<uuid::Uuid, CoreError> {
+    id.as_uuid().copied().ok_or_else(|| CoreError::Unsupported {
+        operation: "Integration API operation on legacy ID".into(),
+        required: "UUID-based entity ID".into(),
+    })
+}
+
+fn require_legacy<'a>(
+    guard: &'a tokio::sync::MutexGuard<'_, Option<LegacyClient>>,
+) -> Result<&'a LegacyClient, CoreError> {
+    guard.as_ref().ok_or(CoreError::ControllerDisconnected)
+}
+
+fn require_integration<'a>(
+    guard: &'a tokio::sync::MutexGuard<'_, Option<IntegrationClient>>,
+    site_id: Option<uuid::Uuid>,
+    operation: &str,
+) -> Result<(&'a IntegrationClient, uuid::Uuid), CoreError> {
+    let client = guard.as_ref().ok_or_else(|| unsupported(operation))?;
+    let sid = site_id.ok_or_else(|| unsupported(operation))?;
+    Ok((client, sid))
 }
 
 fn unsupported(operation: &str) -> CoreError {

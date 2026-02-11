@@ -25,6 +25,9 @@ impl DataStore {
         acls: Vec<AclRule>,
         dns: Vec<DnsPolicy>,
         vouchers: Vec<Voucher>,
+        sites: Vec<Site>,
+        events: Vec<Event>,
+        traffic_matching_lists: Vec<TrafficMatchingList>,
     ) {
         self.devices.clear();
         self.clients.clear();
@@ -35,6 +38,9 @@ impl DataStore {
         self.acl_rules.clear();
         self.dns_policies.clear();
         self.vouchers.clear();
+        self.sites.clear();
+        self.events.clear();
+        self.traffic_matching_lists.clear();
 
         for device in devices {
             let key = device.mac.as_str().to_owned();
@@ -88,6 +94,28 @@ impl DataStore {
             let key = format!("vch:{}", voucher.id);
             let id = voucher.id.clone();
             self.vouchers.upsert(key, id, voucher);
+        }
+
+        for site in sites {
+            let key = format!("site:{}", site.id);
+            let id = site.id.clone();
+            self.sites.upsert(key, id, site);
+        }
+
+        for event in events {
+            let key = event
+                .id
+                .as_ref()
+                .map(|id| id.to_string())
+                .unwrap_or_else(|| format!("evt:{}", event.timestamp.timestamp_millis()));
+            let id = event.id.clone().unwrap_or_else(|| EntityId::Legacy(key.clone()));
+            self.events.upsert(key, id, event);
+        }
+
+        for tml in traffic_matching_lists {
+            let key = format!("tml:{}", tml.id);
+            let id = tml.id.clone();
+            self.traffic_matching_lists.upsert(key, id, tml);
         }
 
         let _ = self.last_full_refresh.send(Some(Utc::now()));

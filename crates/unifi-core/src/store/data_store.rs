@@ -27,6 +27,9 @@ pub struct DataStore {
     pub(crate) acl_rules: EntityCollection<AclRule>,
     pub(crate) dns_policies: EntityCollection<DnsPolicy>,
     pub(crate) vouchers: EntityCollection<Voucher>,
+    pub(crate) sites: EntityCollection<Site>,
+    pub(crate) events: EntityCollection<Event>,
+    pub(crate) traffic_matching_lists: EntityCollection<TrafficMatchingList>,
     pub(crate) last_full_refresh: watch::Sender<Option<DateTime<Utc>>>,
     pub(crate) last_ws_event: watch::Sender<Option<DateTime<Utc>>>,
 }
@@ -46,6 +49,9 @@ impl DataStore {
             acl_rules: EntityCollection::new(),
             dns_policies: EntityCollection::new(),
             vouchers: EntityCollection::new(),
+            sites: EntityCollection::new(),
+            events: EntityCollection::new(),
+            traffic_matching_lists: EntityCollection::new(),
             last_full_refresh,
             last_ws_event,
         }
@@ -87,6 +93,18 @@ impl DataStore {
 
     pub fn vouchers_snapshot(&self) -> Arc<Vec<Arc<Voucher>>> {
         self.vouchers.snapshot()
+    }
+
+    pub fn sites_snapshot(&self) -> Arc<Vec<Arc<Site>>> {
+        self.sites.snapshot()
+    }
+
+    pub fn events_snapshot(&self) -> Arc<Vec<Arc<Event>>> {
+        self.events.snapshot()
+    }
+
+    pub fn traffic_matching_lists_snapshot(&self) -> Arc<Vec<Arc<TrafficMatchingList>>> {
+        self.traffic_matching_lists.snapshot()
     }
 
     // ── Single-entity lookups ────────────────────────────────────────
@@ -161,6 +179,18 @@ impl DataStore {
 
     pub fn subscribe_vouchers(&self) -> EntityStream<Voucher> {
         EntityStream::new(self.vouchers.subscribe())
+    }
+
+    pub fn subscribe_sites(&self) -> EntityStream<Site> {
+        EntityStream::new(self.sites.subscribe())
+    }
+
+    pub fn subscribe_events(&self) -> EntityStream<Event> {
+        EntityStream::new(self.events.subscribe())
+    }
+
+    pub fn subscribe_traffic_matching_lists(&self) -> EntityStream<TrafficMatchingList> {
+        EntityStream::new(self.traffic_matching_lists.subscribe())
     }
 
     // ── Metadata ─────────────────────────────────────────────────────

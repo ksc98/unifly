@@ -18,8 +18,17 @@ pub use command::requests::*;
 pub use store::DataStore;
 pub use stream::EntityStream;
 
-// Re-export the most commonly used model types at the crate root for ergonomics.
+// Re-export model types at the crate root for ergonomics.
 pub use model::{
+    // Core entities
     Client, ClientType, Device, DeviceState, DeviceType, EntityId, Event, MacAddress, Network,
     Site,
+    // Events / alarms
+    Alarm, EventCategory, EventSeverity,
+    // Firewall
+    AclRule, FirewallPolicy, FirewallZone,
+    // Supporting types
+    TrafficMatchingList, VpnServer, VpnTunnel, WanInterface, RadiusProfile,
+    // Legacy resource types
+    Admin, Country, DpiApplication, DpiCategory, HealthSummary, SysInfo, SystemInfo,
 };

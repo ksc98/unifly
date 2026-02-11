@@ -35,6 +35,9 @@ pub enum CoreError {
     #[error("Network not found: {identifier}")]
     NetworkNotFound { identifier: String },
 
+    #[error("Site not found: {name}")]
+    SiteNotFound { name: String },
+
     #[error("Entity not found: {entity_type} with id {identifier}")]
     NotFound {
         entity_type: String,

@@ -52,7 +52,7 @@ impl EventReader {
 
             loop {
                 let event = tokio::select! {
-                    _ = task_cancel.cancelled() => break,
+                    () = task_cancel.cancelled() => break,
 
                     _ = tick_interval.tick() => Event::Tick,
 

@@ -44,7 +44,7 @@ fn detail(t: &Arc<TrafficMatchingList>) -> String {
         format!("Items: {}", t.items.len()),
     ];
     if let Some(ref origin) = t.origin {
-        lines.push(format!("Origin: {:?}", origin));
+        lines.push(format!("Origin: {origin:?}"));
     }
     if !t.items.is_empty() {
         lines.push(String::new());

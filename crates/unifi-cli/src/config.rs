@@ -15,7 +15,7 @@ use crate::error::CliError;
 // ── Re-exports from shared crate ────────────────────────────────────
 
 pub use unifi_config::{
-    Config, Profile, config_path, load_config_or_default, save_config,
+    Config, Defaults, Profile, config_path, load_config_or_default, save_config,
 };
 
 // ── CLI-specific helpers ────────────────────────────────────────────

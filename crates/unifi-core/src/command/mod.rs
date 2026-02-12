@@ -7,9 +7,18 @@
 pub mod requests;
 
 use crate::error::CoreError;
-use crate::model::*;
+use crate::model::{
+    AclRule, Client, Device, DnsPolicy, EntityId, FirewallPolicy, FirewallZone,
+    MacAddress, Network, TrafficMatchingList, Voucher, WifiBroadcast,
+};
 
-pub use requests::*;
+pub use requests::{
+    CreateAclRuleRequest, CreateDnsPolicyRequest, CreateFirewallPolicyRequest,
+    CreateFirewallZoneRequest, CreateNetworkRequest, CreateTrafficMatchingListRequest,
+    CreateVouchersRequest, CreateWifiBroadcastRequest, UpdateAclRuleRequest,
+    UpdateDnsPolicyRequest, UpdateFirewallPolicyRequest, UpdateFirewallZoneRequest,
+    UpdateNetworkRequest, UpdateTrafficMatchingListRequest, UpdateWifiBroadcastRequest,
+};
 
 /// A command envelope sent through the command channel.
 /// Contains the command and a oneshot response channel.

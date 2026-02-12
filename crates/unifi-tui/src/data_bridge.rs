@@ -60,7 +60,7 @@ pub async fn spawn_data_bridge(
         tokio::select! {
             biased;
 
-            _ = cancel.cancelled() => break,
+            () = cancel.cancelled() => break,
 
             Some(d) = devices.changed() => {
                 let _ = action_tx.send(Action::DevicesUpdated(d));

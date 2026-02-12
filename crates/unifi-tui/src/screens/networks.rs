@@ -51,16 +51,17 @@ impl NetworksScreen {
         if self.networks.is_empty() {
             return;
         }
+        #[allow(clippy::cast_possible_wrap)]
         let current = self.selected_index() as isize;
+        #[allow(clippy::cast_possible_wrap)]
         let next = (current + delta).clamp(0, self.networks.len() as isize - 1);
         self.select(next as usize);
     }
 
+    #[allow(clippy::unused_self)]
     fn render_detail(&self, frame: &mut Frame, area: Rect, network: &Network) {
         let vlan_str = network
-            .vlan_id
-            .map(|v| format!("VLAN {v}"))
-            .unwrap_or_else(|| "─".into());
+            .vlan_id.map_or_else(|| "─".into(), |v| format!("VLAN {v}"));
         let subnet = network.subnet.as_deref().unwrap_or("─");
 
         let title = format!(" {}  ·  {vlan_str}  ·  {subnet} ", network.name);
@@ -76,29 +77,22 @@ impl NetworksScreen {
 
         let mgmt = network
             .management
-            .as_ref()
-            .map(|m| format!("{m:?}"))
-            .unwrap_or_else(|| "─".into());
+            .as_ref().map_or_else(|| "─".into(), |m| format!("{m:?}"));
 
         let dhcp_str = network
             .dhcp
             .as_ref()
-            .map(|d| {
+            .map_or_else(|| "─".into(), |d| {
                 if d.enabled {
                     let start = d
-                        .range_start
-                        .map(|ip| ip.to_string())
-                        .unwrap_or_else(|| "?".into());
+                        .range_start.map_or_else(|| "?".into(), |ip| ip.to_string());
                     let stop = d
-                        .range_stop
-                        .map(|ip| ip.to_string())
-                        .unwrap_or_else(|| "?".into());
+                        .range_stop.map_or_else(|| "?".into(), |ip| ip.to_string());
                     format!("Server ({start} - {stop})")
                 } else {
                     "Disabled".into()
                 }
-            })
-            .unwrap_or_else(|| "─".into());
+            });
 
         let internet = if network.internet_access_enabled {
             "Enabled"
@@ -121,9 +115,7 @@ impl NetworksScreen {
         let ipv6 = if network.ipv6_enabled {
             network
                 .ipv6_mode
-                .as_ref()
-                .map(|m| format!("{m:?}"))
-                .unwrap_or_else(|| "Enabled".into())
+                .as_ref().map_or_else(|| "Enabled".into(), |m| format!("{m:?}"))
         } else {
             "Disabled".into()
         };
@@ -268,14 +260,12 @@ impl Component for NetworksScreen {
                 let prefix = if is_selected { "▸" } else { " " };
 
                 let vlan = net
-                    .vlan_id
-                    .map(|v| v.to_string())
-                    .unwrap_or_else(|| "─".into());
+                    .vlan_id.map_or_else(|| "─".into(), |v| v.to_string());
                 let subnet = net.subnet.as_deref().unwrap_or("─");
                 let dhcp = net
                     .dhcp
                     .as_ref()
-                    .map(|d| {
+                    .map_or_else(|| "─".into(), |d| {
                         if d.enabled {
                             let start = d.range_start.map(|ip| ip.to_string()).unwrap_or_default();
                             let stop = d.range_stop.map(|ip| ip.to_string()).unwrap_or_default();
@@ -283,16 +273,13 @@ impl Component for NetworksScreen {
                         } else {
                             "Disabled".into()
                         }
-                    })
-                    .unwrap_or_else(|| "─".into());
+                    });
                 let mgmt = net
                     .management
-                    .as_ref()
-                    .map(|m| format!("{m:?}"))
-                    .unwrap_or_else(|| "─".into());
+                    .as_ref().map_or_else(|| "─".into(), |m| format!("{m:?}"));
 
                 // Zone ID placeholder — we'd resolve this to a name with zone data
-                let zone = net.firewall_zone_id.as_ref().map(|_| "Zone").unwrap_or("─");
+                let zone = net.firewall_zone_id.as_ref().map_or("─", |_| "Zone");
 
                 let row_style = if is_selected {
                     theme::table_selected()
@@ -363,7 +350,7 @@ impl Component for NetworksScreen {
         self.focused = focused;
     }
 
-    fn id(&self) -> &str {
+    fn id(&self) -> &'static str {
         "Networks"
     }
 }

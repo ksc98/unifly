@@ -10,6 +10,9 @@ authors.workspace = true
 keywords = ["unifi", "ubiquiti", "networking", "api-client"]
 categories = ["api-bindings", "network-programming"]
 
+[lints]
+workspace = true
+
 [dependencies]
 reqwest           = { workspace = true }
 tokio             = { workspace = true, features = ["macros", "rt"] }

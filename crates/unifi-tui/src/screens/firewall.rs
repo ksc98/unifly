@@ -80,7 +80,9 @@ impl FirewallScreen {
         if len == 0 {
             return;
         }
+        #[allow(clippy::cast_possible_wrap)]
         let current = self.selected_index() as isize;
+        #[allow(clippy::cast_possible_wrap)]
         let next = (current + delta).clamp(0, len as isize - 1);
         self.select(next as usize);
     }
@@ -114,9 +116,7 @@ impl FirewallScreen {
                 let prefix = if is_selected { "▸" } else { " " };
 
                 let idx = policy
-                    .index
-                    .map(|n| n.to_string())
-                    .unwrap_or_else(|| (i + 1).to_string());
+                    .index.map_or_else(|| (i + 1).to_string(), |n| n.to_string());
                 let enabled = if policy.enabled { "✓" } else { "✗" };
                 let action_str = format!("{:?}", policy.action);
                 let action_color = match policy.action {
@@ -455,7 +455,7 @@ impl Component for FirewallScreen {
         self.focused = focused;
     }
 
-    fn id(&self) -> &str {
+    fn id(&self) -> &'static str {
         "Firewall"
     }
 }

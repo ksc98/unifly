@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 // Integration tests for `LegacyClient` using wiremock.
 
 use serde_json::json;

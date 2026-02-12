@@ -44,6 +44,7 @@ pub struct DhcpConfig {
 
 /// The canonical Network type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Network {
     pub id: EntityId,
     pub name: String,

@@ -2,7 +2,7 @@
 //
 // Used by the TUI to filter snapshots without re-querying the API.
 
-use crate::model::*;
+use crate::model::{DeviceType, DeviceState, EntityId, Device, ClientType, MacAddress, Client};
 
 /// Filter predicate for device collections.
 pub enum DeviceFilter {

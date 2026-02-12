@@ -53,21 +53,18 @@ fn detail(n: &Arc<Network>) -> String {
         format!(
             "Management: {}",
             n.management
-                .map(|m: unifi_core::model::NetworkManagement| format!("{m:?}"))
-                .unwrap_or_else(|| "-".into())
+                .map_or_else(|| "-".into(), |m: unifi_core::model::NetworkManagement| format!("{m:?}"))
         ),
         format!(
             "VLAN:       {}",
             n.vlan_id
-                .map(|v: u16| v.to_string())
-                .unwrap_or_else(|| "-".into())
+                .map_or_else(|| "-".into(), |v: u16| v.to_string())
         ),
         format!("Subnet:     {}", n.subnet.as_deref().unwrap_or("-")),
         format!(
             "Gateway:    {}",
             n.gateway_ip
-                .map(|ip: std::net::Ipv4Addr| ip.to_string())
-                .unwrap_or_else(|| "-".into())
+                .map_or_else(|| "-".into(), |ip: std::net::Ipv4Addr| ip.to_string())
         ),
         format!("Isolated:   {}", n.isolation_enabled),
         format!("Internet:   {}", n.internet_access_enabled),

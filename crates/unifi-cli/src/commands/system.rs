@@ -51,7 +51,7 @@ fn system_info_detail(info: &SystemInfo) -> String {
         lines.push(format!("IP:       {ip}"));
     }
     if let Some(uptime) = info.uptime_secs {
-        lines.push(format!("Uptime:   {}s", uptime));
+        lines.push(format!("Uptime:   {uptime}s"));
     }
     if let Some(update) = info.update_available {
         lines.push(format!(
@@ -80,7 +80,7 @@ fn sysinfo_detail(info: &SysInfo) -> String {
         ));
     }
     if let Some(retention) = info.data_retention_days {
-        lines.push(format!("Retention:  {} days", retention));
+        lines.push(format!("Retention:  {retention} days"));
     }
     if lines.is_empty() {
         lines.push("(no data)".into());

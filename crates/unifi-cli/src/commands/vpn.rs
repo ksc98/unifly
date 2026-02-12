@@ -29,8 +29,7 @@ impl From<&VpnServer> for VpnServerRow {
             server_type: s.server_type.clone(),
             enabled: s
                 .enabled
-                .map(|e| if e { "yes" } else { "no" })
-                .unwrap_or("-")
+                .map_or("-", |e| if e { "yes" } else { "no" })
                 .into(),
         }
     }
@@ -56,8 +55,7 @@ impl From<&VpnTunnel> for VpnTunnelRow {
             tunnel_type: t.tunnel_type.clone(),
             enabled: t
                 .enabled
-                .map(|e| if e { "yes" } else { "no" })
-                .unwrap_or("-")
+                .map_or("-", |e| if e { "yes" } else { "no" })
                 .into(),
         }
     }

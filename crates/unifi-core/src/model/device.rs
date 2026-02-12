@@ -107,6 +107,7 @@ pub struct DeviceStats {
 
 /// The canonical Device type. Merges data from Integration + Legacy APIs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Device {
     pub id: EntityId,
     pub mac: MacAddress,

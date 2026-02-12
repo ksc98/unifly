@@ -22,6 +22,7 @@ pub fn resolve_device_id(controller: &Controller, identifier: &str) -> Result<En
 }
 
 /// Resolve a device identifier to a MacAddress via snapshot lookup.
+#[allow(clippy::unnecessary_wraps)]
 pub fn resolve_device_mac(
     controller: &Controller,
     identifier: &str,

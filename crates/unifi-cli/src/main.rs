@@ -57,7 +57,7 @@ fn init_tracing(verbosity: u8) {
 async fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
         // Config commands don't need a controller connection
-        Command::Config(args) => commands::config_cmd::handle(args, &cli.global).await,
+        Command::Config(args) => commands::config_cmd::handle(args, &cli.global),
 
         // Shell completions generation
         Command::Completions(args) => {

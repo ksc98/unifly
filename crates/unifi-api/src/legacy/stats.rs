@@ -23,7 +23,7 @@ impl LegacyClient {
         start: Option<i64>,
         end: Option<i64>,
     ) -> Result<Vec<serde_json::Value>, Error> {
-        let path = format!("stat/report/{}.site", interval);
+        let path = format!("stat/report/{interval}.site");
         let url = self.site_url(&path);
         debug!(interval, ?start, ?end, "fetching site stats");
 
@@ -52,7 +52,7 @@ impl LegacyClient {
         interval: &str,
         macs: Option<&[String]>,
     ) -> Result<Vec<serde_json::Value>, Error> {
-        let path = format!("stat/report/{}.device", interval);
+        let path = format!("stat/report/{interval}.device");
         let url = self.site_url(&path);
         debug!(interval, "fetching device stats");
 
@@ -76,7 +76,7 @@ impl LegacyClient {
         interval: &str,
         macs: Option<&[String]>,
     ) -> Result<Vec<serde_json::Value>, Error> {
-        let path = format!("stat/report/{}.user", interval);
+        let path = format!("stat/report/{interval}.user");
         let url = self.site_url(&path);
         debug!(interval, "fetching client stats");
 
@@ -99,7 +99,7 @@ impl LegacyClient {
         start: Option<i64>,
         end: Option<i64>,
     ) -> Result<Vec<serde_json::Value>, Error> {
-        let path = format!("stat/report/{}.gw", interval);
+        let path = format!("stat/report/{interval}.gw");
         let url = self.site_url(&path);
         debug!(interval, ?start, ?end, "fetching gateway stats");
 

@@ -81,7 +81,9 @@ impl DevicesScreen {
         if len == 0 {
             return;
         }
+        #[allow(clippy::cast_possible_wrap)]
         let current = self.selected_index() as isize;
+        #[allow(clippy::cast_possible_wrap)]
         let next = (current + delta).clamp(0, len as isize - 1);
         self.select(next as usize);
     }
@@ -91,9 +93,7 @@ impl DevicesScreen {
         let name = device.name.as_deref().unwrap_or("Unknown");
         let model = device.model.as_deref().unwrap_or("─");
         let ip = device
-            .ip
-            .map(|ip| ip.to_string())
-            .unwrap_or_else(|| "─".into());
+            .ip.map_or_else(|| "─".into(), |ip| ip.to_string());
         let mac = device.mac.to_string();
 
         let title = format!(" {name}  ·  {model}  ·  {ip}  ·  {mac} ");
@@ -133,7 +133,7 @@ impl DevicesScreen {
         match self.detail_tab {
             DeviceDetailTab::Overview => self.render_overview_tab(frame, tabs_layout[1], device),
             DeviceDetailTab::Performance => {
-                self.render_performance_tab(frame, tabs_layout[1], device)
+                self.render_performance_tab(frame, tabs_layout[1], device);
             }
             DeviceDetailTab::Radios => self.render_radios_tab(frame, tabs_layout[1], device),
             DeviceDetailTab::Clients => {
@@ -160,6 +160,7 @@ impl DevicesScreen {
         frame.render_widget(Paragraph::new(hints), tabs_layout[2]);
     }
 
+    #[allow(clippy::unused_self)]
     fn render_overview_tab(&self, frame: &mut Frame, area: Rect, device: &Device) {
         let state_span = status_indicator::status_span(&device.state);
         let state_label = format!("{:?}", device.state);
@@ -171,13 +172,9 @@ impl DevicesScreen {
         };
         let uptime = device
             .stats
-            .uptime_secs
-            .map(bytes_fmt::fmt_uptime)
-            .unwrap_or_else(|| "─".into());
+            .uptime_secs.map_or_else(|| "─".into(), bytes_fmt::fmt_uptime);
         let adopted = device
-            .adopted_at
-            .map(|dt| dt.format("%Y-%m-%d %H:%M UTC").to_string())
-            .unwrap_or_else(|| "─".into());
+            .adopted_at.map_or_else(|| "─".into(), |dt| dt.format("%Y-%m-%d %H:%M UTC").to_string());
 
         let lines = vec![
             Line::from(""),
@@ -218,27 +215,22 @@ impl DevicesScreen {
         frame.render_widget(Paragraph::new(lines), area);
     }
 
+    #[allow(clippy::unused_self)]
     fn render_performance_tab(&self, frame: &mut Frame, area: Rect, device: &Device) {
         let cpu = device
             .stats
-            .cpu_utilization_pct
-            .map(|v| format!("{v:.1}%"))
-            .unwrap_or_else(|| "─".into());
+            .cpu_utilization_pct.map_or_else(|| "─".into(), |v| format!("{v:.1}%"));
         let mem = device
             .stats
-            .memory_utilization_pct
-            .map(|v| format!("{v:.1}%"))
-            .unwrap_or_else(|| "─".into());
+            .memory_utilization_pct.map_or_else(|| "─".into(), |v| format!("{v:.1}%"));
         let load = device
             .stats
-            .load_average_1m
-            .map(|v| format!("{v:.2}"))
-            .unwrap_or_else(|| "─".into());
+            .load_average_1m.map_or_else(|| "─".into(), |v| format!("{v:.2}"));
 
         let cpu_color = device
             .stats
             .cpu_utilization_pct
-            .map(|v| {
+            .map_or(theme::DIM_WHITE, |v| {
                 if v < 50.0 {
                     theme::SUCCESS_GREEN
                 } else if v < 75.0 {
@@ -248,13 +240,12 @@ impl DevicesScreen {
                 } else {
                     theme::ERROR_RED
                 }
-            })
-            .unwrap_or(theme::DIM_WHITE);
+            });
 
         let mem_color = device
             .stats
             .memory_utilization_pct
-            .map(|v| {
+            .map_or(theme::DIM_WHITE, |v| {
                 if v < 50.0 {
                     theme::SUCCESS_GREEN
                 } else if v < 75.0 {
@@ -264,8 +255,7 @@ impl DevicesScreen {
                 } else {
                     theme::ERROR_RED
                 }
-            })
-            .unwrap_or(theme::DIM_WHITE);
+            });
 
         let lines = vec![
             Line::from(""),
@@ -286,6 +276,7 @@ impl DevicesScreen {
         frame.render_widget(Paragraph::new(lines), area);
     }
 
+    #[allow(clippy::unused_self)]
     fn render_radios_tab(&self, frame: &mut Frame, area: Rect, device: &Device) {
         let mut lines = vec![Line::from("")];
 
@@ -298,13 +289,9 @@ impl DevicesScreen {
             for radio in &device.radios {
                 let freq = format!("{:.1} GHz", radio.frequency_ghz);
                 let ch = radio
-                    .channel
-                    .map(|c| format!("ch {c}"))
-                    .unwrap_or_else(|| "─".into());
+                    .channel.map_or_else(|| "─".into(), |c| format!("ch {c}"));
                 let width = radio
-                    .channel_width_mhz
-                    .map(|w| format!("{w} MHz"))
-                    .unwrap_or_else(|| "─".into());
+                    .channel_width_mhz.map_or_else(|| "─".into(), |w| format!("{w} MHz"));
 
                 lines.push(Line::from(vec![
                     Span::styled(
@@ -324,6 +311,7 @@ impl DevicesScreen {
         frame.render_widget(Paragraph::new(lines), area);
     }
 
+    #[allow(clippy::unused_self)]
     fn render_ports_tab(&self, frame: &mut Frame, area: Rect, device: &Device) {
         let mut lines = vec![Line::from("")];
 
@@ -345,36 +333,34 @@ impl DevicesScreen {
                 let state_color = match port.state {
                     unifi_core::model::PortState::Up => theme::SUCCESS_GREEN,
                     unifi_core::model::PortState::Down => theme::ERROR_RED,
-                    _ => theme::DIM_WHITE,
+                    unifi_core::model::PortState::Unknown => theme::DIM_WHITE,
                 };
                 let state_str = format!("{:?}", port.state);
                 let speed = port
                     .speed_mbps
-                    .map(|s| {
+                    .map_or_else(|| "─".into(), |s| {
                         if s >= 1000 {
                             format!("{}G", s / 1000)
                         } else {
                             format!("{s}M")
                         }
-                    })
-                    .unwrap_or_else(|| "─".into());
+                    });
                 let poe = port
                     .poe
                     .as_ref()
-                    .map(|p| if p.enabled { "✓" } else { "✗" })
-                    .unwrap_or("─");
+                    .map_or("─", |p| if p.enabled { "✓" } else { "✗" });
 
                 lines.push(Line::from(vec![
                     Span::styled(
-                        format!("  {:<6}", name),
+                        format!("  {name:<6}"),
                         Style::default().fg(theme::NEON_CYAN),
                     ),
                     Span::styled(
-                        format!("{:<8}", state_str),
+                        format!("{state_str:<8}"),
                         Style::default().fg(state_color),
                     ),
                     Span::styled(
-                        format!("{:<11}", speed),
+                        format!("{speed:<11}"),
                         Style::default().fg(theme::DIM_WHITE),
                     ),
                     Span::styled(poe, Style::default().fg(theme::DIM_WHITE)),
@@ -514,7 +500,7 @@ impl Component for DevicesScreen {
                 self.detail_tab = *tab;
             }
             Action::SearchInput(query) => {
-                self.search_query = query.clone();
+                self.search_query.clone_from(query);
                 self.table_state.select(Some(0));
             }
             Action::CloseSearch => {
@@ -609,30 +595,20 @@ impl Component for DevicesScreen {
                 let name = dev.name.as_deref().unwrap_or("Unknown");
                 let model = dev.model.as_deref().unwrap_or("─");
                 let ip = dev
-                    .ip
-                    .map(|ip| ip.to_string())
-                    .unwrap_or_else(|| "─".into());
+                    .ip.map_or_else(|| "─".into(), |ip| ip.to_string());
                 let cpu = dev
                     .stats
-                    .cpu_utilization_pct
-                    .map(|v| format!("{v:.0}%"))
-                    .unwrap_or_else(|| "·····".into());
+                    .cpu_utilization_pct.map_or_else(|| "·····".into(), |v| format!("{v:.0}%"));
                 let mem = dev
                     .stats
-                    .memory_utilization_pct
-                    .map(|v| format!("{v:.0}%"))
-                    .unwrap_or_else(|| "·····".into());
+                    .memory_utilization_pct.map_or_else(|| "·····".into(), |v| format!("{v:.0}%"));
                 let traffic = dev
                     .stats
                     .uplink_bandwidth
-                    .as_ref()
-                    .map(|bw| bytes_fmt::fmt_tx_rx(bw.tx_bytes_per_sec, bw.rx_bytes_per_sec))
-                    .unwrap_or_else(|| "···/···".into());
+                    .as_ref().map_or_else(|| "···/···".into(), |bw| bytes_fmt::fmt_tx_rx(bw.tx_bytes_per_sec, bw.rx_bytes_per_sec));
                 let uptime = dev
                     .stats
-                    .uptime_secs
-                    .map(bytes_fmt::fmt_uptime)
-                    .unwrap_or_else(|| "···".into());
+                    .uptime_secs.map_or_else(|| "···".into(), bytes_fmt::fmt_uptime);
 
                 let status_color = match dev.state {
                     DeviceState::Online => theme::SUCCESS_GREEN,
@@ -719,7 +695,7 @@ impl Component for DevicesScreen {
         self.focused = focused;
     }
 
-    fn id(&self) -> &str {
+    fn id(&self) -> &'static str {
         "Devices"
     }
 }

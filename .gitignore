@@ -1,0 +1,45 @@
+# ── Build artifacts ──
+/target/
+**/*.rs.bk
+
+# ── Cargo ──
+# Lock file is committed for binaries (CLI + TUI)
+# See: https://doc.rust-lang.org/cargo/faq.html#why-have-cargolock-in-version-control
+!Cargo.lock
+
+# ── IDE / Editor ──
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Environment ──
+.env
+.env.*
+!.env.example
+
+# ── Research & scratch ──
+RESEARCH*.md
+research/
+specs/
+docs/
+
+# ── Distribution ──
+dist/
+*.tar.gz
+*.zip
+*.deb
+*.rpm
+
+# ── Coverage & profiling ──
+lcov.info
+*.profraw
+*.profdata
+tarpaulin-report.html
+coverage/
+
+# ── Insta snapshots pending review ──
+*.snap.new

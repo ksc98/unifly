@@ -144,6 +144,7 @@ impl<T: Clone + Send + Sync + 'static> EntityCollection<T> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::model::EntityId;

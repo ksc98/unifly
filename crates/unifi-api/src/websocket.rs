@@ -14,7 +14,7 @@
 //! let cancel = CancellationToken::new();
 //! let ws_url = Url::parse("wss://192.168.1.1/proxy/network/wss/s/default/events")?;
 //!
-//! let handle = WebSocketHandle::connect(ws_url, ReconnectConfig::default(), cancel.clone(), None).await?;
+//! let handle = WebSocketHandle::connect(ws_url, ReconnectConfig::default(), cancel.clone(), None)?;
 //! let mut rx = handle.subscribe();
 //!
 //! while let Ok(event) = rx.recv().await {
@@ -113,7 +113,7 @@ impl WebSocketHandle {
     /// Returns immediately once the background task is spawned.
     /// The first connection attempt happens asynchronously -- subscribe to
     /// the event receiver to start consuming events.
-    pub async fn connect(
+    pub fn connect(
         ws_url: Url,
         reconnect: ReconnectConfig,
         cancel: CancellationToken,
@@ -158,7 +158,7 @@ async fn ws_loop(
     loop {
         tokio::select! {
             biased;
-            _ = cancel.cancelled() => break,
+            () = cancel.cancelled() => break,
             result = connect_and_read(&ws_url, &event_tx, &cancel, cookie.as_deref()) => {
                 match result {
                     // Clean disconnect (server close frame or stream ended).
@@ -181,16 +181,17 @@ async fn ws_loop(
                         }
 
                         let delay = calculate_backoff(attempt, &reconnect);
+                        let delay_ms = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX);
                         tracing::info!(
-                            delay_ms = delay.as_millis() as u64,
+                            delay_ms,
                             attempt,
                             "Waiting before reconnect"
                         );
 
                         tokio::select! {
                             biased;
-                            _ = cancel.cancelled() => break,
-                            _ = tokio::time::sleep(delay) => {}
+                            () = cancel.cancelled() => break,
+                            () = tokio::time::sleep(delay) => {}
                         }
 
                         attempt += 1;
@@ -243,7 +244,7 @@ async fn connect_and_read(
     loop {
         tokio::select! {
             biased;
-            _ = cancel.cancelled() => return Ok(()),
+            () = cancel.cancelled() => return Ok(()),
             frame = read.next() => {
                 match frame {
                     Some(Ok(tungstenite::Message::Text(text))) => {
@@ -363,12 +364,13 @@ fn event_from_raw(msg_type: &str, data: &serde_json::Value) -> UnifiEvent {
 ///
 /// Jitter is +-25% to spread out reconnection storms from multiple clients.
 fn calculate_backoff(attempt: u32, config: &ReconnectConfig) -> Duration {
+    #[allow(clippy::cast_possible_wrap)]
     let base = config.initial_delay.as_secs_f64() * 2.0_f64.powi(attempt as i32);
     let capped = base.min(config.max_delay.as_secs_f64());
 
     // Deterministic "jitter" seeded from the attempt number.
     // Not cryptographically random, but good enough for backoff spread.
-    let jitter_factor = 1.0 + 0.25 * ((attempt as f64 * 7.3).sin());
+    let jitter_factor = 1.0 + 0.25 * ((f64::from(attempt) * 7.3).sin());
     let with_jitter = (capped * jitter_factor).max(0.0);
 
     Duration::from_secs_f64(with_jitter)
@@ -377,6 +379,7 @@ fn calculate_backoff(attempt: u32, config: &ReconnectConfig) -> Duration {
 // ── Tests ────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

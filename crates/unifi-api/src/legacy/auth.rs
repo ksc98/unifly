@@ -53,7 +53,7 @@ impl LegacyClient {
         if !status.is_success() {
             let body = resp.text().await.unwrap_or_default();
             return Err(Error::Authentication {
-                message: format!("login failed (HTTP {}): {}", status, body),
+                message: format!("login failed (HTTP {status}): {body}"),
             });
         }
 
@@ -121,19 +121,15 @@ impl LegacyClient {
 
         debug!("probing UniFi OS at {}", unifi_os_url);
 
-        match http.get(unifi_os_url).send().await {
-            Ok(resp) => {
-                // UniFi OS returns a response (even 401/405) at this path.
-                // Standalone controllers don't have this endpoint at all.
-                if resp.status() != reqwest::StatusCode::NOT_FOUND {
-                    debug!("detected UniFi OS platform");
-                    return Ok(ControllerPlatform::UnifiOs);
-                }
-            }
-            Err(_) => {
-                // Connection error -- might be standalone on a different port
+        if let Ok(resp) = http.get(unifi_os_url).send().await {
+            // UniFi OS returns a response (even 401/405) at this path.
+            // Standalone controllers don't have this endpoint at all.
+            if resp.status() != reqwest::StatusCode::NOT_FOUND {
+                debug!("detected UniFi OS platform");
+                return Ok(ControllerPlatform::UnifiOs);
             }
         }
+        // Connection error -- might be standalone on a different port
 
         // Probe standalone endpoint
         let standalone_url = base_url.join("/api/login").map_err(Error::InvalidUrl)?;

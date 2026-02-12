@@ -28,7 +28,7 @@ struct EventRow {
 impl From<&Arc<Event>> for EventRow {
     fn from(e: &Arc<Event>) -> Self {
         Self {
-            id: e.id.as_ref().map(|id| id.to_string()).unwrap_or_default(),
+            id: e.id.as_ref().map(ToString::to_string).unwrap_or_default(),
             time: e.timestamp.format("%Y-%m-%d %H:%M:%S").to_string(),
             category: format!("{:?}", e.category),
             message: e.message.clone(),
@@ -46,7 +46,7 @@ pub async fn handle(
     match args.command {
         EventsCommand::List { limit, within } => {
             let snap = controller.events_snapshot();
-            let cutoff = Utc::now() - chrono::TimeDelta::hours(within as i64);
+            let cutoff = Utc::now() - chrono::TimeDelta::hours(i64::from(within));
             let filtered: Vec<_> = snap
                 .iter()
                 .filter(|e| e.timestamp >= cutoff)
@@ -57,7 +57,7 @@ pub async fn handle(
                 &global.output,
                 &filtered,
                 |e| EventRow::from(e),
-                |e| e.id.as_ref().map(|id| id.to_string()).unwrap_or_default(),
+                |e| e.id.as_ref().map(ToString::to_string).unwrap_or_default(),
             );
             output::print_output(&out, global.quiet);
             Ok(())
@@ -97,11 +97,11 @@ async fn watch_events(
                         let line = match format {
                             OutputFormat::Json | OutputFormat::JsonCompact => {
                                 serde_json::to_string(&*event)
-                                    .unwrap_or_else(|_| format!("{:?}", event))
+                                    .unwrap_or_else(|_| format!("{event:?}"))
                             }
                             OutputFormat::Yaml => {
                                 serde_yaml::to_string(&*event)
-                                    .unwrap_or_else(|_| format!("{:?}", event))
+                                    .unwrap_or_else(|_| format!("{event:?}"))
                             }
                             _ => {
                                 let time = event.timestamp.format("%H:%M:%S");

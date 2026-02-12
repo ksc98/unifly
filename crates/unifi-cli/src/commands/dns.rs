@@ -63,8 +63,7 @@ fn detail(d: &Arc<DnsPolicy>) -> String {
         format!(
             "TTL:    {}",
             d.ttl_seconds
-                .map(|t: u32| t.to_string())
-                .unwrap_or_else(|| "-".into())
+                .map_or_else(|| "-".into(), |t: u32| t.to_string())
         ),
     ]
     .join("\n")
@@ -124,8 +123,7 @@ pub async fn handle(
                 CreateDnsPolicyRequest {
                     name: domain.clone().unwrap_or_default(),
                     policy_type: record_type
-                        .map(map_dns_type)
-                        .unwrap_or(DnsPolicyType::ARecord),
+                        .map_or(DnsPolicyType::ARecord, map_dns_type),
                     enabled: true,
                     domains: domain.map(|d| vec![d]),
                     upstream: None,

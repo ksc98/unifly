@@ -39,13 +39,13 @@ impl Tui {
     }
 
     /// Exit TUI mode: restore terminal to its original state.
-    pub fn exit(&mut self) -> Result<()> {
+    #[allow(clippy::unused_self)]
+    pub fn exit(&mut self) {
         // Best-effort restoration — don't bail on partial failures
         let _ = stdout().execute(cursor::Show);
         let _ = stdout().execute(DisableMouseCapture);
         let _ = stdout().execute(LeaveAlternateScreen);
         let _ = terminal::disable_raw_mode();
-        Ok(())
     }
 
     /// Draw a frame using the provided render closure.
@@ -66,7 +66,7 @@ impl Tui {
 
 impl Drop for Tui {
     fn drop(&mut self) {
-        let _ = self.exit();
+        self.exit();
     }
 }
 

@@ -52,21 +52,18 @@ fn detail(v: &Arc<Voucher>) -> String {
         format!(
             "Minutes:    {}",
             v.time_limit_minutes
-                .map(|m: u32| m.to_string())
-                .unwrap_or_else(|| "-".into())
+                .map_or_else(|| "-".into(), |m: u32| m.to_string())
         ),
         format!(
             "Data Limit: {} MB",
             v.data_usage_limit_mb
-                .map(|m: u64| m.to_string())
-                .unwrap_or_else(|| "-".into())
+                .map_or_else(|| "-".into(), |m: u64| m.to_string())
         ),
         format!(
             "Guests:     {}/{}",
             v.authorized_guest_count.unwrap_or(0),
             v.authorized_guest_limit
-                .map(|l: u32| l.to_string())
-                .unwrap_or_else(|| "unlimited".into())
+                .map_or_else(|| "unlimited".into(), |l: u32| l.to_string())
         ),
     ]
     .join("\n")

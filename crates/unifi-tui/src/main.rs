@@ -63,7 +63,7 @@ struct Cli {
 /// Set up file-based tracing. We MUST NOT log to stdout/stderr — that would
 /// corrupt the TUI output. Returns a guard that must be held for the
 /// lifetime of the application to ensure logs are flushed.
-fn setup_tracing(cli: &Cli) -> Result<WorkerGuard> {
+fn setup_tracing(cli: &Cli) -> WorkerGuard {
     let log_level = match cli.verbose {
         0 => "warn",
         1 => "info",
@@ -97,7 +97,7 @@ fn setup_tracing(cli: &Cli) -> Result<WorkerGuard> {
         )
         .init();
 
-    Ok(guard)
+    guard
 }
 
 /// Build a [`Controller`] from CLI args, if a URL was provided.
@@ -147,7 +147,7 @@ async fn main() -> Result<()> {
     tui::install_hooks()?;
 
     // Tracing to file — hold the guard so logs flush on exit
-    let _log_guard = setup_tracing(&cli)?;
+    let _log_guard = setup_tracing(&cli);
 
     info!(
         url = cli.url.as_deref().unwrap_or("(not set)"),

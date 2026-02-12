@@ -19,7 +19,7 @@ impl LegacyClient {
     /// by appending `?_limit={count}` to the request.
     pub async fn list_events(&self, count: Option<u32>) -> Result<Vec<LegacyEvent>, Error> {
         let path = match count {
-            Some(n) => format!("stat/event?_limit={}", n),
+            Some(n) => format!("stat/event?_limit={n}"),
             None => "stat/event".to_string(),
         };
         let url = self.site_url(&path);

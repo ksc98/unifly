@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use dialoguer::{Input, Select};
 
 use crate::cli::{ConfigArgs, ConfigCommand, GlobalOpts};
-use crate::config::{self, Config, Profile};
+use crate::config::{self, Config, Defaults, Profile};
 use crate::error::CliError;
 use crate::output;
 
@@ -17,44 +17,44 @@ fn format_config_redacted(cfg: &Config) -> String {
     let mut out = String::new();
 
     if let Some(ref default) = cfg.default_profile {
-        writeln!(out, "default_profile = \"{default}\"").unwrap();
+        let _ = writeln!(out, "default_profile = \"{default}\"");
     }
-    writeln!(out).unwrap();
-    writeln!(out, "[defaults]").unwrap();
-    writeln!(out, "output = \"{}\"", cfg.defaults.output).unwrap();
-    writeln!(out, "color = \"{}\"", cfg.defaults.color).unwrap();
-    writeln!(out, "insecure = {}", cfg.defaults.insecure).unwrap();
-    writeln!(out, "timeout = {}", cfg.defaults.timeout).unwrap();
+    let _ = writeln!(out);
+    let _ = writeln!(out, "[defaults]");
+    let _ = writeln!(out, "output = \"{}\"", cfg.defaults.output);
+    let _ = writeln!(out, "color = \"{}\"", cfg.defaults.color);
+    let _ = writeln!(out, "insecure = {}", cfg.defaults.insecure);
+    let _ = writeln!(out, "timeout = {}", cfg.defaults.timeout);
 
     let mut names: Vec<_> = cfg.profiles.keys().collect();
     names.sort();
     for name in names {
         let p = &cfg.profiles[name];
-        writeln!(out).unwrap();
-        writeln!(out, "[profiles.{name}]").unwrap();
-        writeln!(out, "controller = \"{}\"", p.controller).unwrap();
-        writeln!(out, "site = \"{}\"", p.site).unwrap();
-        writeln!(out, "auth_mode = \"{}\"", p.auth_mode).unwrap();
+        let _ = writeln!(out);
+        let _ = writeln!(out, "[profiles.{name}]");
+        let _ = writeln!(out, "controller = \"{}\"", p.controller);
+        let _ = writeln!(out, "site = \"{}\"", p.site);
+        let _ = writeln!(out, "auth_mode = \"{}\"", p.auth_mode);
         if p.api_key.is_some() {
-            writeln!(out, "api_key = \"****\"").unwrap();
+            let _ = writeln!(out, "api_key = \"****\"");
         }
         if let Some(ref env) = p.api_key_env {
-            writeln!(out, "api_key_env = \"{env}\"").unwrap();
+            let _ = writeln!(out, "api_key_env = \"{env}\"");
         }
         if let Some(ref u) = p.username {
-            writeln!(out, "username = \"{u}\"").unwrap();
+            let _ = writeln!(out, "username = \"{u}\"");
         }
         if p.password.is_some() {
-            writeln!(out, "password = \"****\"").unwrap();
+            let _ = writeln!(out, "password = \"****\"");
         }
         if let Some(ref ca) = p.ca_cert {
-            writeln!(out, "ca_cert = \"{}\"", ca.display()).unwrap();
+            let _ = writeln!(out, "ca_cert = \"{}\"", ca.display());
         }
         if let Some(insecure) = p.insecure {
-            writeln!(out, "insecure = {insecure}").unwrap();
+            let _ = writeln!(out, "insecure = {insecure}");
         }
         if let Some(timeout) = p.timeout {
-            writeln!(out, "timeout = {timeout}").unwrap();
+            let _ = writeln!(out, "timeout = {timeout}");
         }
     }
 
@@ -135,7 +135,7 @@ fn prompt_keyring_storage(
 
 // ── Handler ─────────────────────────────────────────────────────────
 
-pub async fn handle(args: ConfigArgs, global: &GlobalOpts) -> Result<(), CliError> {
+pub fn handle(args: ConfigArgs, global: &GlobalOpts) -> Result<(), CliError> {
     match args.command {
         // ── Init: interactive wizard ────────────────────────────────
         ConfigCommand::Init => {
@@ -271,7 +271,7 @@ pub async fn handle(args: ConfigArgs, global: &GlobalOpts) -> Result<(), CliErro
 
             let cfg = Config {
                 default_profile: Some(profile_name.clone()),
-                defaults: Default::default(),
+                defaults: Defaults::default(),
                 profiles,
             };
 

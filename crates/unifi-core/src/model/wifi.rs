@@ -25,6 +25,7 @@ pub enum WifiSecurityMode {
 
 /// The canonical WiFi Broadcast (SSID/WLAN) type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct WifiBroadcast {
     pub id: EntityId,
     pub name: String,

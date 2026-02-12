@@ -134,7 +134,7 @@ impl LegacyClient {
     /// Store a CSRF token (captured from login response headers).
     pub(crate) fn set_csrf_token(&self, token: String) {
         debug!("storing CSRF token");
-        *self.csrf_token.write().unwrap() = Some(token);
+        *self.csrf_token.write().expect("CSRF lock poisoned") = Some(token);
     }
 
     /// Update CSRF token if the response contains a rotated value.
@@ -148,13 +148,13 @@ impl LegacyClient {
 
         if let Some(token) = new_token {
             trace!("CSRF token rotated");
-            *self.csrf_token.write().unwrap() = Some(token);
+            *self.csrf_token.write().expect("CSRF lock poisoned") = Some(token);
         }
     }
 
     /// Apply the stored CSRF token to a request builder.
     fn apply_csrf(&self, builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        let guard = self.csrf_token.read().unwrap();
+        let guard = self.csrf_token.read().expect("CSRF lock poisoned");
         match guard.as_deref() {
             Some(token) => builder.header("X-CSRF-Token", token),
             None => builder,

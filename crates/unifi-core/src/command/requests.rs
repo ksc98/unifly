@@ -10,6 +10,7 @@ use crate::model::{DnsPolicyType, EntityId, FirewallAction, NetworkPurpose, Wifi
 // ── Network ────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct CreateNetworkRequest {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]

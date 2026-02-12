@@ -194,14 +194,10 @@ impl DashboardScreen {
             .find(|d| d.device_type == unifi_core::DeviceType::Gateway);
 
         let uptime_str = gateway
-            .and_then(|g| g.stats.uptime_secs)
-            .map(bytes_fmt::fmt_uptime)
-            .unwrap_or_else(|| "─".into());
+            .and_then(|g| g.stats.uptime_secs).map_or_else(|| "─".into(), bytes_fmt::fmt_uptime);
 
         let wan_ip = gateway
-            .and_then(|g| g.ip)
-            .map(|ip| ip.to_string())
-            .unwrap_or_else(|| "─".into());
+            .and_then(|g| g.ip).map_or_else(|| "─".into(), |ip| ip.to_string());
 
         let outdated_fw = self.devices.iter().filter(|d| d.firmware_updatable).count();
 
@@ -537,7 +533,7 @@ impl Component for DashboardScreen {
         self.focused = focused;
     }
 
-    fn id(&self) -> &str {
+    fn id(&self) -> &'static str {
         "Dashboard"
     }
 }

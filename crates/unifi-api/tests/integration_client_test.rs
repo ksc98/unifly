@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 // Integration tests for `IntegrationClient` using wiremock.
 
 use serde_json::json;

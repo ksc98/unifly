@@ -15,7 +15,12 @@ use tracing::{debug, info, warn};
 use crate::command::{Command, CommandEnvelope, CommandResult};
 use crate::config::{AuthCredentials, ControllerConfig, TlsVerification};
 use crate::error::CoreError;
-use crate::model::*;
+use crate::model::{
+    Admin, Alarm, AclRule, Client, Country, Device, DnsPolicy, DpiApplication, DpiCategory,
+    EntityId, Event, FirewallAction, FirewallPolicy, FirewallZone, HealthSummary, MacAddress,
+    Network, RadiusProfile, Site, SysInfo, SystemInfo, TrafficMatchingList, Voucher, VpnServer,
+    VpnTunnel, WanInterface, WifiBroadcast,
+};
 use crate::store::DataStore;
 use crate::stream::EntityStream;
 
@@ -303,9 +308,7 @@ impl Controller {
             ReconnectConfig::default(),
             ws_cancel.clone(),
             cookie,
-        )
-        .await
-        {
+        ) {
             Ok(h) => h,
             Err(e) => {
                 warn!(error = %e, "WebSocket connection failed (non-fatal)");
@@ -322,7 +325,7 @@ impl Controller {
             loop {
                 tokio::select! {
                     biased;
-                    _ = bridge_cancel.cancelled() => break,
+                    () = bridge_cancel.cancelled() => break,
                     result = ws_rx.recv() => {
                         match result {
                             Ok(ws_event) => {
@@ -724,8 +727,7 @@ impl Controller {
                     .get("id")
                     .and_then(|v| v.as_str())
                     .and_then(|s| uuid::Uuid::parse_str(s).ok())
-                    .map(EntityId::Uuid)
-                    .unwrap_or_else(|| EntityId::Legacy("unknown".into()));
+                    .map_or_else(|| EntityId::Legacy("unknown".into()), EntityId::Uuid);
                 VpnServer {
                     id,
                     name: s
@@ -740,7 +742,7 @@ impl Controller {
                         .and_then(|v| v.as_str())
                         .unwrap_or("UNKNOWN")
                         .to_owned(),
-                    enabled: s.fields.get("enabled").and_then(|v| v.as_bool()),
+                    enabled: s.fields.get("enabled").and_then(serde_json::Value::as_bool),
                 }
             })
             .collect())
@@ -762,8 +764,7 @@ impl Controller {
                     .get("id")
                     .and_then(|v| v.as_str())
                     .and_then(|s| uuid::Uuid::parse_str(s).ok())
-                    .map(EntityId::Uuid)
-                    .unwrap_or_else(|| EntityId::Legacy("unknown".into()));
+                    .map_or_else(|| EntityId::Legacy("unknown".into()), EntityId::Uuid);
                 VpnTunnel {
                     id,
                     name: t
@@ -778,7 +779,7 @@ impl Controller {
                         .and_then(|v| v.as_str())
                         .unwrap_or("UNKNOWN")
                         .to_owned(),
-                    enabled: t.fields.get("enabled").and_then(|v| v.as_bool()),
+                    enabled: t.fields.get("enabled").and_then(serde_json::Value::as_bool),
                 }
             })
             .collect())
@@ -800,8 +801,7 @@ impl Controller {
                     .get("id")
                     .and_then(|v| v.as_str())
                     .and_then(|s| uuid::Uuid::parse_str(s).ok())
-                    .map(EntityId::Uuid)
-                    .unwrap_or_else(|| EntityId::Legacy("unknown".into()));
+                    .map_or_else(|| EntityId::Legacy("unknown".into()), EntityId::Uuid);
                 let parse_ip = |key: &str| -> Option<std::net::IpAddr> {
                     w.fields
                         .get(key)
@@ -844,7 +844,7 @@ impl Controller {
         Ok(raw
             .into_iter()
             .map(|c| {
-                let id = c.fields.get("id").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                let id = c.fields.get("id").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
                 DpiCategory {
                     id,
                     name: c
@@ -856,12 +856,12 @@ impl Controller {
                     tx_bytes: c
                         .fields
                         .get("txBytes")
-                        .and_then(|v| v.as_u64())
+                        .and_then(serde_json::Value::as_u64)
                         .unwrap_or(0),
                     rx_bytes: c
                         .fields
                         .get("rxBytes")
-                        .and_then(|v| v.as_u64())
+                        .and_then(serde_json::Value::as_u64)
                         .unwrap_or(0),
                     apps: Vec::new(),
                 }
@@ -880,7 +880,7 @@ impl Controller {
         Ok(raw
             .into_iter()
             .map(|a| {
-                let id = a.fields.get("id").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                let id = a.fields.get("id").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
                 DpiApplication {
                     id,
                     name: a
@@ -892,17 +892,17 @@ impl Controller {
                     category_id: a
                         .fields
                         .get("categoryId")
-                        .and_then(|v| v.as_u64())
+                        .and_then(serde_json::Value::as_u64)
                         .unwrap_or(0) as u32,
                     tx_bytes: a
                         .fields
                         .get("txBytes")
-                        .and_then(|v| v.as_u64())
+                        .and_then(serde_json::Value::as_u64)
                         .unwrap_or(0),
                     rx_bytes: a
                         .fields
                         .get("rxBytes")
-                        .and_then(|v| v.as_u64())
+                        .and_then(serde_json::Value::as_u64)
                         .unwrap_or(0),
                 }
             })
@@ -925,8 +925,7 @@ impl Controller {
                     .get("id")
                     .and_then(|v| v.as_str())
                     .and_then(|s| uuid::Uuid::parse_str(s).ok())
-                    .map(EntityId::Uuid)
-                    .unwrap_or_else(|| EntityId::Legacy("unknown".into()));
+                    .map_or_else(|| EntityId::Legacy("unknown".into()), EntityId::Uuid);
                 RadiusProfile {
                     id,
                     name: r
@@ -1037,8 +1036,10 @@ impl Controller {
                 id: v
                     .get("_id")
                     .and_then(|v| v.as_str())
-                    .map(|s| EntityId::Legacy(s.into()))
-                    .unwrap_or_else(|| EntityId::Legacy("unknown".into())),
+                    .map_or_else(
+                        || EntityId::Legacy("unknown".into()),
+                        |s| EntityId::Legacy(s.into()),
+                    ),
                 name: v
                     .get("name")
                     .and_then(|v| v.as_str())
@@ -1050,7 +1051,7 @@ impl Controller {
                     .and_then(|v| v.as_str())
                     .unwrap_or("unknown")
                     .to_owned(),
-                is_super: v.get("is_super").and_then(|v| v.as_bool()).unwrap_or(false),
+                is_super: v.get("is_super").and_then(serde_json::Value::as_bool).unwrap_or(false),
                 last_login: None,
             })
             .collect())
@@ -1090,11 +1091,11 @@ impl Controller {
                     build: f.get("build").and_then(|v| v.as_str()).map(String::from),
                     hostname: f.get("hostname").and_then(|v| v.as_str()).map(String::from),
                     ip: None, // Not available via Integration API
-                    uptime_secs: f.get("uptime").and_then(|v| v.as_u64()),
+                    uptime_secs: f.get("uptime").and_then(serde_json::Value::as_u64),
                     update_available: f
                         .get("isUpdateAvailable")
                         .or_else(|| f.get("update_available"))
-                        .and_then(|v| v.as_bool()),
+                        .and_then(serde_json::Value::as_bool),
                 });
             }
         }
@@ -1125,8 +1126,8 @@ impl Controller {
                 .and_then(|a| a.first())
                 .and_then(|v| v.as_str())
                 .and_then(|s| s.parse().ok()),
-            uptime_secs: raw.get("uptime").and_then(|v| v.as_u64()),
-            update_available: raw.get("update_available").and_then(|v| v.as_bool()),
+            uptime_secs: raw.get("uptime").and_then(serde_json::Value::as_u64),
+            update_available: raw.get("update_available").and_then(serde_json::Value::as_bool),
         })
     }
 
@@ -1150,12 +1151,12 @@ impl Controller {
                     .to_owned(),
                 num_adopted: v
                     .get("num_adopted")
-                    .and_then(|v| v.as_u64())
+                    .and_then(serde_json::Value::as_u64)
                     .map(|n| n as u32),
-                num_sta: v.get("num_sta").and_then(|v| v.as_u64()).map(|n| n as u32),
-                tx_bytes_r: v.get("tx_bytes-r").and_then(|v| v.as_u64()),
-                rx_bytes_r: v.get("rx_bytes-r").and_then(|v| v.as_u64()),
-                latency: v.get("latency").and_then(|v| v.as_f64()),
+                num_sta: v.get("num_sta").and_then(serde_json::Value::as_u64).map(|n| n as u32),
+                tx_bytes_r: v.get("tx_bytes-r").and_then(serde_json::Value::as_u64),
+                rx_bytes_r: v.get("rx_bytes-r").and_then(serde_json::Value::as_u64),
+                latency: v.get("latency").and_then(serde_json::Value::as_f64),
                 wan_ip: v.get("wan_ip").and_then(|v| v.as_str()).map(String::from),
                 gateways: v.get("gateways").and_then(|v| v.as_array()).map(|a| {
                     a.iter()
@@ -1177,7 +1178,7 @@ impl Controller {
                 .get("timezone")
                 .and_then(|v| v.as_str())
                 .map(String::from),
-            autobackup: raw.get("autobackup").and_then(|v| v.as_bool()),
+            autobackup: raw.get("autobackup").and_then(serde_json::Value::as_bool),
             hostname: raw
                 .get("hostname")
                 .and_then(|v| v.as_str())
@@ -1197,7 +1198,7 @@ impl Controller {
                 .map(String::from),
             data_retention_days: raw
                 .get("data_retention_days")
-                .and_then(|v| v.as_u64())
+                .and_then(serde_json::Value::as_u64)
                 .map(|n| n as u32),
             extra: raw,
         })
@@ -1214,7 +1215,7 @@ async fn refresh_task(controller: Controller, interval_secs: u64, cancel: Cancel
     loop {
         tokio::select! {
             biased;
-            _ = cancel.cancelled() => break,
+            () = cancel.cancelled() => break,
             _ = interval.tick() => {
                 if let Err(e) = controller.full_refresh().await {
                     warn!(error = %e, "periodic refresh failed");
@@ -1232,7 +1233,7 @@ async fn command_processor_task(controller: Controller, mut rx: mpsc::Receiver<C
     loop {
         tokio::select! {
             biased;
-            _ = cancel.cancelled() => break,
+            () = cancel.cancelled() => break,
             envelope = rx.recv() => {
                 let Some(envelope) = envelope else { break };
                 let result = route_command(&controller, envelope.command).await;
@@ -1434,7 +1435,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
                 name: req.name,
                 enabled: req.enabled,
                 management: "USER_DEFINED".into(),
-                vlan_id: req.vlan_id.map(|v| v as i32).unwrap_or(1),
+                vlan_id: req.vlan_id.map_or(1, i32::from),
                 dhcp_guarding: None,
             };
             ic.create_network(&sid, &body).await?;
@@ -1450,7 +1451,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
                 name: update.name.unwrap_or(existing.name),
                 enabled: update.enabled.unwrap_or(existing.enabled),
                 management: existing.management,
-                vlan_id: update.vlan_id.map(|v| v as i32).unwrap_or(existing.vlan_id),
+                vlan_id: update.vlan_id.map_or(existing.vlan_id, i32::from),
                 dhcp_guarding: existing.dhcp_guarding,
             };
             ic.update_network(&sid, &uuid, &body).await?;
@@ -1780,11 +1781,15 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             let (ic, sid) = require_integration(&integration_guard, site_id, "CreateVouchers")?;
             let body = unifi_api::integration_types::VoucherCreateRequest {
                 name: req.name.unwrap_or_else(|| "Voucher".into()),
+                #[allow(clippy::cast_possible_wrap)]
                 count: Some(req.count as i32),
-                time_limit_minutes: req.time_limit_minutes.unwrap_or(60) as i64,
-                authorized_guest_limit: req.authorized_guest_limit.map(|l| l as i64),
+                time_limit_minutes: i64::from(req.time_limit_minutes.unwrap_or(60)),
+                authorized_guest_limit: req.authorized_guest_limit.map(i64::from),
+                #[allow(clippy::cast_possible_wrap)]
                 data_usage_limit_m_bytes: req.data_usage_limit_mb.map(|m| m as i64),
+                #[allow(clippy::cast_possible_wrap)]
                 rx_rate_limit_kbps: req.rx_rate_limit_kbps.map(|r| r as i64),
+                #[allow(clippy::cast_possible_wrap)]
                 tx_rate_limit_kbps: req.tx_rate_limit_kbps.map(|r| r as i64),
             };
             let vouchers = ic.create_vouchers(&sid, &body).await?;

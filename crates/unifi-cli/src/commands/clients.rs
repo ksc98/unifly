@@ -44,7 +44,7 @@ impl From<&Arc<Client>> for ClientRow {
             uplink: c
                 .uplink_device_mac
                 .as_ref()
-                .map(|m| m.to_string())
+                .map(ToString::to_string)
                 .unwrap_or_default(),
         }
     }
@@ -58,7 +58,7 @@ fn detail(c: &Arc<Client>) -> String {
         format!("MAC:       {}", c.mac),
         format!(
             "IP:        {}",
-            c.ip.map(|ip| ip.to_string()).unwrap_or_else(|| "-".into())
+            c.ip.map_or_else(|| "-".into(), |ip| ip.to_string())
         ),
         format!("Type:      {:?}", c.client_type),
         format!("Guest:     {}", c.is_guest),
@@ -67,7 +67,7 @@ fn detail(c: &Arc<Client>) -> String {
     if let Some(ref w) = c.wireless {
         lines.push(format!("SSID:      {}", w.ssid.as_deref().unwrap_or("-")));
         if let Some(sig) = w.signal_dbm {
-            lines.push(format!("Signal:    {} dBm", sig));
+            lines.push(format!("Signal:    {sig} dBm"));
         }
     }
     if let Some(os) = &c.os_name {

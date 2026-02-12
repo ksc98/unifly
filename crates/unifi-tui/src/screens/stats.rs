@@ -68,8 +68,8 @@ impl StatsScreen {
         }
 
         // Determine bounds
-        let x_min = self.bandwidth_tx.first().map(|(x, _)| *x).unwrap_or(0.0);
-        let x_max = self.bandwidth_tx.last().map(|(x, _)| *x).unwrap_or(1.0);
+        let x_min = self.bandwidth_tx.first().map_or(0.0, |(x, _)| *x);
+        let x_max = self.bandwidth_tx.last().map_or(1.0, |(x, _)| *x);
         let y_max = self
             .bandwidth_tx
             .iter()
@@ -127,8 +127,8 @@ impl StatsScreen {
             return;
         }
 
-        let x_min = self.client_counts.first().map(|(x, _)| *x).unwrap_or(0.0);
-        let x_max = self.client_counts.last().map(|(x, _)| *x).unwrap_or(1.0);
+        let x_min = self.client_counts.first().map_or(0.0, |(x, _)| *x);
+        let x_max = self.client_counts.last().map_or(1.0, |(x, _)| *x);
         let y_max = self
             .client_counts
             .iter()
@@ -179,7 +179,7 @@ impl StatsScreen {
             return;
         }
 
-        let max_bar_width = inner.width.saturating_sub(22) as f64;
+        let max_bar_width = f64::from(inner.width.saturating_sub(22));
         let colors = theme::CHART_SERIES;
 
         let mut lines = Vec::new();
@@ -240,10 +240,10 @@ impl Component for StatsScreen {
                 self.period = *period;
             }
             Action::StatsUpdated(data) => {
-                self.bandwidth_tx = data.bandwidth_tx.clone();
-                self.bandwidth_rx = data.bandwidth_rx.clone();
-                self.client_counts = data.client_counts.clone();
-                self.dpi_apps = data.dpi_apps.clone();
+                self.bandwidth_tx.clone_from(&data.bandwidth_tx);
+                self.bandwidth_rx.clone_from(&data.bandwidth_rx);
+                self.client_counts.clone_from(&data.client_counts);
+                self.dpi_apps.clone_from(&data.dpi_apps);
             }
             _ => {}
         }
@@ -319,7 +319,7 @@ impl Component for StatsScreen {
         self.focused = focused;
     }
 
-    fn id(&self) -> &str {
+    fn id(&self) -> &'static str {
         "Stats"
     }
 }

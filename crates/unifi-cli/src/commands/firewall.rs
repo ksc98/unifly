@@ -54,12 +54,12 @@ impl From<&Arc<FirewallPolicy>> for PolicyRow {
             src_zone: p
                 .source_zone_id
                 .as_ref()
-                .map(|z| z.to_string())
+                .map(ToString::to_string)
                 .unwrap_or_default(),
             dst_zone: p
                 .destination_zone_id
                 .as_ref()
-                .map(|z| z.to_string())
+                .map(ToString::to_string)
                 .unwrap_or_default(),
         }
     }
@@ -77,15 +77,13 @@ fn policy_detail(p: &Arc<FirewallPolicy>) -> String {
             "Src Zone:    {}",
             p.source_zone_id
                 .as_ref()
-                .map(|z| z.to_string())
-                .unwrap_or_else(|| "-".into())
+                .map_or_else(|| "-".into(), ToString::to_string)
         ),
         format!(
             "Dst Zone:    {}",
             p.destination_zone_id
                 .as_ref()
-                .map(|z| z.to_string())
-                .unwrap_or_else(|| "-".into())
+                .map_or_else(|| "-".into(), ToString::to_string)
         ),
         format!("Logging:     {}", p.logging_enabled),
     ]
@@ -195,8 +193,7 @@ async fn handle_policies(
                 CreateFirewallPolicyRequest {
                     name: name.unwrap_or_default(),
                     action: action
-                        .map(map_fw_action)
-                        .unwrap_or(ModelFirewallAction::Block),
+                        .map_or(ModelFirewallAction::Block, map_fw_action),
                     source_zone_id: EntityId::from(""),
                     destination_zone_id: EntityId::from(""),
                     enabled,

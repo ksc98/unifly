@@ -26,14 +26,14 @@ impl EntityId {
     pub fn as_uuid(&self) -> Option<&Uuid> {
         match self {
             Self::Uuid(u) => Some(u),
-            _ => None,
+            Self::Legacy(_) => None,
         }
     }
 
     pub fn as_legacy(&self) -> Option<&str> {
         match self {
             Self::Legacy(s) => Some(s),
-            _ => None,
+            Self::Uuid(_) => None,
         }
     }
 }
@@ -110,6 +110,7 @@ impl FromStr for MacAddress {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

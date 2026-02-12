@@ -363,6 +363,7 @@ impl OnboardingScreen {
 
     // ── Rendering helpers ───────────────────────────────────────────
 
+    #[allow(clippy::unused_self)]
     fn render_centered_panel(&self, frame: &mut Frame, area: Rect) -> Rect {
         let panel_w = 62u16.min(area.width.saturating_sub(4));
         let panel_h = 22u16.min(area.height.saturating_sub(2));
@@ -407,14 +408,12 @@ impl OnboardingScreen {
             .enumerate()
             .flat_map(|(i, label)| {
                 let step_num = i + 1;
-                let style = if step_num == current {
-                    Style::default()
+                let style = match step_num.cmp(&current) {
+                    std::cmp::Ordering::Equal => Style::default()
                         .fg(theme::ELECTRIC_PURPLE)
-                        .add_modifier(Modifier::BOLD)
-                } else if step_num < current {
-                    Style::default().fg(theme::SUCCESS_GREEN)
-                } else {
-                    Style::default().fg(theme::BORDER_GRAY)
+                        .add_modifier(Modifier::BOLD),
+                    std::cmp::Ordering::Less => Style::default().fg(theme::SUCCESS_GREEN),
+                    std::cmp::Ordering::Greater => Style::default().fg(theme::BORDER_GRAY),
                 };
                 let sep = if i < steps.len() - 1 {
                     Span::styled(" > ", Style::default().fg(theme::BORDER_GRAY))
@@ -432,6 +431,7 @@ impl OnboardingScreen {
         );
     }
 
+    #[allow(clippy::unused_self)]
     fn render_input_field(
         &self,
         frame: &mut Frame,
@@ -670,7 +670,7 @@ impl Component for OnboardingScreen {
         self.focused
     }
 
-    fn id(&self) -> &str {
+    fn id(&self) -> &'static str {
         "onboarding"
     }
 }
@@ -678,6 +678,7 @@ impl Component for OnboardingScreen {
 // ── Step renderers ──────────────────────────────────────────────────
 
 impl OnboardingScreen {
+    #[allow(clippy::unused_self)]
     fn render_welcome(&self, frame: &mut Frame, area: Rect) {
         let layout = Layout::vertical([
             Constraint::Length(2),
@@ -829,7 +830,7 @@ impl OnboardingScreen {
         let mut y_offset = 0u16;
 
         if matches!(self.auth_mode, AuthMode::ApiKey | AuthMode::Hybrid) {
-            let field_area = Rect::new(
+            let input_area = Rect::new(
                 fields_area.x,
                 fields_area.y + y_offset,
                 fields_area.width,
@@ -837,7 +838,7 @@ impl OnboardingScreen {
             );
             self.render_input_field(
                 frame,
-                field_area,
+                input_area,
                 "  API Key",
                 &self.api_key_input,
                 self.cred_field == CredentialField::ApiKey,
@@ -847,7 +848,7 @@ impl OnboardingScreen {
         }
 
         if matches!(self.auth_mode, AuthMode::Legacy | AuthMode::Hybrid) {
-            let field_area = Rect::new(
+            let input_area = Rect::new(
                 fields_area.x,
                 fields_area.y + y_offset,
                 fields_area.width,
@@ -855,7 +856,7 @@ impl OnboardingScreen {
             );
             self.render_input_field(
                 frame,
-                field_area,
+                input_area,
                 "  Username",
                 &self.username_input,
                 self.cred_field == CredentialField::Username,
@@ -863,7 +864,7 @@ impl OnboardingScreen {
             );
             y_offset += 5;
 
-            let field_area = Rect::new(
+            let input_area = Rect::new(
                 fields_area.x,
                 fields_area.y + y_offset,
                 fields_area.width,
@@ -871,7 +872,7 @@ impl OnboardingScreen {
             );
             self.render_input_field(
                 frame,
-                field_area,
+                input_area,
                 "  Password",
                 &self.password_input,
                 self.cred_field == CredentialField::Password,

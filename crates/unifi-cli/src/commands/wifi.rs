@@ -79,8 +79,7 @@ fn detail(w: &Arc<WifiBroadcast>) -> String {
             "Network:    {}",
             w.network_id
                 .as_ref()
-                .map(ToString::to_string)
-                .unwrap_or_else(|| "-".into())
+                .map_or_else(|| "-".into(), ToString::to_string)
         ),
     ]
     .join("\n")

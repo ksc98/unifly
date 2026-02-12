@@ -92,7 +92,9 @@ impl ClientsScreen {
         if filtered.is_empty() {
             return;
         }
+        #[allow(clippy::cast_possible_wrap)]
         let current = self.selected_index() as isize;
+        #[allow(clippy::cast_possible_wrap)]
         let next = (current + delta).clamp(0, filtered.len() as isize - 1);
         self.select(next as usize);
     }
@@ -108,6 +110,7 @@ impl ClientsScreen {
         self.table_state.select(Some(0));
     }
 
+    #[allow(clippy::unused_self)]
     fn render_detail(&self, frame: &mut Frame, area: Rect, client: &Client) {
         let name = client
             .name
@@ -115,9 +118,7 @@ impl ClientsScreen {
             .or(client.hostname.as_deref())
             .unwrap_or("Unknown");
         let ip = client
-            .ip
-            .map(|ip| ip.to_string())
-            .unwrap_or_else(|| "─".into());
+            .ip.map_or_else(|| "─".into(), |ip| ip.to_string());
         let mac = client.mac.to_string();
         let type_str = format!("{:?}", client.client_type);
 
@@ -134,42 +135,31 @@ impl ClientsScreen {
 
         let network = client
             .network_id
-            .as_ref()
-            .map(|id| id.to_string())
-            .unwrap_or_else(|| "─".into());
+            .as_ref().map_or_else(|| "─".into(), std::string::ToString::to_string);
         let signal = client
             .wireless
             .as_ref()
-            .and_then(|w| w.signal_dbm)
-            .map(|dbm| format!("{dbm} dBm"))
-            .unwrap_or_else(|| "─".into());
+            .and_then(|w| w.signal_dbm).map_or_else(|| "─".into(), |dbm| format!("{dbm} dBm"));
         let channel = client
             .wireless
             .as_ref()
-            .and_then(|w| w.channel)
-            .map(|ch| ch.to_string())
-            .unwrap_or_else(|| "─".into());
+            .and_then(|w| w.channel).map_or_else(|| "─".into(), |ch| ch.to_string());
         let ssid = client
             .wireless
             .as_ref()
             .and_then(|w| w.ssid.as_deref())
             .unwrap_or("─");
         let tx = client
-            .tx_bytes
-            .map(bytes_fmt::fmt_bytes_short)
-            .unwrap_or_else(|| "─".into());
+            .tx_bytes.map_or_else(|| "─".into(), bytes_fmt::fmt_bytes_short);
         let rx = client
-            .rx_bytes
-            .map(bytes_fmt::fmt_bytes_short)
-            .unwrap_or_else(|| "─".into());
+            .rx_bytes.map_or_else(|| "─".into(), bytes_fmt::fmt_bytes_short);
         let duration = client
             .connected_at
-            .map(|ts| {
+            .map_or_else(|| "─".into(), |ts| {
                 let dur = chrono::Utc::now().signed_duration_since(ts);
                 let secs = dur.num_seconds().max(0) as u64;
                 bytes_fmt::fmt_uptime(secs)
-            })
-            .unwrap_or_else(|| "─".into());
+            });
         let guest = if client.is_guest { "yes" } else { "no" };
         let blocked = if client.blocked { "yes" } else { "no" };
 
@@ -393,7 +383,7 @@ impl Component for ClientsScreen {
                 self.table_state.select(Some(0));
             }
             Action::SearchInput(query) => {
-                self.search_query = query.clone();
+                self.search_query.clone_from(query);
                 self.table_state.select(Some(0));
             }
             Action::CloseSearch => {
@@ -492,9 +482,7 @@ impl Component for ClientsScreen {
                     .unwrap_or("unknown");
 
                 let ip = client
-                    .ip
-                    .map(|ip| ip.to_string())
-                    .unwrap_or_else(|| "─".into());
+                    .ip.map_or_else(|| "─".into(), |ip| ip.to_string());
 
                 let mac = client.mac.to_string();
 
@@ -502,7 +490,7 @@ impl Component for ClientsScreen {
                     .wireless
                     .as_ref()
                     .and_then(|w| w.signal_dbm)
-                    .map(|dbm| {
+                    .map_or("····", |dbm| {
                         if dbm >= -50 {
                             "▂▄▆█"
                         } else if dbm >= -60 {
@@ -514,8 +502,7 @@ impl Component for ClientsScreen {
                         } else {
                             "·   "
                         }
-                    })
-                    .unwrap_or("····");
+                    });
 
                 let traffic = bytes_fmt::fmt_tx_rx(
                     client.tx_bytes.unwrap_or(0),
@@ -524,12 +511,11 @@ impl Component for ClientsScreen {
 
                 let duration = client
                     .connected_at
-                    .map(|ts| {
+                    .map_or_else(|| "─".into(), |ts| {
                         let dur = chrono::Utc::now().signed_duration_since(ts);
                         let secs = dur.num_seconds().max(0) as u64;
                         bytes_fmt::fmt_uptime(secs)
-                    })
-                    .unwrap_or_else(|| "─".into());
+                    });
 
                 let type_color = if client.is_guest {
                     theme::ELECTRIC_YELLOW
@@ -547,7 +533,7 @@ impl Component for ClientsScreen {
                     .wireless
                     .as_ref()
                     .and_then(|w| w.signal_dbm)
-                    .map(|dbm| {
+                    .map_or(theme::BORDER_GRAY, |dbm| {
                         if dbm >= -50 {
                             theme::SUCCESS_GREEN
                         } else if dbm >= -60 {
@@ -559,8 +545,7 @@ impl Component for ClientsScreen {
                         } else {
                             theme::ERROR_RED
                         }
-                    })
-                    .unwrap_or(theme::BORDER_GRAY);
+                    });
 
                 let row_style = if is_selected {
                     theme::table_selected()
@@ -637,7 +622,7 @@ impl Component for ClientsScreen {
         self.focused = focused;
     }
 
-    fn id(&self) -> &str {
+    fn id(&self) -> &'static str {
         "Clients"
     }
 }

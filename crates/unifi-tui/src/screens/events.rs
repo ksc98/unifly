@@ -38,7 +38,7 @@ impl EventsScreen {
         }
     }
 
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::unused_self)]
     fn visible_count(&self, area_height: u16) -> usize {
         area_height.saturating_sub(1) as usize
     }
@@ -180,7 +180,7 @@ impl Component for EventsScreen {
 
             lines.push(Line::from(vec![
                 Span::styled(
-                    format!("  {:<18}", time_str),
+                    format!("  {time_str:<18}"),
                     Style::default().fg(theme::ELECTRIC_YELLOW),
                 ),
                 Span::styled(
@@ -188,7 +188,7 @@ impl Component for EventsScreen {
                     Style::default().fg(severity_color),
                 ),
                 Span::styled(
-                    format!("{:<11}", category),
+                    format!("{category:<11}"),
                     Style::default().fg(theme::DIM_WHITE),
                 ),
                 Span::styled(msg, Style::default().fg(severity_color)),
@@ -232,7 +232,7 @@ impl Component for EventsScreen {
         self.focused = focused;
     }
 
-    fn id(&self) -> &str {
+    fn id(&self) -> &'static str {
         "Events"
     }
 }

@@ -85,11 +85,11 @@ impl IntegrationClient {
         // Strip trailing slash for uniform handling
         let path = url.path().trim_end_matches('/').to_owned();
 
-        if !path.ends_with("/integration") {
+        if path.ends_with("/integration") {
+            url.set_path(&format!("{path}/"));
+        } else {
             let prefix = platform.integration_prefix();
             url.set_path(&format!("{path}{prefix}/"));
-        } else {
-            url.set_path(&format!("{path}/"));
         }
 
         Ok(url)
@@ -271,11 +271,13 @@ impl IntegrationClient {
             let received = page.data.len();
             all.extend(page.data);
 
-            if received < limit as usize || all.len() as i64 >= page.total_count {
+            #[allow(clippy::cast_sign_loss)]
+            let limit_usize = limit as usize;
+            if received < limit_usize || i64::try_from(all.len()).unwrap_or(i64::MAX) >= page.total_count {
                 break;
             }
 
-            offset += received as i64;
+            offset += i64::try_from(received).unwrap_or(i64::MAX);
         }
 
         Ok(all)

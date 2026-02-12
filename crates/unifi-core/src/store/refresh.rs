@@ -9,7 +9,7 @@ use chrono::Utc;
 
 use super::DataStore;
 use super::collection::EntityCollection;
-use crate::model::*;
+use crate::model::{EntityId, Device, Client, Network, WifiBroadcast, FirewallPolicy, FirewallZone, AclRule, DnsPolicy, Voucher, Site, Event, TrafficMatchingList};
 
 /// Upsert all incoming entities, then prune any existing keys not in the
 /// incoming set. This avoids the brief empty state that `clear()` causes.
@@ -180,9 +180,7 @@ impl DataStore {
                 .into_iter()
                 .map(|e| {
                     let key =
-                        e.id.as_ref()
-                            .map(|id| id.to_string())
-                            .unwrap_or_else(|| format!("evt:{}", e.timestamp.timestamp_millis()));
+                        e.id.as_ref().map_or_else(|| format!("evt:{}", e.timestamp.timestamp_millis()), std::string::ToString::to_string);
                     let id =
                         e.id.clone()
                             .unwrap_or_else(|| EntityId::Legacy(key.clone()));

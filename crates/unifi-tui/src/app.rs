@@ -212,8 +212,8 @@ impl App {
         // Confirmation dialog captures all input
         if self.pending_confirm.is_some() {
             return match key.code {
-                KeyCode::Char('y') | KeyCode::Char('Y') => Ok(Some(Action::ConfirmYes)),
-                KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                KeyCode::Char('y' | 'Y') => Ok(Some(Action::ConfirmYes)),
+                KeyCode::Char('n' | 'N') | KeyCode::Esc => {
                     Ok(Some(Action::ConfirmNo))
                 }
                 _ => Ok(None),
@@ -421,7 +421,7 @@ impl App {
                             mac: mac.clone(),
                             enable: true,
                         },
-                        format!("Locating {}", mac),
+                        format!("Locating {mac}"),
                     );
                 }
             }
@@ -689,6 +689,7 @@ impl App {
         let gen_ref = self.stats_generation.clone();
 
         // Compute time window for this period.
+        #[allow(clippy::cast_possible_wrap)]
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -713,18 +714,18 @@ impl App {
             // Parse gateway stats → bandwidth TX/RX
             if let Ok(gw) = gw_res {
                 for entry in &gw {
-                    let ts = entry.get("time").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let ts = entry.get("time").and_then(serde_json::value::Value::as_f64).unwrap_or(0.0);
                     if let Some(tx_bytes) = entry
                         .get("wan-tx_bytes")
                         .or_else(|| entry.get("tx_bytes"))
-                        .and_then(|v| v.as_f64())
+                        .and_then(serde_json::value::Value::as_f64)
                     {
                         data.bandwidth_tx.push((ts, tx_bytes));
                     }
                     if let Some(rx_bytes) = entry
                         .get("wan-rx_bytes")
                         .or_else(|| entry.get("rx_bytes"))
-                        .and_then(|v| v.as_f64())
+                        .and_then(serde_json::value::Value::as_f64)
                     {
                         data.bandwidth_rx.push((ts, rx_bytes));
                     }
@@ -734,11 +735,11 @@ impl App {
             // Parse site stats → client counts
             if let Ok(site) = site_res {
                 for entry in &site {
-                    let ts = entry.get("time").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let ts = entry.get("time").and_then(serde_json::value::Value::as_f64).unwrap_or(0.0);
                     if let Some(count) = entry
                         .get("num_sta")
                         .or_else(|| entry.get("wlan-num_sta"))
-                        .and_then(|v| v.as_f64())
+                        .and_then(serde_json::value::Value::as_f64)
                     {
                         data.client_counts.push((ts, count));
                     }
@@ -750,8 +751,8 @@ impl App {
                 let total_bytes: f64 = dpi
                     .iter()
                     .map(|e| {
-                        e.get("tx_bytes").and_then(|v| v.as_f64()).unwrap_or(0.0)
-                            + e.get("rx_bytes").and_then(|v| v.as_f64()).unwrap_or(0.0)
+                        e.get("tx_bytes").and_then(serde_json::value::Value::as_f64).unwrap_or(0.0)
+                            + e.get("rx_bytes").and_then(serde_json::value::Value::as_f64).unwrap_or(0.0)
                     })
                     .sum();
 
@@ -760,8 +761,8 @@ impl App {
                         .iter()
                         .filter_map(|e| {
                             let name = e.get("name").and_then(|v| v.as_str())?;
-                            let bytes = e.get("tx_bytes").and_then(|v| v.as_f64()).unwrap_or(0.0)
-                                + e.get("rx_bytes").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                            let bytes = e.get("tx_bytes").and_then(serde_json::value::Value::as_f64).unwrap_or(0.0)
+                                + e.get("rx_bytes").and_then(serde_json::value::Value::as_f64).unwrap_or(0.0);
                             Some((name.to_owned(), (bytes / total_bytes) * 100.0))
                         })
                         .collect();
@@ -890,6 +891,7 @@ impl App {
     }
 
     /// Render the help overlay centered on screen.
+    #[allow(clippy::unused_self)]
     fn render_help_overlay(&self, frame: &mut Frame, area: Rect) {
         let help_width = 60u16.min(area.width.saturating_sub(4));
         let help_height = 22u16.min(area.height.saturating_sub(4));
@@ -984,6 +986,7 @@ impl App {
     }
 
     /// Render a centered confirmation dialog.
+    #[allow(clippy::unused_self)]
     fn render_confirm_dialog(&self, frame: &mut Frame, area: Rect, confirm: &ConfirmAction) {
         let width = 50u16.min(area.width.saturating_sub(4));
         let height = 5u16;
@@ -1024,6 +1027,7 @@ impl App {
     }
 
     /// Render a notification toast in the bottom-right corner.
+    #[allow(clippy::unused_self)]
     fn render_notification(&self, frame: &mut Frame, area: Rect, notif: &Notification) {
         use crate::action::NotificationLevel;
 

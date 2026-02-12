@@ -52,7 +52,7 @@ fn detail(d: &Arc<Device>) -> String {
         format!("MAC:      {}", d.mac),
         format!(
             "IP:       {}",
-            d.ip.map(|ip| ip.to_string()).unwrap_or_else(|| "-".into())
+            d.ip.map_or_else(|| "-".into(), |ip| ip.to_string())
         ),
         format!("Model:    {}", d.model.as_deref().unwrap_or("-")),
         format!("Type:     {:?}", d.device_type),
@@ -60,13 +60,13 @@ fn detail(d: &Arc<Device>) -> String {
         format!("Firmware: {}", d.firmware_version.as_deref().unwrap_or("-")),
     ];
     if let Some(up) = d.stats.uptime_secs {
-        lines.push(format!("Uptime:   {}s", up));
+        lines.push(format!("Uptime:   {up}s"));
     }
     if let Some(cpu) = d.stats.cpu_utilization_pct {
-        lines.push(format!("CPU:      {:.1}%", cpu));
+        lines.push(format!("CPU:      {cpu:.1}%"));
     }
     if let Some(mem) = d.stats.memory_utilization_pct {
-        lines.push(format!("Memory:   {:.1}%", mem));
+        lines.push(format!("Memory:   {mem:.1}%"));
     }
     lines.join("\n")
 }

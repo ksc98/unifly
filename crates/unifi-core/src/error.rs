@@ -103,8 +103,7 @@ impl From<unifi_api::Error> for CoreError {
                     CoreError::ConnectionFailed {
                         url: e
                             .url()
-                            .map(|u| u.to_string())
-                            .unwrap_or_else(|| "<unknown>".into()),
+                            .map_or_else(|| "<unknown>".into(), ToString::to_string),
                         reason: e.to_string(),
                     }
                 } else if e.status().map(|s| s.as_u16()) == Some(404) {

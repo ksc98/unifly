@@ -179,7 +179,7 @@ impl Component for TopologyScreen {
                 Ok(Some(Action::TopologyPan(0, -5)))
             }
             // Zoom
-            KeyCode::Char('+') | KeyCode::Char('=') => {
+            KeyCode::Char('+' | '=') => {
                 self.zoom = (self.zoom * 1.2).min(5.0);
                 Ok(Some(Action::TopologyZoom(self.zoom)))
             }
@@ -370,7 +370,7 @@ impl Component for TopologyScreen {
         self.focused = focused;
     }
 
-    fn id(&self) -> &str {
+    fn id(&self) -> &'static str {
         "Topo"
     }
 }

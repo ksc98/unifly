@@ -88,10 +88,12 @@ pub struct ControllerConfig {
 impl Default for ControllerConfig {
     fn default() -> Self {
         Self {
-            url: "https://192.168.1.1:8443".parse().unwrap(),
+            url: "https://192.168.1.1:8443"
+                .parse()
+                .expect("default controller URL is valid"),
             auth: AuthCredentials::Credentials {
                 username: "admin".into(),
-                password: SecretString::from("".to_string()),
+                password: SecretString::from(String::new()),
             },
             site: "default".into(),
             tls: TlsVerification::default(),

@@ -32,8 +32,8 @@ use crate::model::{
 // ── Helpers ────────────────────────────────────────────────────────
 
 /// Parse an optional string to an `IpAddr`, silently dropping unparseable values.
-fn parse_ip(raw: &Option<String>) -> Option<IpAddr> {
-    raw.as_deref().and_then(|s| s.parse().ok())
+fn parse_ip(raw: Option<&String>) -> Option<IpAddr> {
+    raw.and_then(|s| s.parse().ok())
 }
 
 /// Convert an optional epoch-seconds timestamp to `DateTime<Utc>`.
@@ -42,9 +42,8 @@ fn epoch_to_datetime(epoch: Option<i64>) -> Option<DateTime<Utc>> {
 }
 
 /// Parse an ISO-8601 datetime string (as returned by the legacy event/alarm endpoints).
-fn parse_datetime(raw: &Option<String>) -> Option<DateTime<Utc>> {
-    raw.as_deref()
-        .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+fn parse_datetime(raw: Option<&String>) -> Option<DateTime<Utc>> {
+    raw.and_then(|s| DateTime::parse_from_rfc3339(s).ok())
         .map(|dt| dt.with_timezone(&Utc))
 }
 
@@ -54,14 +53,14 @@ fn parse_datetime(raw: &Option<String>) -> Option<DateTime<Utc>> {
 ///
 /// The legacy API `type` field is typically: `"uap"`, `"usw"`, `"ugw"`, `"udm"`.
 /// We also check the `model` prefix for newer hardware that may not match cleanly.
-fn infer_device_type(device_type: &str, model: &Option<String>) -> DeviceType {
+fn infer_device_type(device_type: &str, model: Option<&String>) -> DeviceType {
     match device_type {
         "uap" => DeviceType::AccessPoint,
         "usw" => DeviceType::Switch,
         "ugw" | "udm" => DeviceType::Gateway,
         _ => {
             // Fallback: check the model string prefix
-            if let Some(m) = model.as_deref() {
+            if let Some(m) = model {
                 let upper = m.to_uppercase();
                 if upper.starts_with("UAP") || upper.starts_with("U6") || upper.starts_with("U7") {
                     DeviceType::AccessPoint
@@ -99,11 +98,11 @@ fn map_device_state(code: i32) -> DeviceState {
 
 impl From<LegacyDevice> for Device {
     fn from(d: LegacyDevice) -> Self {
-        let device_type = infer_device_type(&d.device_type, &d.model);
+        let device_type = infer_device_type(&d.device_type, d.model.as_ref());
         let state = map_device_state(d.state);
 
-        // Build stats from sys_stats + uptime
-        let stats = {
+        // Build device_stats from sys_stats + uptime
+        let device_stats = {
             let mut s = DeviceStats {
                 uptime_secs: d.uptime.and_then(|u| u.try_into().ok()),
                 ..Default::default()
@@ -127,7 +126,7 @@ impl From<LegacyDevice> for Device {
         Device {
             id: EntityId::from(d.id),
             mac: MacAddress::new(&d.mac),
-            ip: parse_ip(&d.ip),
+            ip: parse_ip(d.ip.as_ref()),
             name: d.name,
             model: d.model,
             device_type,
@@ -145,7 +144,7 @@ impl From<LegacyDevice> for Device {
             uplink_device_mac: None,
             has_switching: device_type == DeviceType::Switch || device_type == DeviceType::Gateway,
             has_access_point: device_type == DeviceType::AccessPoint,
-            stats,
+            stats: device_stats,
             client_count: d.num_sta.and_then(|n| n.try_into().ok()),
             origin: None,
             source: DataSource::LegacyApi,
@@ -166,7 +165,9 @@ impl From<LegacyClientEntry> for Client {
         };
 
         // Build wireless info for non-wired clients
-        let wireless = if !is_wired {
+        let wireless = if is_wired {
+            None
+        } else {
             Some(WirelessInfo {
                 ssid: c.essid.clone(),
                 bssid: c.bssid.as_deref().map(MacAddress::new),
@@ -178,8 +179,6 @@ impl From<LegacyClientEntry> for Client {
                 tx_rate_kbps: c.tx_rate.and_then(|r| r.try_into().ok()),
                 rx_rate_kbps: c.rx_rate.and_then(|r| r.try_into().ok()),
             })
-        } else {
-            None
         };
 
         // Build guest auth if the client is a guest
@@ -213,7 +212,7 @@ impl From<LegacyClientEntry> for Client {
         Client {
             id: EntityId::from(c.id),
             mac: MacAddress::new(&c.mac),
-            ip: parse_ip(&c.ip),
+            ip: parse_ip(c.ip.as_ref()),
             name: c.name,
             hostname: c.hostname,
             client_type,
@@ -271,9 +270,9 @@ impl From<LegacySite> for Site {
 // ── Event ──────────────────────────────────────────────────────────
 
 /// Map legacy subsystem string to `EventCategory`.
-fn map_event_category(subsystem: &Option<String>) -> EventCategory {
-    match subsystem.as_deref() {
-        Some("wlan") | Some("lan") | Some("wan") => EventCategory::Network,
+fn map_event_category(subsystem: Option<&String>) -> EventCategory {
+    match subsystem.map(String::as_str) {
+        Some("wlan" | "lan" | "wan") => EventCategory::Network,
         Some("device") => EventCategory::Device,
         Some("client") => EventCategory::Client,
         Some("system") => EventCategory::System,
@@ -288,8 +287,8 @@ impl From<LegacyEvent> for Event {
     fn from(e: LegacyEvent) -> Self {
         Event {
             id: Some(EntityId::from(e.id)),
-            timestamp: parse_datetime(&e.datetime).unwrap_or_else(Utc::now),
-            category: map_event_category(&e.subsystem),
+            timestamp: parse_datetime(e.datetime.as_ref()).unwrap_or_else(Utc::now),
+            category: map_event_category(e.subsystem.as_ref()),
             severity: EventSeverity::Info,
             event_type: e.key.clone().unwrap_or_default(),
             message: e.msg.unwrap_or_default(),
@@ -308,7 +307,7 @@ impl From<LegacyAlarm> for Event {
     fn from(a: LegacyAlarm) -> Self {
         Event {
             id: Some(EntityId::from(a.id)),
-            timestamp: parse_datetime(&a.datetime).unwrap_or_else(Utc::now),
+            timestamp: parse_datetime(a.datetime.as_ref()).unwrap_or_else(Utc::now),
             category: EventCategory::System,
             severity: EventSeverity::Warning,
             event_type: a.key.clone().unwrap_or_default(),
@@ -326,7 +325,7 @@ impl From<LegacyAlarm> for Alarm {
     fn from(a: LegacyAlarm) -> Self {
         Alarm {
             id: EntityId::from(a.id),
-            timestamp: parse_datetime(&a.datetime).unwrap_or_else(Utc::now),
+            timestamp: parse_datetime(a.datetime.as_ref()).unwrap_or_else(Utc::now),
             category: EventCategory::System,
             severity: EventSeverity::Warning,
             message: a.msg.unwrap_or_default(),
@@ -358,7 +357,7 @@ fn infer_ws_severity(key: &str) -> EventSeverity {
 
 impl From<UnifiEvent> for Event {
     fn from(e: UnifiEvent) -> Self {
-        let category = map_event_category(&Some(e.subsystem.clone()));
+        let category = map_event_category(Some(&e.subsystem));
         let severity = infer_ws_severity(&e.key);
 
         // Extract device MAC from common extra fields
@@ -386,7 +385,7 @@ impl From<UnifiEvent> for Event {
 
         Event {
             id: None,
-            timestamp: parse_datetime(&e.datetime).unwrap_or_else(Utc::now),
+            timestamp: parse_datetime(e.datetime.as_ref()).unwrap_or_else(Utc::now),
             category,
             severity,
             event_type: e.key.clone(),
@@ -461,7 +460,8 @@ fn infer_device_type_integration(features: &[String], model: &str) -> DeviceType
         DeviceType::Switch
     } else {
         // Fallback to model prefix
-        infer_device_type("", &Some(model.to_owned()))
+        let model_owned = model.to_owned();
+        infer_device_type("", Some(&model_owned))
     }
 }
 
@@ -610,7 +610,7 @@ impl From<integration_types::WifiBroadcastResponse> for WifiBroadcast {
             .security_configuration
             .get("mode")
             .and_then(|v| v.as_str())
-            .map(|mode| match mode {
+            .map_or(WifiSecurityMode::Open, |mode| match mode {
                 "OPEN" => WifiSecurityMode::Open,
                 "WPA2_PERSONAL" => WifiSecurityMode::Wpa2Personal,
                 "WPA3_PERSONAL" => WifiSecurityMode::Wpa3Personal,
@@ -619,8 +619,7 @@ impl From<integration_types::WifiBroadcastResponse> for WifiBroadcast {
                 "WPA3_ENTERPRISE" => WifiSecurityMode::Wpa3Enterprise,
                 "WPA2_WPA3_ENTERPRISE" => WifiSecurityMode::Wpa2Wpa3Enterprise,
                 _ => WifiSecurityMode::Open,
-            })
-            .unwrap_or(WifiSecurityMode::Open);
+            });
 
         WifiBroadcast {
             id: EntityId::Uuid(w.id),
@@ -656,17 +655,16 @@ impl From<integration_types::FirewallPolicyResponse> for FirewallPolicy {
             .action
             .get("type")
             .and_then(|v| v.as_str())
-            .map(|a| match a {
+            .map_or(FirewallAction::Block, |a| match a {
                 "ALLOW" => FirewallAction::Allow,
                 "REJECT" => FirewallAction::Reject,
                 _ => FirewallAction::Block,
-            })
-            .unwrap_or(FirewallAction::Block);
+            });
 
         let index = p
             .extra
             .get("index")
-            .and_then(|v| v.as_i64())
+            .and_then(serde_json::Value::as_i64)
             .map(|i| i as i32);
 
         // Zone IDs may be in flat fields (real API) or nested source/destination objects (spec)
@@ -805,7 +803,7 @@ impl From<integration_types::DnsPolicyResponse> for DnsPolicy {
             ttl_seconds: d
                 .extra
                 .get("ttl")
-                .and_then(|v| v.as_u64())
+                .and_then(serde_json::Value::as_u64)
                 .map(|t| t as u32),
             origin: None,
             source: DataSource::IntegrationApi,
@@ -867,28 +865,28 @@ mod tests {
 
     #[test]
     fn device_type_from_legacy_type_field() {
-        assert_eq!(infer_device_type("uap", &None), DeviceType::AccessPoint);
-        assert_eq!(infer_device_type("usw", &None), DeviceType::Switch);
-        assert_eq!(infer_device_type("ugw", &None), DeviceType::Gateway);
-        assert_eq!(infer_device_type("udm", &None), DeviceType::Gateway);
+        assert_eq!(infer_device_type("uap", None), DeviceType::AccessPoint);
+        assert_eq!(infer_device_type("usw", None), DeviceType::Switch);
+        assert_eq!(infer_device_type("ugw", None), DeviceType::Gateway);
+        assert_eq!(infer_device_type("udm", None), DeviceType::Gateway);
     }
 
     #[test]
     fn device_type_from_model_fallback() {
         assert_eq!(
-            infer_device_type("unknown", &Some("UAP-AC-Pro".into())),
+            infer_device_type("unknown", Some(&"UAP-AC-Pro".into())),
             DeviceType::AccessPoint
         );
         assert_eq!(
-            infer_device_type("unknown", &Some("U6-LR".into())),
+            infer_device_type("unknown", Some(&"U6-LR".into())),
             DeviceType::AccessPoint
         );
         assert_eq!(
-            infer_device_type("unknown", &Some("USW-24-PoE".into())),
+            infer_device_type("unknown", Some(&"USW-24-PoE".into())),
             DeviceType::Switch
         );
         assert_eq!(
-            infer_device_type("unknown", &Some("UDM-Pro".into())),
+            infer_device_type("unknown", Some(&"UDM-Pro".into())),
             DeviceType::Gateway
         );
     }
@@ -922,7 +920,7 @@ mod tests {
         let site = LegacySite {
             id: "abc123".into(),
             name: "branch-1".into(),
-            desc: Some("".into()),
+            desc: Some(String::new()),
             role: None,
             extra: serde_json::Map::new(),
         };
@@ -933,18 +931,18 @@ mod tests {
     #[test]
     fn event_category_mapping() {
         assert_eq!(
-            map_event_category(&Some("wlan".into())),
+            map_event_category(Some(&"wlan".into())),
             EventCategory::Network
         );
         assert_eq!(
-            map_event_category(&Some("device".into())),
+            map_event_category(Some(&"device".into())),
             EventCategory::Device
         );
         assert_eq!(
-            map_event_category(&Some("admin".into())),
+            map_event_category(Some(&"admin".into())),
             EventCategory::Admin
         );
-        assert_eq!(map_event_category(&None), EventCategory::Unknown);
+        assert_eq!(map_event_category(None), EventCategory::Unknown);
     }
 
     #[test]

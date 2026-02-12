@@ -2,6 +2,7 @@
 //!
 //! These tests validate argument parsing, help output, shell completions,
 //! and error handling — all without requiring a live UniFi controller.
+#![allow(clippy::unwrap_used)]
 
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;

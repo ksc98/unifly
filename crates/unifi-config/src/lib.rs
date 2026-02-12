@@ -155,13 +155,14 @@ fn default_auth_mode() -> String {
 
 /// Resolve the config file path via XDG / platform conventions.
 pub fn config_path() -> PathBuf {
-    ProjectDirs::from("com", "unifi-cli", "unifi-cli")
-        .map(|dirs| dirs.config_dir().join("config.toml"))
-        .unwrap_or_else(|| {
+    ProjectDirs::from("com", "unifi-cli", "unifi-cli").map_or_else(
+        || {
             let mut p = dirs_fallback();
             p.push("config.toml");
             p
-        })
+        },
+        |dirs| dirs.config_dir().join("config.toml"),
+    )
 }
 
 fn dirs_fallback() -> PathBuf {

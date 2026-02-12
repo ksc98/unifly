@@ -83,8 +83,9 @@ impl TopologyScreen {
 
         // Level 0: Gateways at top center
         let gw_total = gateways.len().max(1);
+        let gw_spacing = 90.0 / gw_total as f64;
         for (i, gw) in gateways.iter().enumerate() {
-            let x = 50.0 - (gw_total as f64 * 10.0) / 2.0 + i as f64 * 10.0;
+            let x = 50.0 - (gw_total as f64 * gw_spacing) / 2.0 + i as f64 * gw_spacing;
             nodes.push(TopoNode {
                 label: gw.name.clone().unwrap_or_else(|| "Gateway".into()),
                 ip: gw.ip.map(|ip| ip.to_string()).unwrap_or_default(),
@@ -94,15 +95,15 @@ impl TopologyScreen {
                 x,
                 y: 80.0,
                 width: 16.0,
-                height: 5.0,
+                height: 8.0,
             });
         }
 
         // Level 1: Switches
         let sw_total = switches.len().max(1);
+        let sw_spacing = 90.0 / sw_total as f64;
         for (i, sw) in switches.iter().enumerate() {
-            let spacing = 80.0 / sw_total as f64;
-            let x = 10.0 + spacing * i as f64;
+            let x = 5.0 + sw_spacing * i as f64;
             nodes.push(TopoNode {
                 label: sw.name.clone().unwrap_or_else(|| "Switch".into()),
                 ip: sw.ip.map(|ip| ip.to_string()).unwrap_or_default(),
@@ -110,17 +111,17 @@ impl TopologyScreen {
                 state: sw.state,
                 client_count: sw.client_count.unwrap_or(0),
                 x,
-                y: 55.0,
-                width: 13.0,
-                height: 4.0,
+                y: 52.0,
+                width: 14.0,
+                height: 7.0,
             });
         }
 
         // Level 2: Access Points
         let ap_total = aps.len().max(1);
+        let ap_spacing = 90.0 / ap_total as f64;
         for (i, ap) in aps.iter().enumerate() {
-            let spacing = 80.0 / ap_total as f64;
-            let x = 10.0 + spacing * i as f64;
+            let x = 5.0 + ap_spacing * i as f64;
             nodes.push(TopoNode {
                 label: ap.name.clone().unwrap_or_else(|| "AP".into()),
                 ip: ap.ip.map(|ip| ip.to_string()).unwrap_or_default(),
@@ -128,15 +129,17 @@ impl TopologyScreen {
                 state: ap.state,
                 client_count: ap.client_count.unwrap_or(0),
                 x,
-                y: 30.0,
-                width: 9.0,
-                height: 4.0,
+                y: 24.0,
+                width: 12.0,
+                height: 7.0,
             });
         }
 
         // Level 3: Others at bottom
+        let oth_total = others.len().max(1);
+        let oth_spacing = 90.0 / oth_total as f64;
         for (i, dev) in others.iter().enumerate() {
-            let x = 10.0 + i as f64 * 12.0;
+            let x = 5.0 + i as f64 * oth_spacing;
             nodes.push(TopoNode {
                 label: dev.name.clone().unwrap_or_else(|| "Device".into()),
                 ip: dev.ip.map(|ip| ip.to_string()).unwrap_or_default(),
@@ -144,9 +147,9 @@ impl TopologyScreen {
                 state: dev.state,
                 client_count: dev.client_count.unwrap_or(0),
                 x,
-                y: 10.0,
-                width: 10.0,
-                height: 3.0,
+                y: 2.0,
+                width: 12.0,
+                height: 6.0,
             });
         }
 
@@ -248,11 +251,25 @@ impl Component for TopologyScreen {
 
         let nodes = self.build_nodes();
 
-        // Canvas bounds with zoom and pan
-        let x_min = -10.0 / self.zoom + self.pan_x;
-        let x_max = 110.0 / self.zoom + self.pan_x;
-        let y_min = -10.0 / self.zoom + self.pan_y;
-        let y_max = 110.0 / self.zoom + self.pan_y;
+        // Compute canvas bounds that fill the rendering area properly.
+        // Braille cells are 2 dots wide × 4 dots tall, so each character
+        // cell has a 2:1 height-to-width ratio in dot space.  We want the
+        // logical coordinate system to use this ratio so the diagram fills
+        // the terminal without vertical compression.
+        let w = f64::from(content_area.width.max(1));
+        let h = f64::from(content_area.height.max(1));
+        // Aspect ratio: how many y-units per x-unit to get square pixels
+        let aspect = (h * 2.0) / w; // braille: 4 dots / 2 dots = 2× vertical resolution
+
+        let x_span = 120.0 / self.zoom;
+        let y_span = x_span * aspect;
+        let x_center = 50.0 + self.pan_x;
+        let y_center = 50.0 + self.pan_y;
+
+        let x_min = x_center - x_span / 2.0;
+        let x_max = x_center + x_span / 2.0;
+        let y_min = y_center - y_span / 2.0;
+        let y_max = y_center + y_span / 2.0;
 
         let canvas = Canvas::default()
             .x_bounds([x_min, x_max])

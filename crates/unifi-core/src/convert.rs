@@ -514,12 +514,20 @@ impl From<integration_types::ClientResponse> for Client {
             _ => ClientType::Unknown,
         };
 
-        // Extract MAC from access object if present
-        let mac_str = c
+        // Extract MAC from access object; fall back to UUID so clients
+        // without a macAddress still get unique store keys.
+        let mac_from_access = c
             .access
             .get("macAddress")
             .and_then(|v| v.as_str())
-            .unwrap_or("");
+            .unwrap_or("")
+            .to_string();
+        let uuid_fallback = c.id.to_string();
+        let mac_str = if mac_from_access.is_empty() {
+            uuid_fallback.as_str()
+        } else {
+            mac_from_access.as_str()
+        };
 
         Client {
             id: EntityId::Uuid(c.id),

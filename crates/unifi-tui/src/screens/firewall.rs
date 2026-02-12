@@ -332,12 +332,20 @@ impl Component for FirewallScreen {
                 self.move_selection(-10);
                 Ok(Some(Action::PageUp))
             }
-            // Sub-tab cycling
-            KeyCode::Tab => {
+            // Sub-tab cycling (h/l — consistent with device detail tabs)
+            KeyCode::Char('l') => {
                 self.sub_tab = match self.sub_tab {
                     FirewallSubTab::Policies => FirewallSubTab::Zones,
                     FirewallSubTab::Zones => FirewallSubTab::AclRules,
                     FirewallSubTab::AclRules => FirewallSubTab::Policies,
+                };
+                Ok(Some(Action::FirewallSubTab(self.sub_tab)))
+            }
+            KeyCode::Char('h') => {
+                self.sub_tab = match self.sub_tab {
+                    FirewallSubTab::Policies => FirewallSubTab::AclRules,
+                    FirewallSubTab::Zones => FirewallSubTab::Policies,
+                    FirewallSubTab::AclRules => FirewallSubTab::Zones,
                 };
                 Ok(Some(Action::FirewallSubTab(self.sub_tab)))
             }
@@ -430,7 +438,7 @@ impl Component for FirewallScreen {
                 Span::styled("navigate  ", theme::key_hint()),
                 Span::styled("K/J ", theme::key_hint_key()),
                 Span::styled("reorder  ", theme::key_hint()),
-                Span::styled("Tab ", theme::key_hint_key()),
+                Span::styled("h/l ", theme::key_hint_key()),
                 Span::styled("sub-tab  ", theme::key_hint()),
                 Span::styled("Enter ", theme::key_hint_key()),
                 Span::styled("detail", theme::key_hint()),
@@ -438,7 +446,7 @@ impl Component for FirewallScreen {
             _ => Line::from(vec![
                 Span::styled("  j/k ", theme::key_hint_key()),
                 Span::styled("navigate  ", theme::key_hint()),
-                Span::styled("Tab ", theme::key_hint_key()),
+                Span::styled("h/l ", theme::key_hint_key()),
                 Span::styled("sub-tab  ", theme::key_hint()),
                 Span::styled("Enter ", theme::key_hint_key()),
                 Span::styled("detail", theme::key_hint()),

@@ -5,7 +5,7 @@
 //! so the app can reconnect with the new configuration.
 
 use color_eyre::eyre::Result;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -117,6 +117,8 @@ pub struct SettingsScreen {
     // Test state
     test_error: Option<String>,
     throbber_state: throbber_widgets_tui::ThrobberState,
+    // Last full-screen area, for mouse hit-testing
+    last_area: std::cell::Cell<Rect>,
 }
 
 impl SettingsScreen {
@@ -139,6 +141,7 @@ impl SettingsScreen {
             profile_name: "default".into(),
             test_error: None,
             throbber_state: throbber_widgets_tui::ThrobberState::default(),
+            last_area: std::cell::Cell::new(Rect::default()),
         };
         screen.load_from_config();
         screen
@@ -370,7 +373,7 @@ impl SettingsScreen {
     #[allow(clippy::unused_self)]
     fn render_centered_panel(&self, frame: &mut Frame, area: Rect) -> Rect {
         let panel_w = 62u16.min(area.width.saturating_sub(4));
-        let panel_h = 28u16.min(area.height.saturating_sub(2));
+        let panel_h = 32u16.min(area.height.saturating_sub(2));
         let x = (area.width.saturating_sub(panel_w)) / 2;
         let y = (area.height.saturating_sub(panel_h)) / 2;
         let panel = Rect::new(area.x + x, area.y + y, panel_w, panel_h);
@@ -459,7 +462,7 @@ impl SettingsScreen {
     }
 
     fn render_auth_selector(&self, frame: &mut Frame, area: Rect) {
-        if area.height < 1 {
+        if area.height < 3 {
             return;
         }
 
@@ -474,41 +477,43 @@ impl SettingsScreen {
             Rect::new(area.x, area.y, area.width, 1),
         );
 
-        if area.height < 2 {
-            return;
-        }
+        let border_color = if active {
+            theme::ELECTRIC_PURPLE
+        } else {
+            theme::BORDER_GRAY
+        };
 
-        let mut y = area.y + 1;
-        for (i, mode) in AuthMode::ALL.iter().enumerate() {
-            if y >= area.y + area.height {
-                break;
-            }
-            let selected = i == self.auth_mode_index;
-            let marker = if selected { "\u{25B8} " } else { "  " };
-            let marker_style = if selected && active {
-                Style::default().fg(theme::ELECTRIC_PURPLE)
-            } else {
-                Style::default().fg(theme::BORDER_GRAY)
-            };
-            let label_style = if selected && active {
-                Style::default()
-                    .fg(theme::NEON_CYAN)
-                    .add_modifier(Modifier::BOLD)
-            } else if selected {
-                Style::default().fg(theme::DIM_WHITE).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(theme::BORDER_GRAY)
-            };
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(border_color));
 
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled(format!("  {marker}"), marker_style),
-                    Span::styled(mode.label(), label_style),
-                ])),
-                Rect::new(area.x, y, area.width, 1),
-            );
-            y += 1;
-        }
+        let block_area = Rect::new(area.x, area.y + 1, area.width, 3.min(area.height - 1));
+        let inner = block.inner(block_area);
+        frame.render_widget(block, block_area);
+
+        // Inline selector: ◂ label ▸
+        let arrow_style = if active {
+            Style::default().fg(theme::ELECTRIC_PURPLE)
+        } else {
+            Style::default().fg(theme::BORDER_GRAY)
+        };
+        let value_style = if active {
+            Style::default()
+                .fg(theme::NEON_CYAN)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme::DIM_WHITE)
+        };
+        let label = self.auth_mode.label();
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled(" \u{25C2} ", arrow_style),
+                Span::styled(label, value_style),
+                Span::styled(" \u{25B8}", arrow_style),
+            ])),
+            inner,
+        );
     }
 
     #[allow(clippy::unused_self)]
@@ -547,7 +552,7 @@ impl SettingsScreen {
         // Calculate total height needed
         let mut constraints = vec![
             Constraint::Length(4), // URL
-            Constraint::Length(4), // Auth mode selector (label + 3 options)
+            Constraint::Length(4), // Auth mode inline selector
         ];
         if has_api_key {
             constraints.push(Constraint::Length(4)); // API Key
@@ -670,7 +675,7 @@ impl SettingsScreen {
         let hints = match self.state {
             SettingsState::Editing => {
                 if self.active_field == SettingsField::AuthMode {
-                    "\u{2191}/\u{2193} select  Tab next  Enter test & save  Esc cancel"
+                    "\u{25C2}/\u{25B8} select  Tab next  Enter test & save  Esc cancel"
                 } else if self.active_field == SettingsField::Insecure {
                     "Space toggle  Tab next  Enter test & save  Esc cancel"
                 } else if self.active_field == SettingsField::Password {
@@ -714,19 +719,23 @@ impl Component for SettingsScreen {
 
         match self.active_field {
             SettingsField::AuthMode => match key.code {
-                KeyCode::Up | KeyCode::Char('k') => {
+                KeyCode::Up | KeyCode::Left | KeyCode::Char('k' | 'h') => {
                     if self.auth_mode_index > 0 {
                         self.auth_mode_index -= 1;
-                        self.auth_mode = AuthMode::ALL[self.auth_mode_index];
-                        self.clamp_focus();
+                    } else {
+                        self.auth_mode_index = AuthMode::ALL.len() - 1;
                     }
+                    self.auth_mode = AuthMode::ALL[self.auth_mode_index];
+                    self.clamp_focus();
                 }
-                KeyCode::Down | KeyCode::Char('j') => {
+                KeyCode::Down | KeyCode::Right | KeyCode::Char('j' | 'l') => {
                     if self.auth_mode_index < AuthMode::ALL.len() - 1 {
                         self.auth_mode_index += 1;
-                        self.auth_mode = AuthMode::ALL[self.auth_mode_index];
-                        self.clamp_focus();
+                    } else {
+                        self.auth_mode_index = 0;
                     }
+                    self.auth_mode = AuthMode::ALL[self.auth_mode_index];
+                    self.clamp_focus();
                 }
                 KeyCode::Tab => self.focus_next(),
                 KeyCode::BackTab => self.focus_prev(),
@@ -785,6 +794,94 @@ impl Component for SettingsScreen {
         Ok(None)
     }
 
+    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+        if self.state != SettingsState::Editing {
+            return Ok(None);
+        }
+
+        if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+            let row = mouse.row;
+
+            // Reconstruct the content area geometry from last_area
+            let area = self.last_area.get();
+            if area.width == 0 {
+                return Ok(None);
+            }
+
+            let panel_w = 62u16.min(area.width.saturating_sub(4));
+            let panel_h = 32u16.min(area.height.saturating_sub(2));
+            let px = (area.width.saturating_sub(panel_w)) / 2 + area.x;
+            let py = (area.height.saturating_sub(panel_h)) / 2 + area.y;
+
+            // Inner = panel minus border (1 each side) + layout spacer (1)
+            let content_y = py + 1 + 1; // border + spacer
+            let fields_x = px + 1 + 1;  // border + padding
+            let fields_w = panel_w.saturating_sub(4);
+
+            // Walk the field layout to find which field was clicked
+            let has_api_key = SettingsField::ApiKey.visible_for(self.auth_mode);
+            let has_legacy = SettingsField::Username.visible_for(self.auth_mode);
+
+            let mut y = content_y;
+            let field_order = {
+                let mut v = vec![
+                    (SettingsField::Url, 4u16),
+                    (SettingsField::AuthMode, 4),
+                ];
+                if has_api_key {
+                    v.push((SettingsField::ApiKey, 4));
+                }
+                if has_legacy {
+                    v.push((SettingsField::Username, 4));
+                    v.push((SettingsField::Password, 4));
+                }
+                v.push((SettingsField::Site, 4));
+                v.push((SettingsField::Insecure, 1));
+                v
+            };
+
+            for (field, height) in &field_order {
+                if row >= y && row < y + height {
+                    // Hit! Focus this field
+                    self.active_field = *field;
+
+                    // Special: clicking insecure toggles it
+                    if *field == SettingsField::Insecure {
+                        self.insecure = !self.insecure;
+                    }
+
+                    // Special: clicking auth mode cycles it
+                    if *field == SettingsField::AuthMode {
+                        // Check which side of the field was clicked to determine direction
+                        let mid_x = fields_x + fields_w / 2;
+                        if mouse.column < mid_x {
+                            // Left half — previous
+                            if self.auth_mode_index > 0 {
+                                self.auth_mode_index -= 1;
+                            } else {
+                                self.auth_mode_index = AuthMode::ALL.len() - 1;
+                            }
+                        } else {
+                            // Right half — next
+                            if self.auth_mode_index < AuthMode::ALL.len() - 1 {
+                                self.auth_mode_index += 1;
+                            } else {
+                                self.auth_mode_index = 0;
+                            }
+                        }
+                        self.auth_mode = AuthMode::ALL[self.auth_mode_index];
+                        self.clamp_focus();
+                    }
+
+                    break;
+                }
+                y += height;
+            }
+        }
+
+        Ok(None)
+    }
+
     fn update(&mut self, action: &Action) -> Result<Option<Action>> {
         match action {
             Action::SettingsTestResult(result) => {
@@ -810,6 +907,8 @@ impl Component for SettingsScreen {
     }
 
     fn render(&self, frame: &mut Frame, area: Rect) {
+        self.last_area.set(area);
+
         // Full-screen dark background
         frame.render_widget(
             Block::default().style(Style::default().bg(theme::BG_DARK)),

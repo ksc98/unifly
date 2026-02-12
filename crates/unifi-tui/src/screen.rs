@@ -16,6 +16,8 @@ pub enum ScreenId {
     Stats,    // 8
     /// Onboarding wizard — not in the tab bar, not navigable by number keys.
     Setup,
+    /// Settings editor — not in the tab bar, opened with `,`.
+    Settings,
 }
 
 impl ScreenId {
@@ -42,7 +44,7 @@ impl ScreenId {
             Self::Topology => 6,
             Self::Events => 7,
             Self::Stats => 8,
-            Self::Setup => 0,
+            Self::Setup | Self::Settings => 0,
         }
     }
 
@@ -85,6 +87,7 @@ impl ScreenId {
             Self::Events => "Events",
             Self::Stats => "Stats",
             Self::Setup => "Setup",
+            Self::Settings => "Settings",
         }
     }
 }

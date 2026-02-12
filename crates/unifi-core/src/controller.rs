@@ -208,17 +208,28 @@ impl Controller {
                 *self.inner.integration_client.lock().await = Some(integration);
                 *self.inner.site_id.lock().await = Some(site_id);
 
-                // Legacy API client with authenticated session
-                let client = LegacyClient::new(
+                // Legacy API client — attempt login but degrade gracefully
+                // if it fails. The Integration API is the primary surface;
+                // Legacy adds events, stats, and admin ops.
+                match LegacyClient::new(
                     config.url.clone(),
                     config.site.clone(),
                     platform,
                     &transport,
-                )?;
-                client.login(username, password).await?;
-                debug!("legacy session authentication successful (hybrid)");
-
-                *self.inner.legacy_client.lock().await = Some(client);
+                ) {
+                    Ok(client) => match client.login(username, password).await {
+                        Ok(()) => {
+                            debug!("legacy session authentication successful (hybrid)");
+                            *self.inner.legacy_client.lock().await = Some(client);
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "legacy login failed (non-fatal in hybrid mode — stats/events unavailable)");
+                        }
+                    },
+                    Err(e) => {
+                        warn!(error = %e, "legacy client setup failed (non-fatal in hybrid mode)");
+                    }
+                }
             }
             AuthCredentials::Cloud { .. } => {
                 let _ = self.inner.connection_state.send(ConnectionState::Failed);

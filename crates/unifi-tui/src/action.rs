@@ -291,4 +291,13 @@ pub enum Action {
         config: Box<unifi_core::ControllerConfig>,
     },
     OnboardingTestResult(Result<(), String>),
+
+    // ── Settings ────────────────────────────────────────────────────
+    OpenSettings,
+    CloseSettings,
+    SettingsTestResult(Result<(), String>),
+    SettingsApply {
+        profile_name: String,
+        config: Box<unifi_core::ControllerConfig>,
+    },
 }

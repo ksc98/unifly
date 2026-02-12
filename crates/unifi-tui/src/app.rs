@@ -209,6 +209,17 @@ impl App {
             return Ok(None);
         }
 
+        // Settings screen captures all keys except Ctrl+C
+        if self.active_screen == ScreenId::Settings {
+            if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('c') {
+                return Ok(Some(Action::Quit));
+            }
+            if let Some(screen) = self.screens.get_mut(&ScreenId::Settings) {
+                return screen.handle_key_event(key);
+            }
+            return Ok(None);
+        }
+
         // Confirmation dialog captures all input
         if self.pending_confirm.is_some() {
             return match key.code {
@@ -259,6 +270,9 @@ impl App {
 
             // Search
             (KeyModifiers::NONE, KeyCode::Char('/')) => return Ok(Some(Action::OpenSearch)),
+
+            // Settings
+            (KeyModifiers::NONE, KeyCode::Char(',')) => return Ok(Some(Action::OpenSettings)),
 
             // Screen navigation via number keys
             (KeyModifiers::NONE, KeyCode::Char(c @ '1'..='8')) => {
@@ -366,9 +380,14 @@ impl App {
                         self.notification = None;
                     }
                 }
-                // Forward ticks to setup screen for throbber animation
+                // Forward ticks to setup/settings screens for throbber animation
                 if self.active_screen == ScreenId::Setup {
                     if let Some(screen) = self.screens.get_mut(&ScreenId::Setup) {
+                        let _ = screen.update(action);
+                    }
+                }
+                if self.active_screen == ScreenId::Settings {
+                    if let Some(screen) = self.screens.get_mut(&ScreenId::Settings) {
                         let _ = screen.update(action);
                     }
                 }
@@ -518,6 +537,71 @@ impl App {
                         self.action_tx.send(follow_up)?;
                     }
                 }
+            }
+
+            // ── Settings ─────────────────────────────────────────────
+            Action::OpenSettings => {
+                if self.active_screen != ScreenId::Settings
+                    && self.active_screen != ScreenId::Setup
+                {
+                    let mut screen =
+                        crate::screens::settings::SettingsScreen::new();
+                    screen.init(self.action_tx.clone())?;
+                    self.screens.insert(ScreenId::Settings, Box::new(screen));
+                    self.previous_screen = Some(self.active_screen);
+                    if let Some(s) = self.screens.get_mut(&self.active_screen) {
+                        s.set_focused(false);
+                    }
+                    self.active_screen = ScreenId::Settings;
+                    if let Some(s) = self.screens.get_mut(&ScreenId::Settings) {
+                        s.set_focused(true);
+                    }
+                }
+            }
+
+            Action::CloseSettings => {
+                self.screens.remove(&ScreenId::Settings);
+                let target = self.previous_screen.take().unwrap_or(ScreenId::Dashboard);
+                self.active_screen = target;
+                if let Some(s) = self.screens.get_mut(&target) {
+                    s.set_focused(true);
+                }
+            }
+
+            Action::SettingsTestResult(_) => {
+                if let Some(screen) = self.screens.get_mut(&ScreenId::Settings) {
+                    if let Some(follow_up) = screen.update(action)? {
+                        self.action_tx.send(follow_up)?;
+                    }
+                }
+            }
+
+            Action::SettingsApply { config, .. } => {
+                // 1. Cancel old data bridge
+                self.data_cancel.cancel();
+                self.data_cancel = CancellationToken::new();
+
+                // 2. Build new controller
+                let controller = Controller::new(*config.clone());
+                self.controller = Some(controller.clone());
+
+                // 3. Spawn new data bridge
+                let cancel = self.data_cancel.clone();
+                let tx = self.action_tx.clone();
+                tokio::spawn(async move {
+                    crate::data_bridge::spawn_data_bridge(controller, tx, cancel).await;
+                });
+
+                // 4. Close settings, switch to dashboard
+                self.screens.remove(&ScreenId::Settings);
+                self.active_screen = ScreenId::Dashboard;
+                if let Some(s) = self.screens.get_mut(&ScreenId::Dashboard) {
+                    s.set_focused(true);
+                }
+
+                self.action_tx.send(Action::Notify(Notification::success(
+                    "Settings saved, reconnecting\u{2026}",
+                )))?;
             }
 
             // Notifications
@@ -780,9 +864,15 @@ impl App {
     fn render(&self, frame: &mut Frame) {
         let area = frame.area();
 
-        // Onboarding gets the full frame — no tab bar or status bar
+        // Onboarding and Settings get the full frame — no tab bar or status bar
         if self.active_screen == ScreenId::Setup {
             if let Some(screen) = self.screens.get(&ScreenId::Setup) {
+                screen.render(frame, area);
+            }
+            return;
+        }
+        if self.active_screen == ScreenId::Settings {
+            if let Some(screen) = self.screens.get(&ScreenId::Settings) {
                 screen.render(frame, area);
             }
             return;
@@ -883,7 +973,7 @@ impl App {
             }
         };
 
-        let hints = Span::styled(" │ ? help  / search  q quit", theme::key_hint());
+        let hints = Span::styled(" │ ? help  / search  , settings  q quit", theme::key_hint());
 
         let line = Line::from(vec![Span::raw(" "), connection_indicator, hints]);
 
@@ -971,7 +1061,9 @@ impl App {
                 Span::styled("Filter", theme::key_hint()),
             ]),
             Line::from(vec![
-                Span::styled("  q         ", theme::key_hint_key()),
+                Span::styled("  ,         ", theme::key_hint_key()),
+                Span::styled("Settings            ", theme::key_hint()),
+                Span::styled("q  ", theme::key_hint_key()),
                 Span::styled("Quit", theme::key_hint()),
             ]),
             Line::from(""),

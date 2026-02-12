@@ -129,14 +129,29 @@ fn build_controller(cli: &Cli) -> Option<Controller> {
 
 /// Try loading a controller from the shared config file (default profile).
 fn build_controller_from_config() -> Option<Controller> {
-    let cfg = unifi_config::load_config().ok()?;
-    let profile_name = cfg
-        .default_profile
-        .as_deref()
-        .unwrap_or("default");
-    let profile = cfg.profiles.get(profile_name)?;
-    let config = unifi_config::profile_to_controller_config(profile, profile_name).ok()?;
-    Some(Controller::new(config))
+    let cfg = match unifi_config::load_config() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            tracing::warn!("failed to load config: {e}");
+            return None;
+        }
+    };
+
+    let profile_name = cfg.default_profile.as_deref().unwrap_or("default");
+
+    let Some(profile) = cfg.profiles.get(profile_name) else {
+        tracing::warn!("profile '{profile_name}' not found in config (available: {:?})",
+            cfg.profiles.keys().collect::<Vec<_>>());
+        return None;
+    };
+
+    match unifi_config::profile_to_controller_config(profile, profile_name) {
+        Ok(config) => Some(Controller::new(config)),
+        Err(e) => {
+            tracing::warn!("failed to build controller from profile '{profile_name}': {e}");
+            None
+        }
+    }
 }
 
 #[tokio::main]

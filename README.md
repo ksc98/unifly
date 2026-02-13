@@ -241,29 +241,11 @@ Navigate with number keys `1`–`8` or `Tab`/`Shift+Tab`:
 
 ### Dashboard
 
-The dashboard packs six live panels into a single view:
+The dashboard packs seven live panels into a single view:
 
-```
-╭── UniFi Dashboard ──────────────────────────────────────────────────────────╮
-│ ╭─ WAN Traffic ── TX 1.2 Mbps ↑  RX 19.1 Mbps ↓ ── Peak 45.2 Mbps ────╮ │
-│ │ ⠀⠀⣀⣤⣴⣶⣿⣿⣿⣶⣴⣤⣀⠀⠀⠀⣀⣤⣴⣶⣿⣿⣿⣶⣴⣤⣀⠀⠀⣤⣶⣿⣿⣿⣶⣴⣤⣀⠀⠀⣀⣤⣴⣶⣿⣿      │ │
-│ ╰────────────────────────────────────────────────────────────────────────╯ │
-│ ╭─ Gateway ──────────────╮ ╭─ System Health ─────────────────────────────╮ │
-│ │ ◈ UCG Max (4.0.6)      │ │ WAN ● ok  WWW ● ok  WLAN ● ok  LAN ● ok  │ │
-│ │ WAN  73.181.162.169     │ │ CPU ████████████░░░░░░░░ 45%              │ │
-│ │ DNS  1.1.1.1            │ │ MEM ██████████░░░░░░░░░░ 32%              │ │
-│ │ Lat  10ms  Up 47d       │ │ 10 Devices · 44 Clients (34W 10E)        │ │
-│ ╰────────────────────────╯ ╰────────────────────────────────────────────╯ │
-│ ╭─ Networks ─────────────────────╮ ╭─ Top Clients ───────────────────────╮ │
-│ │ Default    1  192.168.1.0/24   │ │ pixelle        ████████▏  5.7 GiB  │ │
-│ │  ⬡ IPv6 PD 2001:db8:1::/64    │ │ macbook-pro    ██▏        1.4 GiB  │ │
-│ │ IoT       20  10.0.20.0/24    │ │ iphone-13      █▍          890 MiB │ │
-│ ╰────────────────────────────────╯ ╰────────────────────────────────────╯ │
-│ ╭─ Recent Events ───────────────────────────────────────────────────────╮  │
-│ │ 14:23 ● AP-LR connected       14:21 ● pixelle associated to UniFi   │  │
-│ ╰──────────────────────────────────────────────────────────────────────╯  │
-╰──────────────────────────────────────────────────────────────────────────────╯
-```
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="unifly-tui dashboard" width="900">
+</p>
 
 - **WAN Traffic** — Braille line chart with live TX/RX rates and peak tracking
 - **Gateway** — WAN IP, DNS, latency, uptime, ISP name, IPv6 when available
@@ -271,6 +253,16 @@ The dashboard packs six live panels into a single view:
 - **Networks** — VLANs sorted by ID with IPv6 prefix delegation and mode
 - **Top Clients** — Proportional traffic bars with fractional block characters
 - **Recent Events** — Compact two-per-line event display
+
+### Devices & Clients
+
+<p align="center">
+  <img src="docs/images/devices.png" alt="unifly-tui devices" width="900">
+</p>
+
+<p align="center">
+  <img src="docs/images/clients.png" alt="unifly-tui clients" width="900">
+</p>
 
 ### Key Bindings
 

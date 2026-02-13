@@ -254,14 +254,14 @@ The dashboard packs seven live panels into a single view:
 - **Top Clients** — Proportional traffic bars with fractional block characters
 - **Recent Events** — Compact two-per-line event display
 
-### Devices & Clients
+### Devices & Firewall
 
 <p align="center">
   <img src="docs/images/devices.png" alt="unifly-tui devices" width="900">
 </p>
 
 <p align="center">
-  <img src="docs/images/clients.png" alt="unifly-tui clients" width="900">
+  <img src="docs/images/firewall.png" alt="unifly-tui firewall" width="900">
 </p>
 
 ### Key Bindings

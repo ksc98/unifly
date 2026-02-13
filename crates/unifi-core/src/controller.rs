@@ -74,6 +74,8 @@ struct ControllerInner {
     /// WebSocket event stream handle (populated on connect if enabled).
     ws_handle: Mutex<Option<WebSocketHandle>>,
     task_handles: Mutex<Vec<JoinHandle<()>>>,
+    /// Warnings accumulated during connect (e.g. Legacy auth failure in Hybrid mode).
+    warnings: Mutex<Vec<String>>,
 }
 
 impl Controller {
@@ -99,6 +101,7 @@ impl Controller {
                 cancel_child: Mutex::new(cancel_child),
                 legacy_client: Mutex::new(None),
                 integration_client: Mutex::new(None),
+                warnings: Mutex::new(Vec::new()),
                 site_id: Mutex::new(None),
                 ws_handle: Mutex::new(None),
                 task_handles: Mutex::new(Vec::new()),
@@ -224,11 +227,15 @@ impl Controller {
                             *self.inner.legacy_client.lock().await = Some(client);
                         }
                         Err(e) => {
-                            warn!(error = %e, "legacy login failed (non-fatal in hybrid mode — stats/events unavailable)");
+                            let msg = format!("Legacy login failed: {e} — events, health stats, and client traffic will be unavailable");
+                            warn!("{msg}");
+                            self.inner.warnings.lock().await.push(msg);
                         }
                     },
                     Err(e) => {
-                        warn!(error = %e, "legacy client setup failed (non-fatal in hybrid mode)");
+                        let msg = format!("Legacy client setup failed: {e}");
+                        warn!("{msg}");
+                        self.inner.warnings.lock().await.push(msg);
                     }
                 }
             }
@@ -456,7 +463,7 @@ impl Controller {
 
             // Core endpoints — failure is fatal
             let devices: Vec<Device> = devices_res?.into_iter().map(Device::from).collect();
-            let clients: Vec<Client> = clients_res?.into_iter().map(Client::from).collect();
+            let mut clients: Vec<Client> = clients_res?.into_iter().map(Client::from).collect();
             let networks: Vec<Network> = networks_res?.into_iter().map(Network::from).collect();
             let wifi: Vec<WifiBroadcast> = wifi_res?.into_iter().map(WifiBroadcast::from).collect();
             let policies: Vec<FirewallPolicy> = policies_res?
@@ -475,25 +482,125 @@ impl Controller {
             let dns: Vec<DnsPolicy> = unwrap_or_empty("dns/policies", dns_res);
             let vouchers: Vec<Voucher> = unwrap_or_empty("vouchers", vouchers_res);
 
+            // Enrich devices with per-device statistics (parallel, non-fatal)
+            info!(device_count = devices.len(), "enriching devices with statistics");
+            let devices = {
+                let futs = devices.into_iter().map(|mut device| async {
+                    if let EntityId::Uuid(device_uuid) = &device.id {
+                        match integration.get_device_statistics(&sid, device_uuid).await {
+                            Ok(stats_resp) => {
+                                device.stats =
+                                    crate::convert::device_stats_from_integration(&stats_resp);
+                            }
+                            Err(e) => {
+                                warn!(
+                                    device = ?device.name,
+                                    error = %e,
+                                    "device stats fetch failed"
+                                );
+                            }
+                        }
+                    }
+                    device
+                });
+                futures_util::future::join_all(futs).await
+            };
+
             drop(integration_guard);
 
-            // Supplement with Legacy API events (not available in Integration API)
-            let legacy_events = match *self.inner.legacy_client.lock().await {
-                Some(ref legacy) => match legacy.list_events(Some(100)).await {
-                    Ok(raw_events) => {
-                        let events: Vec<Event> = raw_events.into_iter().map(Event::from).collect();
-                        for event in &events {
-                            let _ = self.inner.event_tx.send(Arc::new(event.clone()));
+            // Supplement with Legacy API data (events, health, client traffic)
+            let (legacy_events, legacy_health, legacy_clients): (
+                Vec<Event>,
+                Vec<HealthSummary>,
+                Vec<unifi_api::legacy::models::LegacyClientEntry>,
+            ) = match *self.inner.legacy_client.lock().await {
+                    Some(ref legacy) => {
+                        let (events_res, health_res, clients_res) = tokio::join!(
+                            legacy.list_events(Some(100)),
+                            legacy.get_health(),
+                            legacy.list_clients(),
+                        );
+
+                        let events = match events_res {
+                            Ok(raw) => {
+                                let evts: Vec<Event> =
+                                    raw.into_iter().map(Event::from).collect();
+                                for evt in &evts {
+                                    let _ =
+                                        self.inner.event_tx.send(Arc::new(evt.clone()));
+                                }
+                                evts
+                            }
+                            Err(e) => {
+                                warn!(error = %e, "legacy event fetch failed (non-fatal)");
+                                Vec::new()
+                            }
+                        };
+
+                        let health = match health_res {
+                            Ok(raw) => convert_health_summaries(raw),
+                            Err(e) => {
+                                warn!(error = %e, "legacy health fetch failed (non-fatal)");
+                                Vec::new()
+                            }
+                        };
+
+                        let lc = match clients_res {
+                            Ok(raw) => raw,
+                            Err(e) => {
+                                warn!(
+                                    error = %e,
+                                    "legacy client fetch failed (non-fatal)"
+                                );
+                                Vec::new()
+                            }
+                        };
+
+                        (events, health, lc)
+                    }
+                    None => (Vec::new(), Vec::new(), Vec::new()),
+                };
+
+            // Merge Legacy client traffic (tx/rx bytes, hostname) into Integration clients.
+            // Match by IP address — Integration API clients often lack real MAC addresses
+            // in the access object, falling back to UUIDs which don't match Legacy MACs.
+            if !legacy_clients.is_empty() {
+                let legacy_by_ip: HashMap<&str, &unifi_api::legacy::models::LegacyClientEntry> =
+                    legacy_clients
+                        .iter()
+                        .filter_map(|lc| lc.ip.as_deref().map(|ip| (ip, lc)))
+                        .collect();
+                let mut merged = 0u32;
+                for client in &mut clients {
+                    let ip_key = client.ip.map(|ip| ip.to_string());
+                    if let Some(lc) = ip_key.as_deref().and_then(|ip| legacy_by_ip.get(ip)) {
+                        if client.tx_bytes.is_none() {
+                            client.tx_bytes = lc.tx_bytes.and_then(|b| u64::try_from(b).ok());
                         }
-                        events
+                        if client.rx_bytes.is_none() {
+                            client.rx_bytes = lc.rx_bytes.and_then(|b| u64::try_from(b).ok());
+                        }
+                        if client.hostname.is_none() {
+                            client.hostname.clone_from(&lc.hostname);
+                        }
+                        merged += 1;
                     }
-                    Err(e) => {
-                        debug!(error = %e, "legacy event fetch failed (non-fatal)");
-                        Vec::new()
-                    }
-                },
-                None => Vec::new(),
-            };
+                }
+                debug!(
+                    total_clients = clients.len(),
+                    legacy_available = legacy_by_ip.len(),
+                    merged,
+                    "client traffic merge (by IP)"
+                );
+            }
+
+            // Push health to DataStore
+            if !legacy_health.is_empty() {
+                self.inner
+                    .store
+                    .site_health
+                    .send_modify(|h| *h = Arc::new(legacy_health));
+            }
 
             self.inner
                 .store
@@ -716,6 +823,16 @@ impl Controller {
 
     pub fn traffic_matching_lists(&self) -> EntityStream<TrafficMatchingList> {
         self.inner.store.subscribe_traffic_matching_lists()
+    }
+
+    /// Subscribe to site health updates (WAN IP, latency, bandwidth rates).
+    pub fn site_health(&self) -> watch::Receiver<Arc<Vec<HealthSummary>>> {
+        self.inner.store.subscribe_site_health()
+    }
+
+    /// Drain warnings accumulated during connect (e.g. Legacy auth failure).
+    pub async fn take_warnings(&self) -> Vec<String> {
+        std::mem::take(&mut *self.inner.warnings.lock().await)
     }
 
     // ── Ad-hoc Integration API queries ───────────────────────────
@@ -1148,36 +1265,7 @@ impl Controller {
         let guard = self.inner.legacy_client.lock().await;
         let legacy = require_legacy(&guard)?;
         let raw = legacy.get_health().await?;
-        Ok(raw
-            .into_iter()
-            .map(|v| HealthSummary {
-                subsystem: v
-                    .get("subsystem")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("unknown")
-                    .to_owned(),
-                status: v
-                    .get("status")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("unknown")
-                    .to_owned(),
-                num_adopted: v
-                    .get("num_adopted")
-                    .and_then(serde_json::Value::as_u64)
-                    .map(|n| n as u32),
-                num_sta: v.get("num_sta").and_then(serde_json::Value::as_u64).map(|n| n as u32),
-                tx_bytes_r: v.get("tx_bytes-r").and_then(serde_json::Value::as_u64),
-                rx_bytes_r: v.get("rx_bytes-r").and_then(serde_json::Value::as_u64),
-                latency: v.get("latency").and_then(serde_json::Value::as_f64),
-                wan_ip: v.get("wan_ip").and_then(|v| v.as_str()).map(String::from),
-                gateways: v.get("gateways").and_then(|v| v.as_array()).map(|a| {
-                    a.iter()
-                        .filter_map(|g| g.as_str().map(String::from))
-                        .collect()
-                }),
-                extra: v,
-            })
-            .collect())
+        Ok(convert_health_summaries(raw))
     }
 
     /// Fetch low-level sysinfo from the Legacy API.
@@ -1859,6 +1947,45 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
+
+/// Convert raw health JSON values into domain `HealthSummary` types.
+fn convert_health_summaries(raw: Vec<serde_json::Value>) -> Vec<HealthSummary> {
+    raw.into_iter()
+        .map(|v| HealthSummary {
+            subsystem: v
+                .get("subsystem")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
+                .to_owned(),
+            status: v
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
+                .to_owned(),
+            num_adopted: v
+                .get("num_adopted")
+                .and_then(serde_json::Value::as_u64)
+                .map(|n| n as u32),
+            num_sta: v
+                .get("num_sta")
+                .and_then(serde_json::Value::as_u64)
+                .map(|n| n as u32),
+            tx_bytes_r: v.get("tx_bytes-r").and_then(serde_json::Value::as_u64),
+            rx_bytes_r: v.get("rx_bytes-r").and_then(serde_json::Value::as_u64),
+            latency: v.get("latency").and_then(serde_json::Value::as_f64),
+            wan_ip: v
+                .get("wan_ip")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            gateways: v.get("gateways").and_then(|v| v.as_array()).map(|a| {
+                a.iter()
+                    .filter_map(|g| g.as_str().map(String::from))
+                    .collect()
+            }),
+            extra: v,
+        })
+        .collect()
+}
 
 /// Build a [`TransportConfig`] from the controller configuration.
 fn build_transport(config: &ControllerConfig) -> TransportConfig {

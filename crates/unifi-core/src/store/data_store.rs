@@ -9,7 +9,7 @@ use chrono::{DateTime, Utc};
 use tokio::sync::watch;
 
 use super::collection::EntityCollection;
-use crate::model::{Device, Client, Network, WifiBroadcast, FirewallPolicy, FirewallZone, AclRule, DnsPolicy, Voucher, Site, Event, TrafficMatchingList, MacAddress, EntityId};
+use crate::model::{Device, Client, Network, WifiBroadcast, FirewallPolicy, FirewallZone, AclRule, DnsPolicy, Voucher, Site, Event, TrafficMatchingList, MacAddress, EntityId, HealthSummary};
 use crate::stream::EntityStream;
 
 /// Central reactive store for all UniFi domain entities.
@@ -30,12 +30,14 @@ pub struct DataStore {
     pub(crate) sites: EntityCollection<Site>,
     pub(crate) events: EntityCollection<Event>,
     pub(crate) traffic_matching_lists: EntityCollection<TrafficMatchingList>,
+    pub(crate) site_health: watch::Sender<Arc<Vec<HealthSummary>>>,
     pub(crate) last_full_refresh: watch::Sender<Option<DateTime<Utc>>>,
     pub(crate) last_ws_event: watch::Sender<Option<DateTime<Utc>>>,
 }
 
 impl DataStore {
     pub fn new() -> Self {
+        let (site_health, _) = watch::channel(Arc::new(Vec::new()));
         let (last_full_refresh, _) = watch::channel(None);
         let (last_ws_event, _) = watch::channel(None);
 
@@ -52,6 +54,7 @@ impl DataStore {
             sites: EntityCollection::new(),
             events: EntityCollection::new(),
             traffic_matching_lists: EntityCollection::new(),
+            site_health,
             last_full_refresh,
             last_ws_event,
         }
@@ -191,6 +194,16 @@ impl DataStore {
 
     pub fn subscribe_traffic_matching_lists(&self) -> EntityStream<TrafficMatchingList> {
         EntityStream::new(self.traffic_matching_lists.subscribe())
+    }
+
+    // ── Site health ──────────────────────────────────────────────────
+
+    pub fn site_health_snapshot(&self) -> Arc<Vec<HealthSummary>> {
+        self.site_health.borrow().clone()
+    }
+
+    pub fn subscribe_site_health(&self) -> watch::Receiver<Arc<Vec<HealthSummary>>> {
+        self.site_health.subscribe()
     }
 
     // ── Metadata ─────────────────────────────────────────────────────

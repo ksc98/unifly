@@ -24,7 +24,7 @@ use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Sparkline as Ratat
 use tokio::sync::mpsc::UnboundedSender;
 
 use unifi_core::model::EventSeverity;
-use unifi_core::{Client, Device, DeviceState, Event};
+use unifi_core::{Client, Device, DeviceState, Event, HealthSummary};
 
 use crate::action::Action;
 use crate::component::Component;
@@ -38,6 +38,7 @@ pub struct DashboardScreen {
     devices: Arc<Vec<Arc<Device>>>,
     clients: Arc<Vec<Arc<Client>>>,
     events: Vec<Arc<Event>>,
+    health: Arc<Vec<HealthSummary>>,
     /// Ring buffer of bandwidth samples (tx_bps, rx_bps) for sparklines.
     bandwidth_tx: Vec<u64>,
     bandwidth_rx: Vec<u64>,
@@ -52,6 +53,7 @@ impl DashboardScreen {
             devices: Arc::new(Vec::new()),
             clients: Arc::new(Vec::new()),
             events: Vec::new(),
+            health: Arc::new(Vec::new()),
             bandwidth_tx: Vec::new(),
             bandwidth_rx: Vec::new(),
             last_data_update: None,
@@ -187,17 +189,29 @@ impl DashboardScreen {
         let inner = block.inner(area);
         frame.render_widget(block, area);
 
-        // Derive stats from devices
+        // Derive stats from devices + health
         let gateway = self
             .devices
             .iter()
             .find(|d| d.device_type == unifi_core::DeviceType::Gateway);
+        let wan_health = self.health.iter().find(|h| h.subsystem == "wan");
+        let www_health = self.health.iter().find(|h| h.subsystem == "www");
 
         let uptime_str = gateway
-            .and_then(|g| g.stats.uptime_secs).map_or_else(|| "─".into(), bytes_fmt::fmt_uptime);
+            .and_then(|g| g.stats.uptime_secs)
+            .map_or_else(|| "─".into(), bytes_fmt::fmt_uptime);
 
         let wan_ip = gateway
-            .and_then(|g| g.ip).map_or_else(|| "─".into(), |ip| ip.to_string());
+            .and_then(|g| g.ip)
+            .map(|ip| ip.to_string())
+            .or_else(|| wan_health.and_then(|h| h.wan_ip.clone()))
+            .unwrap_or_else(|| "─".into());
+
+        // ISP latency lives in the "www" subsystem (internet connectivity test),
+        // not "wan" (which has IP/bandwidth but not latency).
+        let latency_str = www_health
+            .and_then(|h| h.latency)
+            .map_or_else(|| "─".into(), |l| format!("{l:.0}ms"));
 
         let outdated_fw = self.devices.iter().filter(|d| d.firmware_updatable).count();
 
@@ -231,8 +245,9 @@ impl DashboardScreen {
                 Span::styled(format!("{guests}"), Style::default().fg(theme::DIM_WHITE)),
             ]),
             Line::from(vec![
-                Span::styled("  ISP Latency    ─", Style::default().fg(theme::DIM_WHITE)),
-                Span::styled("     VPN Clients ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled("  ISP Latency  ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(latency_str, Style::default().fg(theme::NEON_CYAN)),
+                Span::styled("   VPN Clients ", Style::default().fg(theme::DIM_WHITE)),
                 Span::styled(
                     format!("{vpn_clients}"),
                     Style::default().fg(theme::DIM_WHITE),
@@ -459,6 +474,22 @@ impl Component for DashboardScreen {
                 // Keep last 100 events for dashboard display
                 if self.events.len() > 100 {
                     self.events.remove(0);
+                }
+            }
+            Action::HealthUpdated(health) => {
+                self.health = Arc::clone(health);
+                // Use WAN health bandwidth as sparkline source when device stats lack it
+                if let Some(wan) = self.health.iter().find(|h| h.subsystem == "wan") {
+                    let tx = wan.tx_bytes_r.unwrap_or(0);
+                    let rx = wan.rx_bytes_r.unwrap_or(0);
+                    if tx > 0 || rx > 0 {
+                        self.bandwidth_tx.push(tx);
+                        self.bandwidth_rx.push(rx);
+                        if self.bandwidth_tx.len() > 60 {
+                            self.bandwidth_tx.remove(0);
+                            self.bandwidth_rx.remove(0);
+                        }
+                    }
                 }
             }
             _ => {}

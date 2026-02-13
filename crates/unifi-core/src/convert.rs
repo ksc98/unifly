@@ -18,7 +18,7 @@ use unifi_api::websocket::UnifiEvent;
 
 use crate::model::{
     client::{Client, ClientType, GuestAuth, WirelessInfo},
-    common::{DataSource, EntityOrigin},
+    common::{Bandwidth, DataSource, EntityOrigin},
     device::{Device, DeviceState, DeviceStats, DeviceType},
     dns::{DnsPolicy, DnsPolicyType},
     entity_id::{EntityId, MacAddress},
@@ -72,6 +72,8 @@ fn infer_device_type(device_type: &str, model: Option<&String>) -> DeviceType {
                     || upper.starts_with("UDM")
                     || upper.starts_with("UDR")
                     || upper.starts_with("UXG")
+                    || upper.starts_with("UCG")
+                    || upper.starts_with("UCK")
                 {
                     DeviceType::Gateway
                 } else {
@@ -454,7 +456,17 @@ fn map_integration_device_state(state: &str) -> DeviceState {
 fn infer_device_type_integration(features: &[String], model: &str) -> DeviceType {
     let has = |f: &str| features.iter().any(|s| s == f);
 
-    if has("switching") && has("routing") {
+    // Check model prefix first — some gateways (UCG Max) report "switching"
+    // without "routing", which would misclassify them as switches.
+    let upper = model.to_uppercase();
+    let is_gateway_model = upper.starts_with("UGW")
+        || upper.starts_with("UDM")
+        || upper.starts_with("UDR")
+        || upper.starts_with("UXG")
+        || upper.starts_with("UCG")
+        || upper.starts_with("UCK");
+
+    if is_gateway_model || (has("switching") && has("routing")) || has("gateway") {
         DeviceType::Gateway
     } else if has("accessPoint") {
         DeviceType::AccessPoint
@@ -501,6 +513,44 @@ impl From<integration_types::DeviceResponse> for Device {
             source: DataSource::IntegrationApi,
             updated_at: Utc::now(),
         }
+    }
+}
+
+/// Convert Integration API device statistics into domain `DeviceStats`.
+pub(crate) fn device_stats_from_integration(
+    resp: &integration_types::DeviceStatisticsResponse,
+) -> DeviceStats {
+    DeviceStats {
+        uptime_secs: resp.uptime_sec.and_then(|u| u.try_into().ok()),
+        cpu_utilization_pct: resp.cpu_utilization_pct,
+        memory_utilization_pct: resp.memory_utilization_pct,
+        load_average_1m: resp.load_average_1_min,
+        load_average_5m: resp.load_average_5_min,
+        load_average_15m: resp.load_average_15_min,
+        last_heartbeat: resp.last_heartbeat_at.as_deref().and_then(parse_iso),
+        next_heartbeat: resp.next_heartbeat_at.as_deref().and_then(parse_iso),
+        uplink_bandwidth: resp.uplink.as_ref().and_then(|u| {
+            let tx = u
+                .get("txRateBps")
+                .or_else(|| u.get("txBytesPerSecond"))
+                .or_else(|| u.get("tx_bytes-r"))
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0);
+            let rx = u
+                .get("rxRateBps")
+                .or_else(|| u.get("rxBytesPerSecond"))
+                .or_else(|| u.get("rx_bytes-r"))
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0);
+            if tx == 0 && rx == 0 {
+                None
+            } else {
+                Some(Bandwidth {
+                    tx_bytes_per_sec: tx,
+                    rx_bytes_per_sec: rx,
+                })
+            }
+        }),
     }
 }
 
@@ -1080,6 +1130,30 @@ mod tests {
         );
         assert_eq!(
             infer_device_type("unknown", Some(&"UDM-Pro".into())),
+            DeviceType::Gateway
+        );
+        assert_eq!(
+            infer_device_type("unknown", Some(&"UCG-Max".into())),
+            DeviceType::Gateway
+        );
+    }
+
+    #[test]
+    fn integration_device_type_gateway_by_model() {
+        // UCG Max has "switching" but not "routing" — should still be Gateway
+        assert_eq!(
+            infer_device_type_integration(
+                &["switching".into()],
+                "UCG-Max"
+            ),
+            DeviceType::Gateway
+        );
+        // UDM with both features
+        assert_eq!(
+            infer_device_type_integration(
+                &["switching".into(), "routing".into()],
+                "UDM-Pro"
+            ),
             DeviceType::Gateway
         );
     }

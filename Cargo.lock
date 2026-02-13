@@ -4179,6 +4179,7 @@ dependencies = [
  "chrono",
  "dashmap",
  "futures-core",
+ "futures-util",
  "insta",
  "secrecy",
  "serde",

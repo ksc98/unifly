@@ -33,6 +33,14 @@ pub async fn spawn_data_bridge(
 
     let _ = action_tx.send(Action::Connected);
 
+    // Surface any warnings from connect (e.g. Legacy auth failure)
+    for warning in controller.take_warnings().await {
+        let _ = action_tx.send(Action::Notify(crate::action::Notification {
+            message: warning,
+            level: crate::action::NotificationLevel::Warning,
+        }));
+    }
+
     // Subscribe to entity streams
     let mut devices = controller.devices();
     let mut clients = controller.clients();
@@ -43,6 +51,7 @@ pub async fn spawn_data_bridge(
     let mut wifi = controller.wifi_broadcasts();
     let mut events = controller.events();
     let mut conn_state = controller.connection_state();
+    let mut site_health = controller.site_health();
 
     // Push initial snapshots so screens have data immediately
     let _ = action_tx.send(Action::DevicesUpdated(devices.current().clone()));
@@ -54,6 +63,12 @@ pub async fn spawn_data_bridge(
     let _ = action_tx.send(Action::FirewallZonesUpdated(fw_zones.current().clone()));
     let _ = action_tx.send(Action::AclRulesUpdated(acl_rules.current().clone()));
     let _ = action_tx.send(Action::WifiBroadcastsUpdated(wifi.current().clone()));
+
+    // Push initial health snapshot
+    let health_snap = site_health.borrow_and_update().clone();
+    if !health_snap.is_empty() {
+        let _ = action_tx.send(Action::HealthUpdated(health_snap));
+    }
 
     // Stream loop — forward every change until cancelled
     loop {
@@ -85,6 +100,10 @@ pub async fn spawn_data_bridge(
             }
             Ok(event) = events.recv() => {
                 let _ = action_tx.send(Action::EventReceived(event));
+            }
+            Ok(()) = site_health.changed() => {
+                let h = site_health.borrow_and_update().clone();
+                let _ = action_tx.send(Action::HealthUpdated(h));
             }
             Ok(()) = conn_state.changed() => {
                 let state = conn_state.borrow_and_update().clone();

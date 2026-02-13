@@ -23,6 +23,7 @@ tracing      = { workspace = true }
 dashmap      = { workspace = true }
 arc-swap     = { workspace = true }
 futures-core = { workspace = true }
+futures-util = { workspace = true }
 chrono       = { workspace = true }
 uuid         = { workspace = true }
 secrecy      = { workspace = true }

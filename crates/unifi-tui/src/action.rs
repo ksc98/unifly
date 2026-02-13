@@ -208,6 +208,7 @@ pub enum Action {
     AclRulesUpdated(Arc<Vec<Arc<AclRule>>>),
     WifiBroadcastsUpdated(Arc<Vec<Arc<WifiBroadcast>>>),
     EventReceived(Arc<Event>),
+    HealthUpdated(Arc<Vec<unifi_core::HealthSummary>>),
     SiteUpdated(Arc<Site>),
 
     // ── Connection Status ─────────────────────────────────────────

@@ -43,7 +43,7 @@ impl TransportConfig {
     pub fn build_client(&self) -> Result<reqwest::Client, crate::error::Error> {
         let mut builder = reqwest::Client::builder()
             .timeout(self.timeout)
-            .user_agent("unifi-cli/0.1.0");
+            .user_agent("unifly/0.1.0");
 
         match &self.tls {
             TlsMode::System => {}
@@ -78,7 +78,7 @@ impl TransportConfig {
     ) -> Result<reqwest::Client, crate::error::Error> {
         let mut builder = reqwest::Client::builder()
             .timeout(self.timeout)
-            .user_agent("unifi-cli/0.1.0")
+            .user_agent("unifly/0.1.0")
             .default_headers(headers);
 
         match &self.tls {

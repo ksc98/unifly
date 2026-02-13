@@ -1,6 +1,6 @@
 [package]
 name = "unifi-core"
-description = "Business logic and shared services for unifi-cli tools"
+description = "Business logic and shared services for unifly"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

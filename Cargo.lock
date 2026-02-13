@@ -4120,42 +4120,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "unifi-cli"
-version = "0.1.0"
-dependencies = [
- "assert_cmd",
- "chrono",
- "clap",
- "clap_complete",
- "clap_mangen",
- "dialoguer",
- "directories",
- "figment",
- "indicatif",
- "insta",
- "keyring",
- "miette",
- "owo-colors",
- "predicates",
- "rpassword",
- "secrecy",
- "serde",
- "serde_json",
- "serde_yaml",
- "tabled",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "toml 0.8.23",
- "tracing",
- "tracing-subscriber",
- "unifi-config",
- "unifi-core",
- "url",
- "wiremock",
-]
-
-[[package]]
 name = "unifi-config"
 version = "0.1.0"
 dependencies = [
@@ -4198,7 +4162,43 @@ dependencies = [
 ]
 
 [[package]]
-name = "unifi-tui"
+name = "unifly"
+version = "0.1.0"
+dependencies = [
+ "assert_cmd",
+ "chrono",
+ "clap",
+ "clap_complete",
+ "clap_mangen",
+ "dialoguer",
+ "directories",
+ "figment",
+ "indicatif",
+ "insta",
+ "keyring",
+ "miette",
+ "owo-colors",
+ "predicates",
+ "rpassword",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tabled",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.8.23",
+ "tracing",
+ "tracing-subscriber",
+ "unifi-config",
+ "unifi-core",
+ "url",
+ "wiremock",
+]
+
+[[package]]
+name = "unifly-tui"
 version = "0.1.0"
 dependencies = [
  "better-panic",

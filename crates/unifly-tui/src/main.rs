@@ -1,11 +1,11 @@
-//! `unifi-tui` — Real-time terminal dashboard for UniFi network monitoring.
+//! `unifly-tui` — Real-time terminal dashboard for UniFi network monitoring.
 //!
 //! Built on [ratatui](https://ratatui.rs) with reactive data from
 //! `unifi-core`'s [`EntityStream`](unifi_core::EntityStream). Screens are
 //! navigable via number keys (1-8): Dashboard, Devices, Clients, Networks,
 //! Firewall, Topology, Events, and Stats.
 //!
-//! Logs are written to a file (default `/tmp/unifi-tui.log`) to avoid
+//! Logs are written to a file (default `/tmp/unifly-tui.log`) to avoid
 //! corrupting the terminal UI. A background data bridge task continuously
 //! streams entity updates from the controller into the TUI action loop.
 //!
@@ -37,7 +37,7 @@ use crate::app::App;
 
 /// Terminal dashboard for monitoring and managing UniFi networks.
 #[derive(Parser, Debug)]
-#[command(name = "unifi-tui", version, about)]
+#[command(name = "unifly-tui", version, about)]
 struct Cli {
     /// UniFi Controller URL (e.g., https://192.168.1.1)
     #[arg(short = 'u', long, env = "UNIFI_URL")]
@@ -51,8 +51,8 @@ struct Cli {
     #[arg(short = 'k', long, env = "UNIFI_API_KEY")]
     api_key: Option<String>,
 
-    /// Log file path (defaults to /tmp/unifi-tui.log)
-    #[arg(long, default_value = "/tmp/unifi-tui.log")]
+    /// Log file path (defaults to /tmp/unifly-tui.log)
+    #[arg(long, default_value = "/tmp/unifly-tui.log")]
     log_file: PathBuf,
 
     /// Increase log verbosity (-v info, -vv debug, -vvv trace)
@@ -73,7 +73,7 @@ fn setup_tracing(cli: &Cli) -> WorkerGuard {
 
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         EnvFilter::new(format!(
-            "unifi_tui={log_level},unifi_core={log_level},unifi_api={log_level}"
+            "unifly_tui={log_level},unifi_core={log_level},unifi_api={log_level}"
         ))
     });
 
@@ -84,7 +84,7 @@ fn setup_tracing(cli: &Cli) -> WorkerGuard {
     let log_filename = cli
         .log_file
         .file_name()
-        .unwrap_or(std::ffi::OsStr::new("unifi-tui.log"));
+        .unwrap_or(std::ffi::OsStr::new("unifly-tui.log"));
 
     let file_appender = tracing_appender::rolling::never(log_dir, log_filename);
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
@@ -170,7 +170,7 @@ async fn main() -> Result<()> {
     info!(
         url = cli.url.as_deref().unwrap_or("(not set)"),
         site = %cli.site,
-        "starting unifi-tui"
+        "starting unifly-tui"
     );
 
     // Priority: CLI flags > config file > onboarding wizard

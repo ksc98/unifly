@@ -116,7 +116,7 @@ fn prompt_keyring_storage(
 
     if selection == 0 {
         let entry =
-            keyring::Entry::new("unifi-cli", keyring_key).map_err(|e| CliError::Validation {
+            keyring::Entry::new("unifly", keyring_key).map_err(|e| CliError::Validation {
                 field: "keyring".into(),
                 reason: format!("failed to access keyring: {e}"),
             })?;
@@ -423,7 +423,7 @@ pub fn handle(args: ConfigArgs, global: &GlobalOpts) -> Result<(), CliError> {
                     });
                 }
                 let entry =
-                    keyring::Entry::new("unifi-cli", key).map_err(|e| CliError::Validation {
+                    keyring::Entry::new("unifly", key).map_err(|e| CliError::Validation {
                         field: "keyring".into(),
                         reason: format!("failed to access keyring: {e}"),
                     })?;

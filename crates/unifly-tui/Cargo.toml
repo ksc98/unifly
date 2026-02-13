@@ -1,5 +1,5 @@
 [package]
-name = "unifi-tui"
+name = "unifly-tui"
 description = "Terminal UI for monitoring and managing UniFi network controllers"
 version.workspace = true
 edition.workspace = true
@@ -12,7 +12,7 @@ authors.workspace = true
 workspace = true
 
 [[bin]]
-name = "unifi-tui"
+name = "unifly-tui"
 path = "src/main.rs"
 
 [dependencies]

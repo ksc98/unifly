@@ -155,7 +155,7 @@ fn default_auth_mode() -> String {
 
 /// Resolve the config file path via XDG / platform conventions.
 pub fn config_path() -> PathBuf {
-    ProjectDirs::from("com", "unifi-cli", "unifi-cli").map_or_else(
+    ProjectDirs::from("com", "unifly", "unifly").map_or_else(
         || {
             let mut p = dirs_fallback();
             p.push("config.toml");
@@ -168,7 +168,7 @@ pub fn config_path() -> PathBuf {
 fn dirs_fallback() -> PathBuf {
     let mut p = PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into()));
     p.push(".config");
-    p.push("unifi-cli");
+    p.push("unifly");
     p
 }
 
@@ -220,7 +220,7 @@ pub fn resolve_api_key(
     }
 
     // 2. System keyring
-    if let Ok(entry) = keyring::Entry::new("unifi-cli", &format!("{profile_name}/api-key")) {
+    if let Ok(entry) = keyring::Entry::new("unifly", &format!("{profile_name}/api-key")) {
         if let Ok(secret) = entry.get_password() {
             return Ok(SecretString::from(secret));
         }
@@ -255,7 +255,7 @@ pub fn resolve_legacy_credentials(
     }
 
     // 2. Keyring
-    if let Ok(entry) = keyring::Entry::new("unifi-cli", &format!("{profile_name}/password")) {
+    if let Ok(entry) = keyring::Entry::new("unifly", &format!("{profile_name}/password")) {
         if let Ok(pw) = entry.get_password() {
             return Ok((username, SecretString::from(pw)));
         }

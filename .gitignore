@@ -25,7 +25,11 @@ Thumbs.db
 RESEARCH*.md
 research/
 specs/
-docs/
+
+# ── Docs build ──
+docs/node_modules/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
 
 # ── Distribution ──
 dist/

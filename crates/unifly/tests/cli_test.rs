@@ -1,4 +1,4 @@
-//! Integration tests for the `unifi` CLI binary.
+//! Integration tests for the `unifly` CLI binary.
 //!
 //! These tests validate argument parsing, help output, shell completions,
 //! and error handling — all without requiring a live UniFi controller.
@@ -9,14 +9,14 @@ use predicates::prelude::*;
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-/// Build a [`Command`] for the `unifi` binary with env isolation.
+/// Build a [`Command`] for the `unifly` binary with env isolation.
 ///
 /// Clears all `UNIFI_*` env vars and points config directories at a
 /// nonexistent path so tests never touch the user's real configuration.
-fn unifi_cmd() -> assert_cmd::Command {
-    let mut cmd = cargo_bin_cmd!("unifi");
-    cmd.env("HOME", "/tmp/unifi-cli-test-nonexistent")
-        .env("XDG_CONFIG_HOME", "/tmp/unifi-cli-test-nonexistent")
+fn unifly_cmd() -> assert_cmd::Command {
+    let mut cmd = cargo_bin_cmd!("unifly");
+    cmd.env("HOME", "/tmp/unifly-test-nonexistent")
+        .env("XDG_CONFIG_HOME", "/tmp/unifly-test-nonexistent")
         .env_remove("UNIFI_PROFILE")
         .env_remove("UNIFI_CONTROLLER")
         .env_remove("UNIFI_SITE")
@@ -40,7 +40,7 @@ fn combined_output(output: &std::process::Output) -> String {
 
 #[test]
 fn test_no_args_shows_help() {
-    let output = unifi_cmd().output().unwrap();
+    let output = unifly_cmd().output().unwrap();
     assert_eq!(output.status.code(), Some(2), "Expected exit code 2");
     let text = combined_output(&output);
     assert!(
@@ -51,7 +51,7 @@ fn test_no_args_shows_help() {
 
 #[test]
 fn test_help_flag() {
-    unifi_cmd().arg("--help").assert().success().stdout(
+    unifly_cmd().arg("--help").assert().success().stdout(
         predicate::str::contains("UniFi network")
             .and(predicate::str::contains("devices"))
             .and(predicate::str::contains("clients"))
@@ -61,18 +61,18 @@ fn test_help_flag() {
 
 #[test]
 fn test_version_flag() {
-    unifi_cmd()
+    unifly_cmd()
         .arg("--version")
         .assert()
         .success()
-        .stdout(predicate::str::contains("unifi"));
+        .stdout(predicate::str::contains("unifly"));
 }
 
 // ── Shell completions ───────────────────────────────────────────────
 
 #[test]
 fn test_completions_bash() {
-    unifi_cmd()
+    unifly_cmd()
         .args(["completions", "bash"])
         .assert()
         .success()
@@ -81,7 +81,7 @@ fn test_completions_bash() {
 
 #[test]
 fn test_completions_zsh() {
-    unifi_cmd()
+    unifly_cmd()
         .args(["completions", "zsh"])
         .assert()
         .success()
@@ -90,7 +90,7 @@ fn test_completions_zsh() {
 
 #[test]
 fn test_completions_fish() {
-    unifi_cmd()
+    unifly_cmd()
         .args(["completions", "fish"])
         .assert()
         .success()
@@ -101,7 +101,7 @@ fn test_completions_fish() {
 
 #[test]
 fn test_invalid_subcommand() {
-    let output = unifi_cmd().arg("foobar").output().unwrap();
+    let output = unifly_cmd().arg("foobar").output().unwrap();
     assert!(
         !output.status.success(),
         "Expected failure for invalid subcommand"
@@ -115,7 +115,7 @@ fn test_invalid_subcommand() {
 
 #[test]
 fn test_devices_list_no_controller() {
-    unifi_cmd()
+    unifly_cmd()
         .args(["devices", "list"])
         .assert()
         .failure()
@@ -131,12 +131,12 @@ fn test_devices_list_no_controller() {
 fn test_config_show_no_config() {
     // `config show` uses load_config_or_default() so it succeeds even
     // when no config file exists — it just renders the default config.
-    unifi_cmd().args(["config", "show"]).assert().success();
+    unifly_cmd().args(["config", "show"]).assert().success();
 }
 
 #[test]
 fn test_invalid_output_format() {
-    let output = unifi_cmd()
+    let output = unifly_cmd()
         .args(["--output", "invalid", "devices", "list"])
         .output()
         .unwrap();
@@ -157,7 +157,7 @@ fn test_invalid_output_format() {
 fn test_global_flags_parsing() {
     // All flags should parse correctly — the failure should be about
     // missing controller config, not about argument parsing.
-    unifi_cmd()
+    unifly_cmd()
         .args([
             "--output",
             "json",
@@ -182,7 +182,7 @@ fn test_global_flags_parsing() {
 
 #[test]
 fn test_devices_subcommands_exist() {
-    unifi_cmd()
+    unifly_cmd()
         .args(["devices", "--help"])
         .assert()
         .success()
@@ -197,7 +197,7 @@ fn test_devices_subcommands_exist() {
 
 #[test]
 fn test_clients_subcommands_exist() {
-    unifi_cmd()
+    unifly_cmd()
         .args(["clients", "--help"])
         .assert()
         .success()
@@ -211,7 +211,7 @@ fn test_clients_subcommands_exist() {
 
 #[test]
 fn test_firewall_subcommands_exist() {
-    unifi_cmd()
+    unifly_cmd()
         .args(["firewall", "--help"])
         .assert()
         .success()
@@ -220,7 +220,7 @@ fn test_firewall_subcommands_exist() {
 
 #[test]
 fn test_config_subcommands_exist() {
-    unifi_cmd()
+    unifly_cmd()
         .args(["config", "--help"])
         .assert()
         .success()

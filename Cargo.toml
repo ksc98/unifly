@@ -3,8 +3,8 @@ members = [
     "crates/unifi-api",
     "crates/unifi-core",
     "crates/unifi-config",
-    "crates/unifi-cli",
-    "crates/unifi-tui",
+    "crates/unifly",
+    "crates/unifly-tui",
 ]
 resolver = "3"
 
@@ -12,10 +12,10 @@ resolver = "3"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.86"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/blisshostings/unifi-cli"
-homepage = "https://github.com/blisshostings/unifi-cli"
-authors = ["Bliss"]
+license = "Apache-2.0"
+repository = "https://github.com/hyperb1iss/unifly"
+homepage = "https://github.com/hyperb1iss/unifly"
+authors = ["Stefanie Jane <stef@hyperbliss.tech>"]
 
 [workspace.dependencies]
 # ── Internal crates ──
@@ -199,7 +199,7 @@ targets = [
     "x86_64-pc-windows-msvc",
 ]
 install-path = "CARGO_HOME"
-tap = "blisshostings/homebrew-tap"
+tap = "hyperb1iss/homebrew-tap"
 
 # ── Profiles ──
 [profile.dev]

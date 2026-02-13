@@ -1,4 +1,4 @@
-//! Clap derive structures for the `unifi` CLI.
+//! Clap derive structures for the `unifly` CLI.
 //!
 //! Defines the complete command tree, global flags, and shared types.
 
@@ -8,10 +8,10 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 
 // ── Top-Level CLI ────────────────────────────────────────────────────
 
-/// unifi -- kubectl-style CLI for UniFi network management
+/// unifly -- kubectl-style CLI for UniFi network management
 #[derive(Debug, Parser)]
 #[command(
-    name = "unifi",
+    name = "unifly",
     version,
     about = "Manage UniFi networks from the command line",
     long_about = "A powerful CLI for administering UniFi network controllers.\n\n\

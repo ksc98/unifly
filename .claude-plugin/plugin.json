@@ -1,0 +1,22 @@
+{
+  "name": "unifly",
+  "version": "1.0.0",
+  "description": "UniFi network management CLI, TUI, and AI agent skill — full infrastructure control",
+  "author": {
+    "name": "Bliss",
+    "url": "https://github.com/hyperb1iss"
+  },
+  "homepage": "https://github.com/hyperb1iss/unifly",
+  "repository": "https://github.com/hyperb1iss/unifly",
+  "license": "Apache-2.0",
+  "keywords": [
+    "unifi",
+    "unifly",
+    "networking",
+    "ubiquiti",
+    "infrastructure",
+    "automation",
+    "firewall",
+    "wifi"
+  ]
+}

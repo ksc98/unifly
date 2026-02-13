@@ -4,7 +4,9 @@ use std::fmt;
 use std::sync::Arc;
 
 use unifi_core::model::{AclRule, EventCategory, FirewallPolicy, FirewallZone, WifiBroadcast};
-use unifi_core::{Client, Device, EntityId, Event, Network, Site};
+use unifi_core::{
+    Client, Device, EntityId, Event, Network, Site, UpdateNetworkRequest,
+};
 
 use crate::screen::ScreenId;
 
@@ -228,6 +230,11 @@ pub enum Action {
     SelectZonePair(EntityId, EntityId),
     ReorderPolicy(usize, Direction),
     FirewallSubTab(FirewallSubTab),
+
+    // ── Network Editing ──────────────────────────────────────────
+    NetworkEdit(EntityId),
+    NetworkSave(EntityId, Box<UpdateNetworkRequest>),
+    NetworkEditResult(Result<(), String>),
 
     // ── Device Commands ───────────────────────────────────────────
     RequestRestart(EntityId),

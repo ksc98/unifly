@@ -1,6 +1,8 @@
 #![allow(clippy::unwrap_used)]
 // Integration tests for `IntegrationClient` using wiremock.
 
+use std::collections::HashMap;
+
 use serde_json::json;
 use uuid::Uuid;
 use wiremock::matchers::{method, path, query_param};
@@ -134,6 +136,7 @@ async fn test_create_network() {
         management: "USER_DEFINED".into(),
         vlan_id: 30,
         dhcp_guarding: None,
+        extra: HashMap::new(),
     };
 
     let resp: NetworkDetailsResponse = client.create_network(&site_id, &req).await.unwrap();
@@ -262,6 +265,7 @@ async fn test_error_422_validation() {
         management: "USER_DEFINED".into(),
         vlan_id: 9999,
         dhcp_guarding: None,
+        extra: HashMap::new(),
     };
 
     let result = client.create_network(&site_id, &req).await;

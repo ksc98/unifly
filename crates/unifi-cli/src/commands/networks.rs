@@ -178,6 +178,10 @@ pub async fn handle(
                     subnet: None,
                     dhcp_enabled: None,
                     enabled,
+                    isolation_enabled: None,
+                    internet_access_enabled: None,
+                    mdns_forwarding_enabled: None,
+                    ipv6_enabled: None,
                 }
             };
 

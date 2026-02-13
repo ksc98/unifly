@@ -137,6 +137,10 @@ pub struct ClientDetailsResponse {
 // ── Networks ─────────────────────────────────────────────────────────
 
 /// Network overview — from `GET /v1/sites/{siteId}/networks`.
+///
+/// GATEWAY networks include top-level fields like `isolationEnabled`,
+/// `internetAccessEnabled`, `ipv4Configuration`, `ipv6Configuration`, etc.
+/// These are captured in `extra` via `#[serde(flatten)]`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NetworkResponse {
@@ -149,6 +153,10 @@ pub struct NetworkResponse {
     #[serde(default)]
     pub default: bool,
     pub metadata: Value,
+    /// Catch-all for management-type-specific fields (GATEWAY: ipv4Configuration,
+    /// ipv6Configuration, isolationEnabled, etc.; SWITCH: deviceId, natOutbound, etc.)
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
 }
 
 /// Network details — extends overview with additional fields.
@@ -164,6 +172,9 @@ pub struct NetworkDetailsResponse {
     pub default: bool,
     pub metadata: Value,
     pub dhcp_guarding: Option<Value>,
+    /// Catch-all for management-type-specific fields.
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
 }
 
 /// Create or update a network.
@@ -175,6 +186,9 @@ pub struct NetworkCreateUpdate {
     pub management: String,
     pub vlan_id: i32,
     pub dhcp_guarding: Option<Value>,
+    /// GATEWAY/SWITCH-specific fields to include in create/update requests.
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
 }
 
 /// References to resources using a network.

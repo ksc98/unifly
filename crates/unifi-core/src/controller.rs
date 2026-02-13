@@ -4,6 +4,7 @@
 // Handles authentication, background refresh, command routing,
 // and reactive data streaming through the DataStore.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -1448,6 +1449,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
                 management: "USER_DEFINED".into(),
                 vlan_id: req.vlan_id.map_or(1, i32::from),
                 dhcp_guarding: None,
+                extra: HashMap::new(),
             };
             ic.create_network(&sid, &body).await?;
             Ok(CommandResult::Ok)
@@ -1458,12 +1460,34 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             let uuid = require_uuid(&id)?;
             // Fetch existing to merge partial update
             let existing = ic.get_network(&sid, &uuid).await?;
+            // Start from existing extra fields, then apply toggle overrides
+            let mut extra = existing.extra;
+            if let Some(v) = update.isolation_enabled {
+                extra.insert("isolationEnabled".into(), serde_json::Value::Bool(v));
+            }
+            if let Some(v) = update.internet_access_enabled {
+                extra.insert("internetAccessEnabled".into(), serde_json::Value::Bool(v));
+            }
+            if let Some(v) = update.mdns_forwarding_enabled {
+                extra.insert("mdnsForwardingEnabled".into(), serde_json::Value::Bool(v));
+            }
+            if let Some(v) = update.ipv6_enabled {
+                if v {
+                    // Enable IPv6 with prefix delegation if not already configured
+                    extra.entry("ipv6Configuration".into()).or_insert_with(|| {
+                        serde_json::json!({ "type": "PREFIX_DELEGATION" })
+                    });
+                } else {
+                    extra.remove("ipv6Configuration");
+                }
+            }
             let body = unifi_api::integration_types::NetworkCreateUpdate {
                 name: update.name.unwrap_or(existing.name),
                 enabled: update.enabled.unwrap_or(existing.enabled),
                 management: existing.management,
                 vlan_id: update.vlan_id.map_or(existing.vlan_id, i32::from),
                 dhcp_guarding: existing.dhcp_guarding,
+                extra,
             };
             ic.update_network(&sid, &uuid, &body).await?;
             Ok(CommandResult::Ok)

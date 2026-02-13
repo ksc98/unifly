@@ -403,7 +403,8 @@ impl App {
             | Action::WifiBroadcastsUpdated(_)
             | Action::EventReceived(_)
             | Action::SiteUpdated(_)
-            | Action::StatsUpdated(_) => {
+            | Action::StatsUpdated(_)
+            | Action::NetworkEditResult(_) => {
                 for screen in self.screens.values_mut() {
                     if let Some(follow_up) = screen.update(action)? {
                         self.action_tx.send(follow_up)?;
@@ -497,6 +498,17 @@ impl App {
 
             Action::ConfirmNo => {
                 self.pending_confirm = None;
+            }
+
+            // Network editing → execute update command
+            Action::NetworkSave(id, update) => {
+                self.execute_command(
+                    Command::UpdateNetwork {
+                        id: id.clone(),
+                        update: *update.clone(),
+                    },
+                    "Updated network".into(),
+                );
             }
 
             // Stats fetch

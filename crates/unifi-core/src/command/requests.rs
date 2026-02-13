@@ -34,6 +34,7 @@ pub struct CreateNetworkRequest {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct UpdateNetworkRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -45,6 +46,14 @@ pub struct UpdateNetworkRequest {
     pub dhcp_enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub isolation_enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub internet_access_enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mdns_forwarding_enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ipv6_enabled: Option<bool>,
 }
 
 // ── WiFi ───────────────────────────────────────────────────────────

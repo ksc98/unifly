@@ -8,8 +8,6 @@ use ratatui::style::Style;
 use ratatui::symbols::Marker;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Axis, Block, BorderType, Borders, Chart, Dataset, GraphType, Paragraph};
-use tokio::sync::mpsc::UnboundedSender;
-
 use crate::action::{Action, StatsPeriod};
 use crate::component::Component;
 use crate::theme;
@@ -207,26 +205,22 @@ impl StatsScreen {
 }
 
 impl Component for StatsScreen {
-    fn init(&mut self, action_tx: UnboundedSender<Action>) -> Result<()> {
-        let _ = action_tx.send(Action::RequestStats(self.period));
-        Ok(())
-    }
-
     fn handle_key_event(&mut self, key: KeyEvent) -> Result<Option<Action>> {
         match key.code {
-            KeyCode::Char('1') => {
+            // Period selection: h=1h, d=24h, w=7d, m=30d
+            KeyCode::Char('h') => {
                 self.period = StatsPeriod::OneHour;
                 Ok(Some(Action::RequestStats(StatsPeriod::OneHour)))
             }
-            KeyCode::Char('2') => {
+            KeyCode::Char('d') => {
                 self.period = StatsPeriod::TwentyFourHours;
                 Ok(Some(Action::RequestStats(StatsPeriod::TwentyFourHours)))
             }
-            KeyCode::Char('3') => {
+            KeyCode::Char('w') => {
                 self.period = StatsPeriod::SevenDays;
                 Ok(Some(Action::RequestStats(StatsPeriod::SevenDays)))
             }
-            KeyCode::Char('4') => {
+            KeyCode::Char('m') => {
                 self.period = StatsPeriod::ThirtyDays;
                 Ok(Some(Action::RequestStats(StatsPeriod::ThirtyDays)))
             }
@@ -301,12 +295,14 @@ impl Component for StatsScreen {
 
         // Hints
         let hints = Line::from(vec![
-            Span::styled("  1-4 ", theme::key_hint_key()),
-            Span::styled("change period  ", theme::key_hint()),
+            Span::styled("  h ", theme::key_hint_key()),
+            Span::styled("1h  ", theme::key_hint()),
             Span::styled("d ", theme::key_hint_key()),
-            Span::styled("device breakdown  ", theme::key_hint()),
-            Span::styled("a ", theme::key_hint_key()),
-            Span::styled("application detail", theme::key_hint()),
+            Span::styled("24h  ", theme::key_hint()),
+            Span::styled("w ", theme::key_hint_key()),
+            Span::styled("7d  ", theme::key_hint()),
+            Span::styled("m ", theme::key_hint_key()),
+            Span::styled("30d", theme::key_hint()),
         ]);
         frame.render_widget(Paragraph::new(hints), layout[3]);
     }

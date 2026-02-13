@@ -46,3 +46,69 @@ pub fn fmt_rate(bytes_per_sec: u64) -> String {
         format!("{bits} bps")
     }
 }
+
+/// Compact rate for chart Y-axis labels: "50M", "1.2G", "500K".
+/// Input is bytes/sec — converted to bits for display.
+pub fn fmt_rate_axis(bytes_per_sec: f64) -> String {
+    let bits = bytes_per_sec * 8.0;
+    if bits >= 1_000_000_000.0 {
+        format!("{:.1}G", bits / 1_000_000_000.0)
+    } else if bits >= 1_000_000.0 {
+        format!("{:.0}M", bits / 1_000_000.0)
+    } else if bits >= 1_000.0 {
+        format!("{:.0}K", bits / 1_000.0)
+    } else {
+        format!("{bits:.0}")
+    }
+}
+
+/// Render a percentage bar split into filled and empty portions.
+///
+/// Returns `(filled, empty)` strings of `█` and `░` characters that together
+/// span `width` character positions. Caller applies styling per segment.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_lossless
+)]
+pub fn fmt_pct_bar(pct: f64, width: u16) -> (String, String) {
+    let clamped = pct.clamp(0.0, 100.0);
+    let filled_count = ((clamped / 100.0) * f64::from(width)).round() as u16;
+    let empty_count = width.saturating_sub(filled_count);
+    (
+        "█".repeat(filled_count as usize),
+        "░".repeat(empty_count as usize),
+    )
+}
+
+/// Render a proportional traffic bar using fractional block characters.
+///
+/// Uses ▏▎▍▌▋▊▉█ for sub-character precision across `max_chars` positions.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::cast_lossless
+)]
+pub fn fmt_traffic_bar(value: u64, max_value: u64, max_chars: u16) -> String {
+    const FRACTIONAL: &[char] = &[' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
+
+    if max_value == 0 || max_chars == 0 {
+        return " ".repeat(max_chars as usize);
+    }
+    // How many eighth-blocks to fill
+    let fraction = (value as f64 / max_value as f64).min(1.0);
+    let total_eighths = (fraction * f64::from(max_chars) * 8.0).round() as u32;
+    let full_blocks = total_eighths / 8;
+    let remainder = total_eighths % 8;
+
+    let mut bar = "█".repeat(full_blocks as usize);
+    if remainder > 0 {
+        bar.push(FRACTIONAL[remainder as usize]);
+    }
+    // Pad to max_chars
+    let bar_len = full_blocks + u32::from(remainder > 0);
+    let padding = u32::from(max_chars).saturating_sub(bar_len);
+    bar.push_str(&" ".repeat(padding as usize));
+    bar
+}

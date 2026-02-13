@@ -122,9 +122,9 @@ fn build_controller(cli: &Cli) -> Option<Controller> {
         site: cli.site.clone(),
         tls: TlsVerification::DangerAcceptInvalid,
         timeout: std::time::Duration::from_secs(30),
-        refresh_interval_secs: 30,
+        refresh_interval_secs: 10,
         websocket_enabled: true,
-        polling_interval_secs: 30,
+        polling_interval_secs: 10,
     };
 
     Some(Controller::new(config))

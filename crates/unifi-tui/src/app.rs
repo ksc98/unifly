@@ -336,6 +336,13 @@ impl App {
                     if let Some(screen) = self.screens.get_mut(&self.active_screen) {
                         screen.set_focused(true);
                     }
+
+                    // Trigger stats fetch when arriving at the Stats screen
+                    if *target == ScreenId::Stats {
+                        self.action_tx.send(Action::RequestStats(
+                            crate::action::StatsPeriod::default(),
+                        ))?;
+                    }
                 }
             }
 
@@ -402,6 +409,7 @@ impl App {
             | Action::AclRulesUpdated(_)
             | Action::WifiBroadcastsUpdated(_)
             | Action::EventReceived(_)
+            | Action::HealthUpdated(_)
             | Action::SiteUpdated(_)
             | Action::StatsUpdated(_)
             | Action::NetworkEditResult(_) => {
@@ -784,14 +792,14 @@ impl App {
             + 1;
         let gen_ref = self.stats_generation.clone();
 
-        // Compute time window for this period.
+        // Compute time window for this period (UniFi expects epoch milliseconds).
         #[allow(clippy::cast_possible_wrap)]
-        let now = std::time::SystemTime::now()
+        let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_secs() as i64;
-        let start = Some(now - period.duration_secs());
-        let end = Some(now);
+            .as_millis() as i64;
+        let start = Some(now_ms - period.duration_secs() * 1000);
+        let end = Some(now_ms);
 
         tokio::spawn(async move {
             let (gw_res, site_res, dpi_res) = tokio::join!(

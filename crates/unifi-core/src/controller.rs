@@ -335,9 +335,12 @@ impl Controller {
             }
         };
 
-        // Bridge task: WS events → domain Events → broadcast channel
+        // Bridge task: WS events → domain Events → broadcast channel.
+        // Also extracts real-time device stats from `device:sync` messages
+        // to feed the dashboard chart without waiting for full_refresh().
         let mut ws_rx = handle.subscribe();
         let event_tx = self.inner.event_tx.clone();
+        let store = Arc::clone(&self.inner.store);
         let bridge_cancel = ws_cancel;
 
         handles.push(tokio::spawn(async move {
@@ -348,6 +351,11 @@ impl Controller {
                     result = ws_rx.recv() => {
                         match result {
                             Ok(ws_event) => {
+                                // Extract real-time stats from device:sync messages
+                                if ws_event.key == "device:sync" || ws_event.key == "device:update" {
+                                    apply_device_sync(&store, &ws_event.extra);
+                                }
+
                                 let event = crate::model::event::Event::from(
                                     (*ws_event).clone(),
                                 );
@@ -464,7 +472,30 @@ impl Controller {
             // Core endpoints — failure is fatal
             let devices: Vec<Device> = devices_res?.into_iter().map(Device::from).collect();
             let mut clients: Vec<Client> = clients_res?.into_iter().map(Client::from).collect();
-            let networks: Vec<Network> = networks_res?.into_iter().map(Network::from).collect();
+            // Fetch full details for each network (list endpoint omits ipv4/ipv6 config)
+            let network_ids: Vec<uuid::Uuid> = networks_res?
+                .into_iter()
+                .map(|n| n.id)
+                .collect();
+            info!(network_count = network_ids.len(), "fetching network details");
+            let networks: Vec<Network> = {
+                let futs = network_ids.into_iter().map(|nid| async move {
+                    match integration.get_network(&sid, &nid).await {
+                        Ok(detail) => {
+                            Some(Network::from(detail))
+                        }
+                        Err(e) => {
+                            warn!(network_id = %nid, error = %e, "network detail fetch failed");
+                            None
+                        }
+                    }
+                });
+                futures_util::future::join_all(futs)
+                    .await
+                    .into_iter()
+                    .flatten()
+                    .collect()
+            };
             let wifi: Vec<WifiBroadcast> = wifi_res?.into_iter().map(WifiBroadcast::from).collect();
             let policies: Vec<FirewallPolicy> = policies_res?
                 .into_iter()
@@ -484,7 +515,7 @@ impl Controller {
 
             // Enrich devices with per-device statistics (parallel, non-fatal)
             info!(device_count = devices.len(), "enriching devices with statistics");
-            let devices = {
+            let mut devices = {
                 let futs = devices.into_iter().map(|mut device| async {
                     if let EntityId::Uuid(device_uuid) = &device.id {
                         match integration.get_device_statistics(&sid, device_uuid).await {
@@ -508,17 +539,19 @@ impl Controller {
 
             drop(integration_guard);
 
-            // Supplement with Legacy API data (events, health, client traffic)
-            let (legacy_events, legacy_health, legacy_clients): (
+            // Supplement with Legacy API data (events, health, client traffic, device stats)
+            let (legacy_events, legacy_health, legacy_clients, legacy_devices): (
                 Vec<Event>,
                 Vec<HealthSummary>,
                 Vec<unifi_api::legacy::models::LegacyClientEntry>,
+                Vec<unifi_api::legacy::models::LegacyDevice>,
             ) = match *self.inner.legacy_client.lock().await {
                     Some(ref legacy) => {
-                        let (events_res, health_res, clients_res) = tokio::join!(
+                        let (events_res, health_res, clients_res, devices_res) = tokio::join!(
                             legacy.list_events(Some(100)),
                             legacy.get_health(),
                             legacy.list_clients(),
+                            legacy.list_devices(),
                         );
 
                         let events = match events_res {
@@ -556,9 +589,17 @@ impl Controller {
                             }
                         };
 
-                        (events, health, lc)
+                        let ld = match devices_res {
+                            Ok(raw) => raw,
+                            Err(e) => {
+                                warn!(error = %e, "legacy device fetch failed (non-fatal)");
+                                Vec::new()
+                            }
+                        };
+
+                        (events, health, lc, ld)
                     }
-                    None => (Vec::new(), Vec::new(), Vec::new()),
+                    None => (Vec::new(), Vec::new(), Vec::new(), Vec::new()),
                 };
 
             // Merge Legacy client traffic (tx/rx bytes, hostname) into Integration clients.
@@ -583,6 +624,14 @@ impl Controller {
                         if client.hostname.is_none() {
                             client.hostname.clone_from(&lc.hostname);
                         }
+                        // Merge wireless info (Legacy has AP MAC, signal, channel)
+                        if client.wireless.is_none() {
+                            let legacy_client: Client = Client::from((*lc).clone());
+                            client.wireless = legacy_client.wireless;
+                            if client.uplink_device_mac.is_none() {
+                                client.uplink_device_mac = legacy_client.uplink_device_mac;
+                            }
+                        }
                         merged += 1;
                     }
                 }
@@ -592,6 +641,20 @@ impl Controller {
                     merged,
                     "client traffic merge (by IP)"
                 );
+            }
+
+            // Merge Legacy device num_sta (client counts) into Integration devices
+            if !legacy_devices.is_empty() {
+                let legacy_by_mac: HashMap<&str, &unifi_api::legacy::models::LegacyDevice> =
+                    legacy_devices.iter().map(|d| (d.mac.as_str(), d)).collect();
+                for device in &mut devices {
+                    if let Some(ld) = legacy_by_mac.get(device.mac.as_str()) {
+                        if device.client_count.is_none() {
+                            device.client_count =
+                                ld.num_sta.and_then(|n| n.try_into().ok());
+                        }
+                    }
+                }
             }
 
             // Push health to DataStore
@@ -1306,6 +1369,106 @@ impl Controller {
 }
 
 // ── Background tasks ─────────────────────────────────────────────
+
+/// Apply a `device:sync` WebSocket message to the DataStore.
+///
+/// Extracts CPU, memory, load averages, and uplink bandwidth from the
+/// raw Legacy API device JSON. Merges stats into the existing device
+/// (looked up by MAC) without clobbering Integration API fields.
+#[allow(clippy::cast_precision_loss)]
+fn apply_device_sync(store: &DataStore, data: &serde_json::Value) {
+    let Some(mac_str) = data.get("mac").and_then(serde_json::Value::as_str) else {
+        return;
+    };
+    let mac = MacAddress::new(mac_str);
+    let Some(existing) = store.device_by_mac(&mac) else {
+        return; // Device not in store yet — full_refresh will add it
+    };
+
+    // Parse sys_stats
+    let sys = data.get("sys_stats");
+    let cpu = sys
+        .and_then(|s| s.get("cpu"))
+        .and_then(|v| v.as_str().or_else(|| v.as_f64().map(|_| "")))
+        .and_then(|s| if s.is_empty() { None } else { s.parse::<f64>().ok() })
+        .or_else(|| sys.and_then(|s| s.get("cpu")).and_then(serde_json::Value::as_f64));
+    let mem_pct = match (
+        sys.and_then(|s| s.get("mem_used")).and_then(serde_json::Value::as_i64),
+        sys.and_then(|s| s.get("mem_total")).and_then(serde_json::Value::as_i64),
+    ) {
+        (Some(used), Some(total)) if total > 0 => Some((used as f64 / total as f64) * 100.0),
+        _ => None,
+    };
+    let load_averages: [Option<f64>; 3] = [
+        sys.and_then(|s| s.get("loadavg_1"))
+            .and_then(|v| v.as_str().and_then(|s| s.parse().ok()).or_else(|| v.as_f64())),
+        sys.and_then(|s| s.get("loadavg_5"))
+            .and_then(|v| v.as_str().and_then(|s| s.parse().ok()).or_else(|| v.as_f64())),
+        sys.and_then(|s| s.get("loadavg_15"))
+            .and_then(|v| v.as_str().and_then(|s| s.parse().ok()).or_else(|| v.as_f64())),
+    ];
+
+    // Uplink bandwidth: check "uplink" object or top-level fields
+    let uplink = data.get("uplink");
+    let tx_bps = uplink
+        .and_then(|u| u.get("tx_bytes-r").or_else(|| u.get("tx_bytes_r")))
+        .and_then(serde_json::Value::as_u64)
+        .or_else(|| data.get("tx_bytes-r").and_then(serde_json::Value::as_u64));
+    let rx_bps = uplink
+        .and_then(|u| u.get("rx_bytes-r").or_else(|| u.get("rx_bytes_r")))
+        .and_then(serde_json::Value::as_u64)
+        .or_else(|| data.get("rx_bytes-r").and_then(serde_json::Value::as_u64));
+
+    let bandwidth = match (tx_bps, rx_bps) {
+        (Some(tx), Some(rx)) if tx > 0 || rx > 0 => {
+            Some(crate::model::common::Bandwidth {
+                tx_bytes_per_sec: tx,
+                rx_bytes_per_sec: rx,
+            })
+        }
+        _ => existing.stats.uplink_bandwidth, // Keep existing if no new data
+    };
+
+    // Uptime from top-level `_uptime` or `uptime`
+    let uptime = data
+        .get("_uptime")
+        .or_else(|| data.get("uptime"))
+        .and_then(serde_json::Value::as_i64)
+        .and_then(|u| u.try_into().ok())
+        .or(existing.stats.uptime_secs);
+
+    // Clone and update
+    let mut device = (*existing).clone();
+    device.stats.uplink_bandwidth = bandwidth;
+    if let Some(c) = cpu {
+        device.stats.cpu_utilization_pct = Some(c);
+    }
+    if let Some(m) = mem_pct {
+        device.stats.memory_utilization_pct = Some(m);
+    }
+    if let Some(l) = load_averages[0] {
+        device.stats.load_average_1m = Some(l);
+    }
+    if let Some(l) = load_averages[1] {
+        device.stats.load_average_5m = Some(l);
+    }
+    if let Some(l) = load_averages[2] {
+        device.stats.load_average_15m = Some(l);
+    }
+    device.stats.uptime_secs = uptime;
+
+    // Update client count from num_sta (AP/switch connected stations)
+    if let Some(num_sta) = data
+        .get("num_sta")
+        .and_then(serde_json::Value::as_u64)
+    {
+        device.client_count = Some(num_sta as u32);
+    }
+
+    let key = mac.as_str().to_owned();
+    let id = device.id.clone();
+    store.devices.upsert(key, id, device);
+}
 
 /// Periodically refresh data from the controller.
 async fn refresh_task(controller: Controller, interval_secs: u64, cancel: CancellationToken) {

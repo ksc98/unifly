@@ -304,7 +304,7 @@ pub fn resolve_auth(
 /// Build a `ControllerConfig` from a profile — no CLI flag overrides.
 ///
 /// Suitable for the TUI and other non-CLI consumers. Sets TUI-friendly
-/// defaults: `websocket_enabled: true`, `refresh_interval_secs: 30`.
+/// defaults: `websocket_enabled: true`, `refresh_interval_secs: 10`.
 pub fn profile_to_controller_config(
     profile: &Profile,
     profile_name: &str,
@@ -332,8 +332,8 @@ pub fn profile_to_controller_config(
         site: profile.site.clone(),
         tls,
         timeout,
-        refresh_interval_secs: 30,
+        refresh_interval_secs: 10,
         websocket_enabled: true,
-        polling_interval_secs: 30,
+        polling_interval_secs: 10,
     })
 }

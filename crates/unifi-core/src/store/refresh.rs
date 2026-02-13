@@ -219,7 +219,19 @@ impl DataStore {
     ) {
         for device in devices {
             let key = device.mac.as_str().to_owned();
-            if self.devices.get_by_key(&key).is_none() {
+            if let Some(existing) = self.devices.get_by_key(&key) {
+                // Merge Legacy-only fields into existing Integration device
+                let mut merged = (*existing).clone();
+                let mut changed = false;
+                if merged.client_count.is_none() && device.client_count.is_some() {
+                    merged.client_count = device.client_count;
+                    changed = true;
+                }
+                if changed {
+                    let id = merged.id.clone();
+                    self.devices.upsert(key, id, merged);
+                }
+            } else {
                 let id = device.id.clone();
                 self.devices.upsert(key, id, device);
             }
@@ -227,7 +239,44 @@ impl DataStore {
 
         for client in clients {
             let key = client.mac.as_str().to_owned();
-            if self.clients.get_by_key(&key).is_none() {
+            if let Some(existing) = self.clients.get_by_key(&key) {
+                // Merge Legacy-only fields into existing Integration client
+                let mut merged = (*existing).clone();
+                let mut changed = false;
+                if merged.wireless.is_none() && client.wireless.is_some() {
+                    merged.wireless = client.wireless;
+                    changed = true;
+                }
+                if merged.uplink_device_mac.is_none() && client.uplink_device_mac.is_some() {
+                    merged.uplink_device_mac = client.uplink_device_mac;
+                    changed = true;
+                }
+                if merged.hostname.is_none() && client.hostname.is_some() {
+                    merged.hostname = client.hostname;
+                    changed = true;
+                }
+                if merged.vlan.is_none() && client.vlan.is_some() {
+                    merged.vlan = client.vlan;
+                    changed = true;
+                }
+                // Merge traffic bytes — Legacy has accurate totals
+                if client.tx_bytes.is_some() {
+                    merged.tx_bytes = client.tx_bytes;
+                    changed = true;
+                }
+                if client.rx_bytes.is_some() {
+                    merged.rx_bytes = client.rx_bytes;
+                    changed = true;
+                }
+                if client.bandwidth.is_some() {
+                    merged.bandwidth = client.bandwidth;
+                    changed = true;
+                }
+                if changed {
+                    let id = merged.id.clone();
+                    self.clients.upsert(key, id, merged);
+                }
+            } else {
                 let id = client.id.clone();
                 self.clients.upsert(key, id, client);
             }

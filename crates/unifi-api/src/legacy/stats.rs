@@ -118,16 +118,14 @@ impl LegacyClient {
 
     /// Fetch site-wide DPI (Deep Packet Inspection) statistics.
     ///
-    /// `GET /api/s/{site}/stat/sitedpi`
+    /// `POST /api/s/{site}/stat/sitedpi` with `{"type": "by_app"}` body.
     ///
-    /// The `group_by` parameter selects the DPI grouping: `"by-app"` or `"by-cat"`.
+    /// The `group_by` parameter selects the DPI grouping: `"by_app"` or `"by_cat"`.
+    /// Returns empty data if DPI tracking is not enabled on the controller.
     pub async fn get_dpi_stats(&self, group_by: &str) -> Result<Vec<serde_json::Value>, Error> {
-        let endpoint = match group_by {
-            "by-cat" => "stat/sitedpi",
-            _ => "stat/stadpi",
-        };
-        let url = self.site_url(endpoint);
-        debug!(group_by, "fetching DPI stats");
-        self.get(url).await
+        let url = self.site_url("stat/sitedpi");
+        debug!(group_by, "fetching site DPI stats");
+        let body = json!({"type": group_by});
+        self.post(url, &body).await
     }
 }

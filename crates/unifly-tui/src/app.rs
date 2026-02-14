@@ -224,9 +224,7 @@ impl App {
         if self.pending_confirm.is_some() {
             return match key.code {
                 KeyCode::Char('y' | 'Y') => Ok(Some(Action::ConfirmYes)),
-                KeyCode::Char('n' | 'N') | KeyCode::Esc => {
-                    Ok(Some(Action::ConfirmNo))
-                }
+                KeyCode::Char('n' | 'N') | KeyCode::Esc => Ok(Some(Action::ConfirmNo)),
                 _ => Ok(None),
             };
         }
@@ -262,8 +260,8 @@ impl App {
         // Global keybindings
         match (key.modifiers, key.code) {
             // Quit
-            (KeyModifiers::CONTROL, KeyCode::Char('c')) => return Ok(Some(Action::Quit)),
-            (KeyModifiers::NONE, KeyCode::Char('q')) => return Ok(Some(Action::Quit)),
+            (KeyModifiers::CONTROL, KeyCode::Char('c'))
+            | (KeyModifiers::NONE, KeyCode::Char('q')) => return Ok(Some(Action::Quit)),
 
             // Help
             (KeyModifiers::NONE, KeyCode::Char('?')) => return Ok(Some(Action::ToggleHelp)),
@@ -276,7 +274,8 @@ impl App {
 
             // Screen navigation via number keys
             (KeyModifiers::NONE, KeyCode::Char(c @ '1'..='8')) => {
-                let n = c as u8 - b'0';
+                #[allow(clippy::cast_possible_truncation, clippy::as_conversions)]
+                let n = c.to_digit(10).unwrap_or(0) as u8;
                 if let Some(screen) = ScreenId::from_number(n) {
                     return Ok(Some(Action::SwitchScreen(screen)));
                 }
@@ -313,6 +312,7 @@ impl App {
     }
 
     /// Process a single action — update app state and propagate to components.
+    #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
     fn process_action(&mut self, action: &Action) -> Result<()> {
         match action {
             Action::Quit => {
@@ -339,9 +339,8 @@ impl App {
 
                     // Trigger stats fetch when arriving at the Stats screen
                     if *target == ScreenId::Stats {
-                        self.action_tx.send(Action::RequestStats(
-                            crate::action::StatsPeriod::default(),
-                        ))?;
+                        self.action_tx
+                            .send(Action::RequestStats(crate::action::StatsPeriod::default()))?;
                     }
                 }
             }
@@ -486,10 +485,7 @@ impl App {
             Action::RequestKickClient(id) => {
                 if let Some(mac) = self.resolve_client_mac(id) {
                     let name = self.resolve_client_name(id);
-                    self.execute_command(
-                        Command::KickClient { mac },
-                        format!("Kicked {name}"),
-                    );
+                    self.execute_command(Command::KickClient { mac }, format!("Kicked {name}"));
                 }
             }
 
@@ -561,11 +557,9 @@ impl App {
 
             // ── Settings ─────────────────────────────────────────────
             Action::OpenSettings => {
-                if self.active_screen != ScreenId::Settings
-                    && self.active_screen != ScreenId::Setup
+                if self.active_screen != ScreenId::Settings && self.active_screen != ScreenId::Setup
                 {
-                    let mut screen =
-                        crate::screens::settings::SettingsScreen::new();
+                    let mut screen = crate::screens::settings::SettingsScreen::new();
                     screen.init(self.action_tx.clone())?;
                     self.screens.insert(ScreenId::Settings, Box::new(screen));
                     self.previous_screen = Some(self.active_screen);
@@ -706,16 +700,10 @@ impl App {
     fn execute_confirm(&self, action: ConfirmAction) {
         match action {
             ConfirmAction::RestartDevice { id, name } => {
-                self.execute_command(
-                    Command::RestartDevice { id },
-                    format!("Restarting {name}"),
-                );
+                self.execute_command(Command::RestartDevice { id }, format!("Restarting {name}"));
             }
             ConfirmAction::UnadoptDevice { id, name } => {
-                self.execute_command(
-                    Command::RemoveDevice { id },
-                    format!("Removed {name}"),
-                );
+                self.execute_command(Command::RemoveDevice { id }, format!("Removed {name}"));
             }
             ConfirmAction::AdoptDevice { mac } => {
                 self.execute_command(
@@ -739,10 +727,7 @@ impl App {
             }
             ConfirmAction::BlockClient { id, name } => {
                 if let Some(mac) = self.resolve_client_mac(&id) {
-                    self.execute_command(
-                        Command::BlockClient { mac },
-                        format!("Blocked {name}"),
-                    );
+                    self.execute_command(Command::BlockClient { mac }, format!("Blocked {name}"));
                 }
             }
             ConfirmAction::UnblockClient { id, name } => {
@@ -755,10 +740,7 @@ impl App {
             }
             ConfirmAction::ForgetClient { id, name } => {
                 if let Some(mac) = self.resolve_client_mac(&id) {
-                    self.execute_command(
-                        Command::ForgetClient { mac },
-                        format!("Forgot {name}"),
-                    );
+                    self.execute_command(Command::ForgetClient { mac }, format!("Forgot {name}"));
                 }
             }
             ConfirmAction::DeleteFirewallPolicy { id, name } => {
@@ -774,6 +756,7 @@ impl App {
     ///
     /// Uses a generation counter so stale responses from a previous period
     /// switch are silently dropped.
+    #[allow(clippy::too_many_lines)]
     fn fetch_stats(&self, period: crate::action::StatsPeriod) {
         use std::sync::atomic::Ordering;
 
@@ -786,14 +769,15 @@ impl App {
         let interval = period.api_interval();
 
         // Bump generation — any in-flight task with an older generation will be dropped.
-        let generation = self
-            .stats_generation
-            .fetch_add(1, Ordering::Relaxed)
-            + 1;
+        let generation = self.stats_generation.fetch_add(1, Ordering::Relaxed) + 1;
         let gen_ref = self.stats_generation.clone();
 
         // Compute time window for this period (UniFi expects epoch milliseconds).
-        #[allow(clippy::cast_possible_wrap)]
+        #[allow(
+            clippy::cast_possible_wrap,
+            clippy::cast_possible_truncation,
+            clippy::as_conversions
+        )]
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -818,7 +802,10 @@ impl App {
             // Parse gateway stats → bandwidth TX/RX
             if let Ok(gw) = gw_res {
                 for entry in &gw {
-                    let ts = entry.get("time").and_then(serde_json::value::Value::as_f64).unwrap_or(0.0);
+                    let ts = entry
+                        .get("time")
+                        .and_then(serde_json::value::Value::as_f64)
+                        .unwrap_or(0.0);
                     if let Some(tx_bytes) = entry
                         .get("wan-tx_bytes")
                         .or_else(|| entry.get("tx_bytes"))
@@ -839,7 +826,10 @@ impl App {
             // Parse site stats → client counts
             if let Ok(site) = site_res {
                 for entry in &site {
-                    let ts = entry.get("time").and_then(serde_json::value::Value::as_f64).unwrap_or(0.0);
+                    let ts = entry
+                        .get("time")
+                        .and_then(serde_json::value::Value::as_f64)
+                        .unwrap_or(0.0);
                     if let Some(count) = entry
                         .get("num_sta")
                         .or_else(|| entry.get("wlan-num_sta"))
@@ -855,8 +845,12 @@ impl App {
                 let total_bytes: f64 = dpi
                     .iter()
                     .map(|e| {
-                        e.get("tx_bytes").and_then(serde_json::value::Value::as_f64).unwrap_or(0.0)
-                            + e.get("rx_bytes").and_then(serde_json::value::Value::as_f64).unwrap_or(0.0)
+                        e.get("tx_bytes")
+                            .and_then(serde_json::value::Value::as_f64)
+                            .unwrap_or(0.0)
+                            + e.get("rx_bytes")
+                                .and_then(serde_json::value::Value::as_f64)
+                                .unwrap_or(0.0)
                     })
                     .sum();
 
@@ -865,8 +859,13 @@ impl App {
                         .iter()
                         .filter_map(|e| {
                             let name = e.get("name").and_then(|v| v.as_str())?;
-                            let bytes = e.get("tx_bytes").and_then(serde_json::value::Value::as_f64).unwrap_or(0.0)
-                                + e.get("rx_bytes").and_then(serde_json::value::Value::as_f64).unwrap_or(0.0);
+                            let bytes = e
+                                .get("tx_bytes")
+                                .and_then(serde_json::value::Value::as_f64)
+                                .unwrap_or(0.0)
+                                + e.get("rx_bytes")
+                                    .and_then(serde_json::value::Value::as_f64)
+                                    .unwrap_or(0.0);
                             Some((name.to_owned(), (bytes / total_bytes) * 100.0))
                         })
                         .collect();
@@ -1143,7 +1142,7 @@ impl App {
     fn render_notification(&self, frame: &mut Frame, area: Rect, notif: &Notification) {
         use crate::action::NotificationLevel;
 
-        let msg_len = notif.message.len() as u16;
+        let msg_len = u16::try_from(notif.message.len()).unwrap_or(u16::MAX);
         let width = (msg_len + 6).clamp(20, 60);
         let height = 3u16;
 

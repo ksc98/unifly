@@ -201,7 +201,7 @@ impl LegacyClient {
     pub(crate) async fn post<T: DeserializeOwned>(
         &self,
         url: Url,
-        body: &impl Serialize,
+        body: &(impl Serialize + Sync),
     ) -> Result<Vec<T>, Error> {
         debug!("POST {}", url);
 
@@ -216,7 +216,7 @@ impl LegacyClient {
     pub(crate) async fn put<T: DeserializeOwned>(
         &self,
         url: Url,
-        body: &impl Serialize,
+        body: &(impl Serialize + Sync),
     ) -> Result<Vec<T>, Error> {
         debug!("PUT {}", url);
 

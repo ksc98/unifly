@@ -40,7 +40,7 @@ impl EventsScreen {
 
     #[allow(dead_code, clippy::unused_self)]
     fn visible_count(&self, area_height: u16) -> usize {
-        area_height.saturating_sub(1) as usize
+        usize::from(area_height.saturating_sub(1))
     }
 }
 
@@ -92,17 +92,11 @@ impl Component for EventsScreen {
     }
 
     fn update(&mut self, action: &Action) -> Result<Option<Action>> {
-        match action {
-            Action::EventReceived(event) => {
-                self.events.push(Arc::clone(event));
-                if self.events.len() > self.capacity {
-                    self.events.remove(0);
-                }
+        if let Action::EventReceived(event) = action {
+            self.events.push(Arc::clone(event));
+            if self.events.len() > self.capacity {
+                self.events.remove(0);
             }
-            Action::ToggleEventPause => {
-                // Handled in key handler, but also handle external toggles
-            }
-            _ => {}
         }
         Ok(None)
     }
@@ -149,7 +143,7 @@ impl Component for EventsScreen {
         frame.render_widget(Paragraph::new(status), layout[0]);
 
         // Events list
-        let visible_height = layout[1].height as usize;
+        let visible_height = usize::from(layout[1].height);
         let total = self.events.len();
 
         // Calculate which events to show
@@ -175,7 +169,7 @@ impl Component for EventsScreen {
                 _ => theme::DIM_WHITE,
             };
             let category = format!("{:?}", event.category);
-            let msg_width = layout[1].width.saturating_sub(50).max(10) as usize;
+            let msg_width = usize::from(layout[1].width.saturating_sub(50).max(10));
             let msg: String = event.message.chars().take(msg_width).collect();
 
             lines.push(Line::from(vec![

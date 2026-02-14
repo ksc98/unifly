@@ -78,6 +78,7 @@ fn detail(c: &Arc<Client>) -> String {
 
 // ── Handler ─────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_lines)]
 pub async fn handle(
     controller: &Controller,
     args: ClientsArgs,

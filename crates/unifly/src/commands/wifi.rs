@@ -15,7 +15,7 @@ use crate::output;
 
 use super::util;
 
-fn map_security(s: WifiSecurity) -> WifiSecurityMode {
+fn map_security(s: &WifiSecurity) -> WifiSecurityMode {
     match s {
         WifiSecurity::Open => WifiSecurityMode::Open,
         WifiSecurity::Wpa2Personal => WifiSecurityMode::Wpa2Personal,
@@ -87,6 +87,7 @@ fn detail(w: &Arc<WifiBroadcast>) -> String {
 
 // ── Handler ─────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_lines)]
 pub async fn handle(
     controller: &Controller,
     args: WifiArgs,
@@ -143,7 +144,7 @@ pub async fn handle(
                 CreateWifiBroadcastRequest {
                     name: name.clone().unwrap_or_default(),
                     ssid: name.unwrap_or_default(),
-                    security_mode: map_security(security),
+                    security_mode: map_security(&security),
                     passphrase,
                     enabled: true,
                     network_id: network.map(EntityId::from),

@@ -1,5 +1,9 @@
 //! Stats screen — historical charts and analytics (spec §2.8).
 
+use crate::action::{Action, StatsPeriod};
+use crate::component::Component;
+use crate::theme;
+use crate::widgets::sub_tabs;
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::Frame;
@@ -8,10 +12,6 @@ use ratatui::style::Style;
 use ratatui::symbols::Marker;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Axis, Block, BorderType, Borders, Chart, Dataset, GraphType, Paragraph};
-use crate::action::{Action, StatsPeriod};
-use crate::component::Component;
-use crate::theme;
-use crate::widgets::sub_tabs;
 
 pub struct StatsScreen {
     focused: bool,
@@ -182,6 +182,11 @@ impl StatsScreen {
 
         let mut lines = Vec::new();
         for (i, (name, pct)) in self.dpi_apps.iter().enumerate().take(5) {
+            #[allow(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                clippy::as_conversions
+            )]
             let bar_width = (pct / 100.0 * max_bar_width).round() as usize;
             let bar: String = "█".repeat(bar_width);
             let color = colors[i % colors.len()];

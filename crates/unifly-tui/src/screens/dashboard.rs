@@ -21,9 +21,7 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::symbols::Marker;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{
-    Axis, Block, BorderType, Borders, Chart, Dataset, GraphType, Paragraph,
-};
+use ratatui::widgets::{Axis, Block, BorderType, Borders, Chart, Dataset, GraphType, Paragraph};
 use tokio::sync::mpsc::UnboundedSender;
 
 use unifi_core::model::{EventSeverity, Ipv6Mode};
@@ -90,13 +88,11 @@ impl DashboardScreen {
     }
 
     /// Record a bandwidth sample into the chart data ring buffer.
-    #[allow(clippy::cast_precision_loss)]
+    #[allow(clippy::cast_precision_loss, clippy::as_conversions)]
     fn push_bandwidth_sample(&mut self, tx_bps: u64, rx_bps: u64) {
         self.sample_counter += 1.0;
-        self.bandwidth_tx
-            .push((self.sample_counter, tx_bps as f64));
-        self.bandwidth_rx
-            .push((self.sample_counter, rx_bps as f64));
+        self.bandwidth_tx.push((self.sample_counter, tx_bps as f64));
+        self.bandwidth_rx.push((self.sample_counter, rx_bps as f64));
         self.peak_tx = self.peak_tx.max(tx_bps);
         self.peak_rx = self.peak_rx.max(rx_bps);
         // Keep last 60 samples (~30 min at 30s refresh)
@@ -109,16 +105,14 @@ impl DashboardScreen {
     // ── Render Methods ──────────────────────────────────────────────────
 
     /// Hero panel: WAN traffic chart with Braille markers.
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::as_conversions
+    )]
     fn render_traffic_chart(&self, frame: &mut Frame, area: Rect) {
-        let current_tx = self
-            .bandwidth_tx
-            .last()
-            .map_or(0, |&(_, v)| v as u64);
-        let current_rx = self
-            .bandwidth_rx
-            .last()
-            .map_or(0, |&(_, v)| v as u64);
+        let current_tx = self.bandwidth_tx.last().map_or(0, |&(_, v)| v as u64);
+        let current_rx = self.bandwidth_rx.last().map_or(0, |&(_, v)| v as u64);
 
         let title = Line::from(vec![
             Span::styled(" WAN Traffic ", theme::title_style()),
@@ -159,10 +153,7 @@ impl DashboardScreen {
         }
 
         // Compute axis bounds
-        let x_min = self
-            .bandwidth_tx
-            .first()
-            .map_or(0.0, |&(x, _)| x);
+        let x_min = self.bandwidth_tx.first().map_or(0.0, |&(x, _)| x);
         let x_max = self.sample_counter;
 
         let y_max_raw = self
@@ -172,7 +163,11 @@ impl DashboardScreen {
             .map(|&(_, v)| v)
             .fold(0.0_f64, f64::max);
         // Round up to a nice ceiling so the chart doesn't clip
-        let y_max = if y_max_raw < 1.0 { 1000.0 } else { y_max_raw * 1.2 };
+        let y_max = if y_max_raw < 1.0 {
+            1000.0
+        } else {
+            y_max_raw * 1.2
+        };
 
         let tx_dataset = Dataset::default()
             .name("TX")
@@ -240,8 +235,7 @@ impl DashboardScreen {
         let isp_name = wan_health
             .and_then(|h| h.extra.get("isp_name").and_then(|v| v.as_str()))
             .or_else(|| {
-                wan_health
-                    .and_then(|h| h.extra.get("isp_organization").and_then(|v| v.as_str()))
+                wan_health.and_then(|h| h.extra.get("isp_organization").and_then(|v| v.as_str()))
             });
         let dns = wan_health
             .and_then(|h| h.extra.get("nameservers").and_then(|v| v.as_array()))
@@ -254,10 +248,9 @@ impl DashboardScreen {
         let gw_ip = wan_health
             .and_then(|h| h.extra.get("gateways").and_then(|v| v.as_array()))
             .and_then(|a| a.first().and_then(|v| v.as_str()));
-        let wan_ipv6 = wan_health
-            .and_then(|h| h.extra.get("wan_ip6").and_then(|v| v.as_str()));
-        let gw_version = wan_health
-            .and_then(|h| h.extra.get("gw_version").and_then(|v| v.as_str()));
+        let wan_ipv6 = wan_health.and_then(|h| h.extra.get("wan_ip6").and_then(|v| v.as_str()));
+        let gw_version =
+            wan_health.and_then(|h| h.extra.get("gw_version").and_then(|v| v.as_str()));
         let latency = www_health.and_then(|h| h.latency);
         let uptime = gateway.and_then(|g| g.stats.uptime_secs);
         let wan_ip = gateway
@@ -270,9 +263,7 @@ impl DashboardScreen {
         // Header: ◈ Model (firmware)
         if let Some(gw) = gateway {
             let model = gw.model.as_deref().unwrap_or("Gateway");
-            let fw = gw_version
-                .or(gw.firmware_version.as_deref())
-                .unwrap_or("─");
+            let fw = gw_version.or(gw.firmware_version.as_deref()).unwrap_or("─");
             lines.push(Line::from(vec![
                 Span::styled(" ◈ ", Style::default().fg(theme::ELECTRIC_PURPLE)),
                 Span::styled(
@@ -313,11 +304,17 @@ impl DashboardScreen {
         }
         if let Some(ref d) = dns {
             // Truncate to fit panel width
-            let truncated: String = d.chars().take(inner.width.saturating_sub(7) as usize).collect();
+            let truncated: String = d
+                .chars()
+                .take(usize::from(inner.width.saturating_sub(7)))
+                .collect();
             lines.push(kv("DNS", &truncated, theme::DIM_WHITE));
         }
         if let Some(isp) = isp_name {
-            let truncated: String = isp.chars().take(inner.width.saturating_sub(7) as usize).collect();
+            let truncated: String = isp
+                .chars()
+                .take(usize::from(inner.width.saturating_sub(7)))
+                .collect();
             lines.push(kv("ISP", &truncated, theme::DIM_WHITE));
         }
 
@@ -351,7 +348,7 @@ impl DashboardScreen {
             .devices
             .iter()
             .find(|d| d.device_type == DeviceType::Gateway);
-        let w = inner.width as usize;
+        let w = usize::from(inner.width);
 
         let mut lines = Vec::new();
 
@@ -384,7 +381,7 @@ impl DashboardScreen {
 
         // ── Row 3: CPU bar + Load averages (right-aligned) ──────
         let bar_width = inner.width.saturating_sub(14).min(24);
-        let bar_left_chars = 5 + bar_width as usize + 7; // " CPU " + bar + " XX.X%"
+        let bar_left_chars = 5 + usize::from(bar_width) + 7; // " CPU " + bar + " XX.X%"
 
         let pct_bar_color = |pct: f64| -> ratatui::style::Color {
             if pct > 80.0 {
@@ -420,26 +417,17 @@ impl DashboardScreen {
                     let padding = w.saturating_sub(bar_left_chars + right_len);
                     if padding >= 2 {
                         spans.push(Span::raw(" ".repeat(padding)));
-                        spans.push(Span::styled(
-                            "Load ",
-                            Style::default().fg(theme::DIM_WHITE),
-                        ));
+                        spans.push(Span::styled("Load ", Style::default().fg(theme::DIM_WHITE)));
                         spans.push(Span::styled(
                             format!("{l1:.2}"),
                             Style::default().fg(theme::NEON_CYAN),
                         ));
-                        spans.push(Span::styled(
-                            " │ ",
-                            Style::default().fg(theme::BORDER_GRAY),
-                        ));
+                        spans.push(Span::styled(" │ ", Style::default().fg(theme::BORDER_GRAY)));
                         spans.push(Span::styled(
                             format!("{l5:.2}"),
                             Style::default().fg(theme::NEON_CYAN),
                         ));
-                        spans.push(Span::styled(
-                            " │ ",
-                            Style::default().fg(theme::BORDER_GRAY),
-                        ));
+                        spans.push(Span::styled(" │ ", Style::default().fg(theme::BORDER_GRAY)));
                         spans.push(Span::styled(
                             format!("{l15:.2}"),
                             Style::default().fg(theme::NEON_CYAN),
@@ -497,28 +485,19 @@ impl DashboardScreen {
                         .fg(theme::NEON_CYAN)
                         .add_modifier(Modifier::BOLD),
                 ));
-                spans.push(Span::styled(
-                    " Dev ",
-                    Style::default().fg(theme::DIM_WHITE),
-                ));
+                spans.push(Span::styled(" Dev ", Style::default().fg(theme::DIM_WHITE)));
                 spans.push(Span::styled(
                     format!("({online}▲ {offline}▼)"),
                     Style::default().fg(theme::DIM_WHITE),
                 ));
-                spans.push(Span::styled(
-                    " · ",
-                    Style::default().fg(theme::BORDER_GRAY),
-                ));
+                spans.push(Span::styled(" · ", Style::default().fg(theme::BORDER_GRAY)));
                 spans.push(Span::styled(
                     format!("{total_clients}"),
                     Style::default()
                         .fg(theme::NEON_CYAN)
                         .add_modifier(Modifier::BOLD),
                 ));
-                spans.push(Span::styled(
-                    " Cli ",
-                    Style::default().fg(theme::DIM_WHITE),
-                ));
+                spans.push(Span::styled(" Cli ", Style::default().fg(theme::DIM_WHITE)));
                 spans.push(Span::styled(
                     format!("({wireless}W {wired}E)"),
                     Style::default().fg(theme::DIM_WHITE),
@@ -539,16 +518,12 @@ impl DashboardScreen {
                 let cli_count: usize = if sub_name == "wlan" {
                     self.clients
                         .iter()
-                        .filter(|c| {
-                            c.client_type == unifi_core::ClientType::Wireless
-                        })
+                        .filter(|c| c.client_type == unifi_core::ClientType::Wireless)
                         .count()
                 } else {
                     self.clients
                         .iter()
-                        .filter(|c| {
-                            c.client_type == unifi_core::ClientType::Wired
-                        })
+                        .filter(|c| c.client_type == unifi_core::ClientType::Wired)
                         .count()
                 };
 
@@ -580,10 +555,7 @@ impl DashboardScreen {
                 // Throughput if available
                 if let (Some(tx), Some(rx)) = (h.tx_bytes_r, h.rx_bytes_r) {
                     if tx > 0 || rx > 0 {
-                        spans.push(Span::styled(
-                            "   ",
-                            Style::default(),
-                        ));
+                        spans.push(Span::styled("   ", Style::default()));
                         spans.push(Span::styled(
                             format!("↑ {}", bytes_fmt::fmt_rate(tx)),
                             Style::default().fg(theme::NEON_CYAN),
@@ -616,8 +588,7 @@ impl DashboardScreen {
 
         if self.networks.is_empty() {
             frame.render_widget(
-                Paragraph::new("  No networks")
-                    .style(Style::default().fg(theme::BORDER_GRAY)),
+                Paragraph::new("  No networks").style(Style::default().fg(theme::BORDER_GRAY)),
                 inner,
             );
             return;
@@ -626,7 +597,7 @@ impl DashboardScreen {
         let mut sorted: Vec<_> = self.networks.iter().collect();
         sorted.sort_by_key(|n| n.vlan_id.unwrap_or(0));
 
-        let max_lines = inner.height as usize;
+        let max_lines = usize::from(inner.height);
         let mut lines = Vec::new();
 
         for net in &sorted {
@@ -635,15 +606,15 @@ impl DashboardScreen {
             }
 
             let name: String = net.name.chars().take(10).collect();
-            let vlan = net
-                .vlan_id
-                .map_or_else(|| "─".into(), |v| format!("{v}"));
+            let vlan = net.vlan_id.map_or_else(|| "─".into(), |v| format!("{v}"));
             let subnet = net.subnet.as_deref().unwrap_or("─");
 
             // Count clients on this network
-            let client_count = self.clients.iter().filter(|c| {
-                c.vlan.map_or(false, |v| Some(v) == net.vlan_id)
-            }).count();
+            let client_count = self
+                .clients
+                .iter()
+                .filter(|c| c.vlan.is_some_and(|v| Some(v) == net.vlan_id))
+                .count();
             let client_str = if client_count > 0 {
                 format!(" {client_count}c")
             } else {
@@ -658,15 +629,9 @@ impl DashboardScreen {
                         .fg(theme::NEON_CYAN)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(
-                    format!("{vlan:<3}"),
-                    Style::default().fg(theme::CORAL),
-                ),
+                Span::styled(format!("{vlan:<3}"), Style::default().fg(theme::CORAL)),
                 Span::styled(subnet.to_string(), Style::default().fg(theme::DIM_WHITE)),
-                Span::styled(
-                    client_str,
-                    Style::default().fg(theme::ELECTRIC_YELLOW),
-                ),
+                Span::styled(client_str, Style::default().fg(theme::ELECTRIC_YELLOW)),
             ]));
 
             // IPv6 sub-line (compact)
@@ -723,15 +688,14 @@ impl DashboardScreen {
 
         if aps.is_empty() {
             frame.render_widget(
-                Paragraph::new("  No APs")
-                    .style(Style::default().fg(theme::BORDER_GRAY)),
+                Paragraph::new("  No APs").style(Style::default().fg(theme::BORDER_GRAY)),
                 inner,
             );
             return;
         }
 
-        let max_rows = inner.height as usize;
-        let w = inner.width as usize;
+        let max_rows = usize::from(inner.height);
+        let w = usize::from(inner.width);
         let mut lines = Vec::new();
 
         // Check if any AP has radio data for the optional Chan column
@@ -810,9 +774,7 @@ impl DashboardScreen {
                 .radios
                 .iter()
                 .map(|r| {
-                    let ch = r
-                        .channel
-                        .map_or_else(|| "─".into(), |c| c.to_string());
+                    let ch = r.channel.map_or_else(|| "─".into(), |c| c.to_string());
                     if r.frequency_ghz >= 5.9 {
                         format!("6G:{ch}")
                     } else if r.frequency_ghz >= 4.9 {
@@ -822,11 +784,7 @@ impl DashboardScreen {
                     }
                 })
                 .collect();
-            let ch_str: String = channels
-                .join(" ")
-                .chars()
-                .take(chan_width)
-                .collect();
+            let ch_str: String = channels.join(" ").chars().take(chan_width).collect();
 
             // Average WiFi experience from connected clients
             let satisfaction: Vec<u8> = self
@@ -837,7 +795,7 @@ impl DashboardScreen {
                         || c.wireless
                             .as_ref()
                             .and_then(|wl| wl.bssid.as_ref())
-                            .map_or(false, |bssid| *bssid == ap.mac)
+                            .is_some_and(|bssid| *bssid == ap.mac)
                 })
                 .filter_map(|c| c.wireless.as_ref()?.satisfaction)
                 .collect();
@@ -846,7 +804,7 @@ impl DashboardScreen {
             } else {
                 Some(
                     satisfaction.iter().map(|s| u32::from(*s)).sum::<u32>()
-                        / satisfaction.len() as u32,
+                        / u32::try_from(satisfaction.len()).unwrap_or(1),
                 )
             };
 
@@ -910,7 +868,7 @@ impl DashboardScreen {
         let inner = block.inner(area);
         frame.render_widget(block, area);
 
-        let max_rows = inner.height as usize;
+        let max_rows = usize::from(inner.height);
         let mut sorted: Vec<_> = self.clients.iter().collect();
         sorted.sort_by(|a, b| {
             let a_total = a.tx_bytes.unwrap_or(0) + a.rx_bytes.unwrap_or(0);
@@ -931,16 +889,24 @@ impl DashboardScreen {
         let padding = 3u16;
 
         // Dynamic name width: fit the longest visible name up to a cap
-        let longest_name = visible.iter().map(|c| {
-            c.name.as_deref().or(c.hostname.as_deref()).unwrap_or("unknown").len()
-        }).max().unwrap_or(8);
-        let name_cap = inner.width.saturating_sub(traffic_width + padding + 4) as usize;
+        let longest_name = visible
+            .iter()
+            .map(|c| {
+                c.name
+                    .as_deref()
+                    .or(c.hostname.as_deref())
+                    .unwrap_or("unknown")
+                    .len()
+            })
+            .max()
+            .unwrap_or(8);
+        let name_cap = usize::from(inner.width.saturating_sub(traffic_width + padding + 4));
         let name_width = longest_name.min(name_cap).max(8);
 
         // Bar gets whatever is left
-        let bar_width = inner
-            .width
-            .saturating_sub(name_width as u16 + traffic_width + padding + 1);
+        let bar_width = inner.width.saturating_sub(
+            u16::try_from(name_width).unwrap_or(u16::MAX) + traffic_width + padding + 1,
+        );
 
         let mut lines = Vec::new();
         for client in &visible {
@@ -981,16 +947,12 @@ impl DashboardScreen {
     #[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
     fn render_recent_events(&self, frame: &mut Frame, area: Rect) {
         let event_count = self.events.len();
-        let title = Line::from(vec![
-            Span::styled(" Recent Events ", theme::title_style()),
-        ]);
+        let title = Line::from(vec![Span::styled(" Recent Events ", theme::title_style())]);
         let footer = if event_count > 0 {
-            Line::from(vec![
-                Span::styled(
-                    format!(" ↓ {event_count} event log "),
-                    Style::default().fg(theme::BORDER_GRAY),
-                ),
-            ])
+            Line::from(vec![Span::styled(
+                format!(" ↓ {event_count} event log "),
+                Style::default().fg(theme::BORDER_GRAY),
+            )])
         } else {
             Line::from("")
         };
@@ -1005,7 +967,7 @@ impl DashboardScreen {
         let inner = block.inner(area);
         frame.render_widget(block, area);
 
-        let max_rows = inner.height as usize;
+        let max_rows = usize::from(inner.height);
         let recent: Vec<_> = self.events.iter().rev().take(max_rows * 2).collect();
         let wide = inner.width > 80;
 
@@ -1038,7 +1000,7 @@ impl DashboardScreen {
             )));
         } else if wide {
             // Two events per line
-            let col_width = (inner.width / 2).saturating_sub(10) as usize;
+            let col_width = usize::from((inner.width / 2).saturating_sub(10));
             let mut iter = recent.iter();
             for _ in 0..max_rows {
                 let Some(left) = iter.next() else { break };
@@ -1055,7 +1017,7 @@ impl DashboardScreen {
             }
         } else {
             // One event per line
-            let msg_width = inner.width.saturating_sub(10) as usize;
+            let msg_width = usize::from(inner.width.saturating_sub(10));
             for evt in recent.iter().take(max_rows) {
                 let mut spans = vec![Span::raw(" ")];
                 spans.extend(format_event(evt, msg_width));
@@ -1158,8 +1120,8 @@ impl Component for DashboardScreen {
         let rows = Layout::vertical([
             Constraint::Length(9),  // Row 1: WAN Traffic Chart
             Constraint::Length(11), // Row 2: Gateway | System Health
-            Constraint::Min(8),    // Row 3: Networks | Top Clients
-            Constraint::Length(4), // Row 4: Recent Events
+            Constraint::Min(8),     // Row 3: Networks | Top Clients
+            Constraint::Length(4),  // Row 4: Recent Events
         ])
         .split(inner);
 
@@ -1167,7 +1129,7 @@ impl Component for DashboardScreen {
 
         let mid_row = Layout::horizontal([
             Constraint::Length(30), // Gateway panel
-            Constraint::Min(30),   // System Health panel
+            Constraint::Min(30),    // System Health panel
         ])
         .split(rows[1]);
 

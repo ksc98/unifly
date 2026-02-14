@@ -95,9 +95,7 @@ impl Error {
     pub fn is_transient(&self) -> bool {
         match self {
             Self::Transport(e) => e.is_timeout() || e.is_connect(),
-            Self::Timeout { .. }
-            | Self::RateLimited { .. }
-            | Self::WebSocketConnect(_) => true,
+            Self::Timeout { .. } | Self::RateLimited { .. } | Self::WebSocketConnect(_) => true,
             _ => false,
         }
     }

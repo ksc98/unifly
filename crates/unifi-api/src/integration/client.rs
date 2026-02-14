@@ -127,7 +127,7 @@ impl IntegrationClient {
         self.handle_response(resp).await
     }
 
-    async fn post<T: DeserializeOwned, B: Serialize>(
+    async fn post<T: DeserializeOwned, B: Serialize + Sync>(
         &self,
         path: &str,
         body: &B,
@@ -139,7 +139,11 @@ impl IntegrationClient {
         self.handle_response(resp).await
     }
 
-    async fn post_no_response<B: Serialize>(&self, path: &str, body: &B) -> Result<(), Error> {
+    async fn post_no_response<B: Serialize + Sync>(
+        &self,
+        path: &str,
+        body: &B,
+    ) -> Result<(), Error> {
         let url = self.url(path);
         debug!("POST {url}");
 
@@ -147,7 +151,7 @@ impl IntegrationClient {
         self.handle_empty(resp).await
     }
 
-    async fn put<T: DeserializeOwned, B: Serialize>(
+    async fn put<T: DeserializeOwned, B: Serialize + Sync>(
         &self,
         path: &str,
         body: &B,
@@ -159,7 +163,7 @@ impl IntegrationClient {
         self.handle_response(resp).await
     }
 
-    async fn patch<T: DeserializeOwned, B: Serialize>(
+    async fn patch<T: DeserializeOwned, B: Serialize + Sync>(
         &self,
         path: &str,
         body: &B,
@@ -271,9 +275,10 @@ impl IntegrationClient {
             let received = page.data.len();
             all.extend(page.data);
 
-            #[allow(clippy::cast_sign_loss)]
-            let limit_usize = limit as usize;
-            if received < limit_usize || i64::try_from(all.len()).unwrap_or(i64::MAX) >= page.total_count {
+            let limit_usize = usize::try_from(limit).unwrap_or(0);
+            if received < limit_usize
+                || i64::try_from(all.len()).unwrap_or(i64::MAX) >= page.total_count
+            {
                 break;
             }
 

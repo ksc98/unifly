@@ -208,10 +208,7 @@ pub fn save_config(cfg: &Config) -> Result<(), ConfigError> {
 // ── Credential resolution (without CLI flags) ───────────────────────
 
 /// Resolve an API key from the credential chain (no CLI flag step).
-pub fn resolve_api_key(
-    profile: &Profile,
-    profile_name: &str,
-) -> Result<SecretString, ConfigError> {
+pub fn resolve_api_key(profile: &Profile, profile_name: &str) -> Result<SecretString, ConfigError> {
     // 1. Profile's api_key_env → env var lookup
     if let Some(ref env_name) = profile.api_key_env {
         if let Ok(val) = std::env::var(env_name) {
@@ -272,10 +269,7 @@ pub fn resolve_legacy_credentials(
 }
 
 /// Resolve `AuthCredentials` from a profile's `auth_mode` field.
-pub fn resolve_auth(
-    profile: &Profile,
-    profile_name: &str,
-) -> Result<AuthCredentials, ConfigError> {
+pub fn resolve_auth(profile: &Profile, profile_name: &str) -> Result<AuthCredentials, ConfigError> {
     match profile.auth_mode.as_str() {
         "integration" => {
             let secret = resolve_api_key(profile, profile_name)?;
@@ -309,10 +303,13 @@ pub fn profile_to_controller_config(
     profile: &Profile,
     profile_name: &str,
 ) -> Result<ControllerConfig, ConfigError> {
-    let url: url::Url = profile.controller.parse().map_err(|_| ConfigError::Validation {
-        field: "controller".into(),
-        reason: format!("invalid URL: {}", profile.controller),
-    })?;
+    let url: url::Url = profile
+        .controller
+        .parse()
+        .map_err(|_| ConfigError::Validation {
+            field: "controller".into(),
+            reason: format!("invalid URL: {}", profile.controller),
+        })?;
 
     let auth = resolve_auth(profile, profile_name)?;
 

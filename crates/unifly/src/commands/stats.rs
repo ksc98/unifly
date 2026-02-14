@@ -19,10 +19,9 @@ fn interval_str(interval: &StatsInterval) -> &'static str {
 /// Render `Vec<serde_json::Value>` in the chosen output format.
 fn render_stats(data: &[serde_json::Value], format: &OutputFormat) -> String {
     match format {
-        OutputFormat::Json => output::render_json_pretty(data),
         OutputFormat::JsonCompact => output::render_json_compact(data),
         OutputFormat::Yaml => output::render_yaml(data),
-        // Dynamic fields -- fall back to pretty JSON for table/plain
+        // Dynamic fields -- fall back to pretty JSON for table/plain/json
         _ => output::render_json_pretty(data),
     }
 }

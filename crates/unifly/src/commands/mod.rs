@@ -29,6 +29,7 @@ use crate::cli::{Command, GlobalOpts};
 use crate::error::CliError;
 
 /// Dispatch a controller-bound command to the appropriate handler.
+#[allow(clippy::future_not_send)]
 pub async fn dispatch(
     cmd: Command,
     controller: &Controller,

@@ -9,7 +9,10 @@ use chrono::Utc;
 
 use super::DataStore;
 use super::collection::EntityCollection;
-use crate::model::{EntityId, Device, Client, Network, WifiBroadcast, FirewallPolicy, FirewallZone, AclRule, DnsPolicy, Voucher, Site, Event, TrafficMatchingList};
+use crate::model::{
+    AclRule, Client, Device, DnsPolicy, EntityId, Event, FirewallPolicy, FirewallZone, Network,
+    Site, TrafficMatchingList, Voucher, WifiBroadcast,
+};
 
 /// Upsert all incoming entities, then prune any existing keys not in the
 /// incoming set. This avoids the brief empty state that `clear()` causes.
@@ -53,6 +56,7 @@ impl DataStore {
     /// Uses upsert-then-prune: incoming entities are upserted first, then
     /// any keys not present in the incoming set are removed. This avoids the
     /// brief "empty" state that a clear-then-insert approach would cause.
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn apply_integration_snapshot(&self, snap: RefreshSnapshot) {
         upsert_and_prune(
             &self.devices,
@@ -179,8 +183,10 @@ impl DataStore {
             snap.events
                 .into_iter()
                 .map(|e| {
-                    let key =
-                        e.id.as_ref().map_or_else(|| format!("evt:{}", e.timestamp.timestamp_millis()), std::string::ToString::to_string);
+                    let key = e.id.as_ref().map_or_else(
+                        || format!("evt:{}", e.timestamp.timestamp_millis()),
+                        std::string::ToString::to_string,
+                    );
                     let id =
                         e.id.clone()
                             .unwrap_or_else(|| EntityId::Legacy(key.clone()));

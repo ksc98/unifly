@@ -73,6 +73,7 @@ fn detail(d: &Arc<Device>) -> String {
 
 // ── Handler ─────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_lines)]
 pub async fn handle(
     controller: &Controller,
     args: DevicesArgs,

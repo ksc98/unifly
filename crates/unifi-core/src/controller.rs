@@ -17,7 +17,7 @@ use crate::command::{Command, CommandEnvelope, CommandResult};
 use crate::config::{AuthCredentials, ControllerConfig, TlsVerification};
 use crate::error::CoreError;
 use crate::model::{
-    Admin, Alarm, AclRule, Client, Country, Device, DnsPolicy, DpiApplication, DpiCategory,
+    AclRule, Admin, Alarm, Client, Country, Device, DnsPolicy, DpiApplication, DpiCategory,
     EntityId, Event, FirewallAction, FirewallPolicy, FirewallZone, HealthSummary, MacAddress,
     Network, RadiusProfile, Site, SysInfo, SystemInfo, TrafficMatchingList, Voucher, VpnServer,
     VpnTunnel, WanInterface, WifiBroadcast,
@@ -126,6 +126,7 @@ impl Controller {
     /// Detects the platform, authenticates, performs an initial data
     /// refresh, and spawns background tasks (periodic refresh, command
     /// processor).
+    #[allow(clippy::cognitive_complexity, clippy::too_many_lines)]
     pub async fn connect(&self) -> Result<(), CoreError> {
         let _ = self
             .inner
@@ -227,7 +228,9 @@ impl Controller {
                             *self.inner.legacy_client.lock().await = Some(client);
                         }
                         Err(e) => {
-                            let msg = format!("Legacy login failed: {e} — events, health stats, and client traffic will be unavailable");
+                            let msg = format!(
+                                "Legacy login failed: {e} — events, health stats, and client traffic will be unavailable"
+                            );
                             warn!("{msg}");
                             self.inner.warnings.lock().await.push(msg);
                         }
@@ -280,11 +283,7 @@ impl Controller {
     /// raw [`UnifiEvent`]s into domain [`Event`]s and broadcasts them.
     ///
     /// Non-fatal on failure — the TUI falls back to polling.
-    async fn spawn_websocket(
-        &self,
-        cancel: &CancellationToken,
-        handles: &mut Vec<JoinHandle<()>>,
-    ) {
+    async fn spawn_websocket(&self, cancel: &CancellationToken, handles: &mut Vec<JoinHandle<()>>) {
         let legacy_guard = self.inner.legacy_client.lock().await;
         let Some(ref legacy) = *legacy_guard else {
             debug!("no legacy client — WebSocket unavailable");
@@ -299,7 +298,11 @@ impl Controller {
 
         let ws_path = ws_path_template.replace("{site}", &self.inner.config.site);
         let base_url = &self.inner.config.url;
-        let scheme = if base_url.scheme() == "https" { "wss" } else { "ws" };
+        let scheme = if base_url.scheme() == "https" {
+            "wss"
+        } else {
+            "ws"
+        };
         let host = base_url.host_str().unwrap_or("localhost");
         let ws_url_str = match base_url.port() {
             Some(p) => format!("{scheme}://{host}:{p}{ws_path}"),
@@ -421,6 +424,7 @@ impl Controller {
     /// Pulls devices, clients, and events from the Legacy API, converts
     /// them to domain types, and applies them to the store. Events are
     /// broadcast through the event channel (not stored).
+    #[allow(clippy::cognitive_complexity, clippy::too_many_lines)]
     pub async fn full_refresh(&self) -> Result<(), CoreError> {
         let integration_guard = self.inner.integration_client.lock().await;
         let site_id = *self.inner.site_id.lock().await;
@@ -473,17 +477,15 @@ impl Controller {
             let devices: Vec<Device> = devices_res?.into_iter().map(Device::from).collect();
             let mut clients: Vec<Client> = clients_res?.into_iter().map(Client::from).collect();
             // Fetch full details for each network (list endpoint omits ipv4/ipv6 config)
-            let network_ids: Vec<uuid::Uuid> = networks_res?
-                .into_iter()
-                .map(|n| n.id)
-                .collect();
-            info!(network_count = network_ids.len(), "fetching network details");
+            let network_ids: Vec<uuid::Uuid> = networks_res?.into_iter().map(|n| n.id).collect();
+            info!(
+                network_count = network_ids.len(),
+                "fetching network details"
+            );
             let networks: Vec<Network> = {
                 let futs = network_ids.into_iter().map(|nid| async move {
                     match integration.get_network(&sid, &nid).await {
-                        Ok(detail) => {
-                            Some(Network::from(detail))
-                        }
+                        Ok(detail) => Some(Network::from(detail)),
                         Err(e) => {
                             warn!(network_id = %nid, error = %e, "network detail fetch failed");
                             None
@@ -514,7 +516,10 @@ impl Controller {
             let vouchers: Vec<Voucher> = unwrap_or_empty("vouchers", vouchers_res);
 
             // Enrich devices with per-device statistics (parallel, non-fatal)
-            info!(device_count = devices.len(), "enriching devices with statistics");
+            info!(
+                device_count = devices.len(),
+                "enriching devices with statistics"
+            );
             let mut devices = {
                 let futs = devices.into_iter().map(|mut device| async {
                     if let EntityId::Uuid(device_uuid) = &device.id {
@@ -546,61 +551,59 @@ impl Controller {
                 Vec<unifi_api::legacy::models::LegacyClientEntry>,
                 Vec<unifi_api::legacy::models::LegacyDevice>,
             ) = match *self.inner.legacy_client.lock().await {
-                    Some(ref legacy) => {
-                        let (events_res, health_res, clients_res, devices_res) = tokio::join!(
-                            legacy.list_events(Some(100)),
-                            legacy.get_health(),
-                            legacy.list_clients(),
-                            legacy.list_devices(),
-                        );
+                Some(ref legacy) => {
+                    let (events_res, health_res, clients_res, devices_res) = tokio::join!(
+                        legacy.list_events(Some(100)),
+                        legacy.get_health(),
+                        legacy.list_clients(),
+                        legacy.list_devices(),
+                    );
 
-                        let events = match events_res {
-                            Ok(raw) => {
-                                let evts: Vec<Event> =
-                                    raw.into_iter().map(Event::from).collect();
-                                for evt in &evts {
-                                    let _ =
-                                        self.inner.event_tx.send(Arc::new(evt.clone()));
-                                }
-                                evts
+                    let events = match events_res {
+                        Ok(raw) => {
+                            let evts: Vec<Event> = raw.into_iter().map(Event::from).collect();
+                            for evt in &evts {
+                                let _ = self.inner.event_tx.send(Arc::new(evt.clone()));
                             }
-                            Err(e) => {
-                                warn!(error = %e, "legacy event fetch failed (non-fatal)");
-                                Vec::new()
-                            }
-                        };
+                            evts
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "legacy event fetch failed (non-fatal)");
+                            Vec::new()
+                        }
+                    };
 
-                        let health = match health_res {
-                            Ok(raw) => convert_health_summaries(raw),
-                            Err(e) => {
-                                warn!(error = %e, "legacy health fetch failed (non-fatal)");
-                                Vec::new()
-                            }
-                        };
+                    let health = match health_res {
+                        Ok(raw) => convert_health_summaries(raw),
+                        Err(e) => {
+                            warn!(error = %e, "legacy health fetch failed (non-fatal)");
+                            Vec::new()
+                        }
+                    };
 
-                        let lc = match clients_res {
-                            Ok(raw) => raw,
-                            Err(e) => {
-                                warn!(
-                                    error = %e,
-                                    "legacy client fetch failed (non-fatal)"
-                                );
-                                Vec::new()
-                            }
-                        };
+                    let lc = match clients_res {
+                        Ok(raw) => raw,
+                        Err(e) => {
+                            warn!(
+                                error = %e,
+                                "legacy client fetch failed (non-fatal)"
+                            );
+                            Vec::new()
+                        }
+                    };
 
-                        let ld = match devices_res {
-                            Ok(raw) => raw,
-                            Err(e) => {
-                                warn!(error = %e, "legacy device fetch failed (non-fatal)");
-                                Vec::new()
-                            }
-                        };
+                    let ld = match devices_res {
+                        Ok(raw) => raw,
+                        Err(e) => {
+                            warn!(error = %e, "legacy device fetch failed (non-fatal)");
+                            Vec::new()
+                        }
+                    };
 
-                        (events, health, lc, ld)
-                    }
-                    None => (Vec::new(), Vec::new(), Vec::new(), Vec::new()),
-                };
+                    (events, health, lc, ld)
+                }
+                None => (Vec::new(), Vec::new(), Vec::new(), Vec::new()),
+            };
 
             // Merge Legacy client traffic (tx/rx bytes, hostname) into Integration clients.
             // Match by IP address — Integration API clients often lack real MAC addresses
@@ -650,8 +653,7 @@ impl Controller {
                 for device in &mut devices {
                     if let Some(ld) = legacy_by_mac.get(device.mac.as_str()) {
                         if device.client_count.is_none() {
-                            device.client_count =
-                                ld.num_sta.and_then(|n| n.try_into().ok());
+                            device.client_count = ld.num_sta.and_then(|n| n.try_into().ok());
                         }
                     }
                 }
@@ -1036,7 +1038,12 @@ impl Controller {
         Ok(raw
             .into_iter()
             .map(|c| {
-                let id = c.fields.get("id").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
+                #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+                let id = c
+                    .fields
+                    .get("id")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0) as u32;
                 DpiCategory {
                     id,
                     name: c
@@ -1072,7 +1079,12 @@ impl Controller {
         Ok(raw
             .into_iter()
             .map(|a| {
-                let id = a.fields.get("id").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
+                #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+                let id = a
+                    .fields
+                    .get("id")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0) as u32;
                 DpiApplication {
                     id,
                     name: a
@@ -1081,6 +1093,7 @@ impl Controller {
                         .and_then(|v| v.as_str())
                         .unwrap_or("Unknown")
                         .to_owned(),
+                    #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
                     category_id: a
                         .fields
                         .get("categoryId")
@@ -1225,13 +1238,10 @@ impl Controller {
         Ok(raw
             .into_iter()
             .map(|v| Admin {
-                id: v
-                    .get("_id")
-                    .and_then(|v| v.as_str())
-                    .map_or_else(
-                        || EntityId::Legacy("unknown".into()),
-                        |s| EntityId::Legacy(s.into()),
-                    ),
+                id: v.get("_id").and_then(|v| v.as_str()).map_or_else(
+                    || EntityId::Legacy("unknown".into()),
+                    |s| EntityId::Legacy(s.into()),
+                ),
                 name: v
                     .get("name")
                     .and_then(|v| v.as_str())
@@ -1243,7 +1253,10 @@ impl Controller {
                     .and_then(|v| v.as_str())
                     .unwrap_or("unknown")
                     .to_owned(),
-                is_super: v.get("is_super").and_then(serde_json::Value::as_bool).unwrap_or(false),
+                is_super: v
+                    .get("is_super")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false),
                 last_login: None,
             })
             .collect())
@@ -1319,7 +1332,9 @@ impl Controller {
                 .and_then(|v| v.as_str())
                 .and_then(|s| s.parse().ok()),
             uptime_secs: raw.get("uptime").and_then(serde_json::Value::as_u64),
-            update_available: raw.get("update_available").and_then(serde_json::Value::as_bool),
+            update_available: raw
+                .get("update_available")
+                .and_then(serde_json::Value::as_bool),
         })
     }
 
@@ -1359,6 +1374,7 @@ impl Controller {
                 .get("live_chat")
                 .and_then(|v| v.as_str())
                 .map(String::from),
+            #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
             data_retention_days: raw
                 .get("data_retention_days")
                 .and_then(serde_json::Value::as_u64)
@@ -1390,22 +1406,43 @@ fn apply_device_sync(store: &DataStore, data: &serde_json::Value) {
     let cpu = sys
         .and_then(|s| s.get("cpu"))
         .and_then(|v| v.as_str().or_else(|| v.as_f64().map(|_| "")))
-        .and_then(|s| if s.is_empty() { None } else { s.parse::<f64>().ok() })
-        .or_else(|| sys.and_then(|s| s.get("cpu")).and_then(serde_json::Value::as_f64));
+        .and_then(|s| {
+            if s.is_empty() {
+                None
+            } else {
+                s.parse::<f64>().ok()
+            }
+        })
+        .or_else(|| {
+            sys.and_then(|s| s.get("cpu"))
+                .and_then(serde_json::Value::as_f64)
+        });
+    #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
     let mem_pct = match (
-        sys.and_then(|s| s.get("mem_used")).and_then(serde_json::Value::as_i64),
-        sys.and_then(|s| s.get("mem_total")).and_then(serde_json::Value::as_i64),
+        sys.and_then(|s| s.get("mem_used"))
+            .and_then(serde_json::Value::as_i64),
+        sys.and_then(|s| s.get("mem_total"))
+            .and_then(serde_json::Value::as_i64),
     ) {
         (Some(used), Some(total)) if total > 0 => Some((used as f64 / total as f64) * 100.0),
         _ => None,
     };
     let load_averages: [Option<f64>; 3] = [
-        sys.and_then(|s| s.get("loadavg_1"))
-            .and_then(|v| v.as_str().and_then(|s| s.parse().ok()).or_else(|| v.as_f64())),
-        sys.and_then(|s| s.get("loadavg_5"))
-            .and_then(|v| v.as_str().and_then(|s| s.parse().ok()).or_else(|| v.as_f64())),
-        sys.and_then(|s| s.get("loadavg_15"))
-            .and_then(|v| v.as_str().and_then(|s| s.parse().ok()).or_else(|| v.as_f64())),
+        sys.and_then(|s| s.get("loadavg_1")).and_then(|v| {
+            v.as_str()
+                .and_then(|s| s.parse().ok())
+                .or_else(|| v.as_f64())
+        }),
+        sys.and_then(|s| s.get("loadavg_5")).and_then(|v| {
+            v.as_str()
+                .and_then(|s| s.parse().ok())
+                .or_else(|| v.as_f64())
+        }),
+        sys.and_then(|s| s.get("loadavg_15")).and_then(|v| {
+            v.as_str()
+                .and_then(|s| s.parse().ok())
+                .or_else(|| v.as_f64())
+        }),
     ];
 
     // Uplink bandwidth: check "uplink" object or top-level fields
@@ -1420,12 +1457,10 @@ fn apply_device_sync(store: &DataStore, data: &serde_json::Value) {
         .or_else(|| data.get("rx_bytes-r").and_then(serde_json::Value::as_u64));
 
     let bandwidth = match (tx_bps, rx_bps) {
-        (Some(tx), Some(rx)) if tx > 0 || rx > 0 => {
-            Some(crate::model::common::Bandwidth {
-                tx_bytes_per_sec: tx,
-                rx_bytes_per_sec: rx,
-            })
-        }
+        (Some(tx), Some(rx)) if tx > 0 || rx > 0 => Some(crate::model::common::Bandwidth {
+            tx_bytes_per_sec: tx,
+            rx_bytes_per_sec: rx,
+        }),
         _ => existing.stats.uplink_bandwidth, // Keep existing if no new data
     };
 
@@ -1458,11 +1493,11 @@ fn apply_device_sync(store: &DataStore, data: &serde_json::Value) {
     device.stats.uptime_secs = uptime;
 
     // Update client count from num_sta (AP/switch connected stations)
-    if let Some(num_sta) = data
-        .get("num_sta")
-        .and_then(serde_json::Value::as_u64)
-    {
-        device.client_count = Some(num_sta as u32);
+    if let Some(num_sta) = data.get("num_sta").and_then(serde_json::Value::as_u64) {
+        #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+        {
+            device.client_count = Some(num_sta as u32);
+        }
     }
 
     let key = mac.as_str().to_owned();
@@ -1512,6 +1547,7 @@ async fn command_processor_task(controller: Controller, mut rx: mpsc::Receiver<C
 ///
 /// Uses the Integration API for CRUD operations when available,
 /// falls back to the Legacy API for session-based commands.
+#[allow(clippy::cognitive_complexity, clippy::too_many_lines)]
 async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandResult, CoreError> {
     let store = &controller.inner.store;
 
@@ -1659,15 +1695,18 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             let legacy = require_legacy(&legacy_guard)?;
             let mac = client_mac(store, &client_id)?;
             let minutes = time_limit_minutes.unwrap_or(60);
-            legacy
-                .authorize_guest(
-                    mac.as_str(),
-                    minutes,
-                    tx_rate_kbps.map(|r| r as u32),
-                    rx_rate_kbps.map(|r| r as u32),
-                    data_limit_mb.map(|m| m as u32),
-                )
-                .await?;
+            #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+            {
+                legacy
+                    .authorize_guest(
+                        mac.as_str(),
+                        minutes,
+                        tx_rate_kbps.map(|r| r as u32),
+                        rx_rate_kbps.map(|r| r as u32),
+                        data_limit_mb.map(|m| m as u32),
+                    )
+                    .await?;
+            }
             Ok(CommandResult::Ok)
         }
 
@@ -1725,9 +1764,9 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             if let Some(v) = update.ipv6_enabled {
                 if v {
                     // Enable IPv6 with prefix delegation if not already configured
-                    extra.entry("ipv6Configuration".into()).or_insert_with(|| {
-                        serde_json::json!({ "type": "PREFIX_DELEGATION" })
-                    });
+                    extra
+                        .entry("ipv6Configuration".into())
+                        .or_insert_with(|| serde_json::json!({ "type": "PREFIX_DELEGATION" }));
                 } else {
                     extra.remove("ipv6Configuration");
                 }
@@ -2065,17 +2104,14 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
         // ── Voucher management ───────────────────────────────────
         Command::CreateVouchers(req) => {
             let (ic, sid) = require_integration(&integration_guard, site_id, "CreateVouchers")?;
+            #[allow(clippy::as_conversions, clippy::cast_possible_wrap)]
             let body = unifi_api::integration_types::VoucherCreateRequest {
                 name: req.name.unwrap_or_else(|| "Voucher".into()),
-                #[allow(clippy::cast_possible_wrap)]
                 count: Some(req.count as i32),
                 time_limit_minutes: i64::from(req.time_limit_minutes.unwrap_or(60)),
                 authorized_guest_limit: req.authorized_guest_limit.map(i64::from),
-                #[allow(clippy::cast_possible_wrap)]
                 data_usage_limit_m_bytes: req.data_usage_limit_mb.map(|m| m as i64),
-                #[allow(clippy::cast_possible_wrap)]
                 rx_rate_limit_kbps: req.rx_rate_limit_kbps.map(|r| r as i64),
-                #[allow(clippy::cast_possible_wrap)]
                 tx_rate_limit_kbps: req.tx_rate_limit_kbps.map(|r| r as i64),
             };
             let vouchers = ic.create_vouchers(&sid, &body).await?;
@@ -2125,10 +2161,12 @@ fn convert_health_summaries(raw: Vec<serde_json::Value>) -> Vec<HealthSummary> {
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown")
                 .to_owned(),
+            #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
             num_adopted: v
                 .get("num_adopted")
                 .and_then(serde_json::Value::as_u64)
                 .map(|n| n as u32),
+            #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
             num_sta: v
                 .get("num_sta")
                 .and_then(serde_json::Value::as_u64)
@@ -2136,10 +2174,7 @@ fn convert_health_summaries(raw: Vec<serde_json::Value>) -> Vec<HealthSummary> {
             tx_bytes_r: v.get("tx_bytes-r").and_then(serde_json::Value::as_u64),
             rx_bytes_r: v.get("rx_bytes-r").and_then(serde_json::Value::as_u64),
             latency: v.get("latency").and_then(serde_json::Value::as_f64),
-            wan_ip: v
-                .get("wan_ip")
-                .and_then(|v| v.as_str())
-                .map(String::from),
+            wan_ip: v.get("wan_ip").and_then(|v| v.as_str()).map(String::from),
             gateways: v.get("gateways").and_then(|v| v.as_array()).map(|a| {
                 a.iter()
                     .filter_map(|g| g.as_str().map(String::from))

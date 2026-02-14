@@ -87,6 +87,7 @@ impl ClientsScreen {
         self.table_state.select(Some(clamped));
     }
 
+    #[allow(clippy::cast_sign_loss, clippy::as_conversions)]
     fn move_selection(&mut self, delta: isize) {
         let filtered = self.filtered_clients();
         if filtered.is_empty() {
@@ -110,15 +111,14 @@ impl ClientsScreen {
         self.table_state.select(Some(0));
     }
 
-    #[allow(clippy::unused_self)]
+    #[allow(clippy::unused_self, clippy::too_many_lines, clippy::as_conversions)]
     fn render_detail(&self, frame: &mut Frame, area: Rect, client: &Client) {
         let name = client
             .name
             .as_deref()
             .or(client.hostname.as_deref())
             .unwrap_or("Unknown");
-        let ip = client
-            .ip.map_or_else(|| "─".into(), |ip| ip.to_string());
+        let ip = client.ip.map_or_else(|| "─".into(), |ip| ip.to_string());
         let mac = client.mac.to_string();
         let type_str = format!("{:?}", client.client_type);
 
@@ -135,31 +135,38 @@ impl ClientsScreen {
 
         let network = client
             .network_id
-            .as_ref().map_or_else(|| "─".into(), std::string::ToString::to_string);
+            .as_ref()
+            .map_or_else(|| "─".into(), std::string::ToString::to_string);
         let signal = client
             .wireless
             .as_ref()
-            .and_then(|w| w.signal_dbm).map_or_else(|| "─".into(), |dbm| format!("{dbm} dBm"));
+            .and_then(|w| w.signal_dbm)
+            .map_or_else(|| "─".into(), |dbm| format!("{dbm} dBm"));
         let channel = client
             .wireless
             .as_ref()
-            .and_then(|w| w.channel).map_or_else(|| "─".into(), |ch| ch.to_string());
+            .and_then(|w| w.channel)
+            .map_or_else(|| "─".into(), |ch| ch.to_string());
         let ssid = client
             .wireless
             .as_ref()
             .and_then(|w| w.ssid.as_deref())
             .unwrap_or("─");
         let tx = client
-            .tx_bytes.map_or_else(|| "─".into(), bytes_fmt::fmt_bytes_short);
+            .tx_bytes
+            .map_or_else(|| "─".into(), bytes_fmt::fmt_bytes_short);
         let rx = client
-            .rx_bytes.map_or_else(|| "─".into(), bytes_fmt::fmt_bytes_short);
-        let duration = client
-            .connected_at
-            .map_or_else(|| "─".into(), |ts| {
+            .rx_bytes
+            .map_or_else(|| "─".into(), bytes_fmt::fmt_bytes_short);
+        let duration = client.connected_at.map_or_else(
+            || "─".into(),
+            |ts| {
                 let dur = chrono::Utc::now().signed_duration_since(ts);
+                #[allow(clippy::cast_sign_loss)]
                 let secs = dur.num_seconds().max(0) as u64;
                 bytes_fmt::fmt_uptime(secs)
-            });
+            },
+        );
         let guest = if client.is_guest { "yes" } else { "no" };
         let blocked = if client.blocked { "yes" } else { "no" };
 
@@ -263,6 +270,7 @@ impl Component for ClientsScreen {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     fn handle_key_event(&mut self, key: KeyEvent) -> Result<Option<Action>> {
         if self.detail_open {
             return match key.code {
@@ -397,6 +405,7 @@ impl Component for ClientsScreen {
         Ok(None)
     }
 
+    #[allow(clippy::too_many_lines, clippy::as_conversions)]
     fn render(&self, frame: &mut Frame, area: Rect) {
         let filtered = self.filtered_clients();
         let total = self.clients.len();
@@ -455,124 +464,123 @@ impl Component for ClientsScreen {
 
         // Table rows
         let selected_idx = self.selected_index();
-        let rows: Vec<Row> = filtered
-            .iter()
-            .enumerate()
-            .map(|(i, client)| {
-                let is_selected = i == selected_idx;
-                let prefix = if is_selected { "▸" } else { " " };
+        let rows: Vec<Row> =
+            filtered
+                .iter()
+                .enumerate()
+                .map(|(i, client)| {
+                    let is_selected = i == selected_idx;
+                    let prefix = if is_selected { "▸" } else { " " };
 
-                let type_char = match client.client_type {
-                    ClientType::Wireless => "W",
-                    ClientType::Wired => "E",
-                    ClientType::Vpn => "V",
-                    ClientType::Teleport => "T",
-                    _ => "?",
-                };
-                let type_str = if client.is_guest {
-                    format!("{prefix}G")
-                } else {
-                    format!("{prefix}{type_char}")
-                };
+                    let type_char = match client.client_type {
+                        ClientType::Wireless => "W",
+                        ClientType::Wired => "E",
+                        ClientType::Vpn => "V",
+                        ClientType::Teleport => "T",
+                        _ => "?",
+                    };
+                    let type_str = if client.is_guest {
+                        format!("{prefix}G")
+                    } else {
+                        format!("{prefix}{type_char}")
+                    };
 
-                let name = client
-                    .name
-                    .as_deref()
-                    .or(client.hostname.as_deref())
-                    .unwrap_or("unknown");
+                    let name = client
+                        .name
+                        .as_deref()
+                        .or(client.hostname.as_deref())
+                        .unwrap_or("unknown");
 
-                let ip = client
-                    .ip.map_or_else(|| "─".into(), |ip| ip.to_string());
+                    let ip = client.ip.map_or_else(|| "─".into(), |ip| ip.to_string());
 
-                let mac = client.mac.to_string();
+                    let mac = client.mac.to_string();
 
-                let signal = client
-                    .wireless
-                    .as_ref()
-                    .and_then(|w| w.signal_dbm)
-                    .map_or("····", |dbm| {
-                        if dbm >= -50 {
-                            "▂▄▆█"
-                        } else if dbm >= -60 {
-                            "▂▄▆ "
-                        } else if dbm >= -70 {
-                            "▂▄  "
-                        } else if dbm >= -80 {
-                            "▂   "
-                        } else {
-                            "·   "
-                        }
-                    });
-
-                let traffic = bytes_fmt::fmt_tx_rx(
-                    client.tx_bytes.unwrap_or(0),
-                    client.rx_bytes.unwrap_or(0),
-                );
-
-                let duration = client
-                    .connected_at
-                    .map_or_else(|| "─".into(), |ts| {
-                        let dur = chrono::Utc::now().signed_duration_since(ts);
-                        let secs = dur.num_seconds().max(0) as u64;
-                        bytes_fmt::fmt_uptime(secs)
-                    });
-
-                let type_color = if client.is_guest {
-                    theme::ELECTRIC_YELLOW
-                } else {
-                    match client.client_type {
-                        ClientType::Wireless => theme::NEON_CYAN,
-                        ClientType::Wired => theme::DIM_WHITE,
-                        ClientType::Vpn => theme::ELECTRIC_PURPLE,
-                        ClientType::Teleport => theme::CORAL,
-                        _ => theme::DIM_WHITE,
-                    }
-                };
-
-                let signal_color = client
-                    .wireless
-                    .as_ref()
-                    .and_then(|w| w.signal_dbm)
-                    .map_or(theme::BORDER_GRAY, |dbm| {
-                        if dbm >= -50 {
-                            theme::SUCCESS_GREEN
-                        } else if dbm >= -60 {
-                            theme::NEON_CYAN
-                        } else if dbm >= -70 {
-                            theme::ELECTRIC_YELLOW
-                        } else if dbm >= -80 {
-                            theme::CORAL
-                        } else {
-                            theme::ERROR_RED
-                        }
-                    });
-
-                let row_style = if is_selected {
-                    theme::table_selected()
-                } else {
-                    theme::table_row()
-                };
-
-                Row::new(vec![
-                    Cell::from(type_str).style(Style::default().fg(type_color)),
-                    Cell::from(name.to_string()).style(
-                        Style::default()
-                            .fg(theme::NEON_CYAN)
-                            .add_modifier(if is_selected {
-                                Modifier::BOLD
+                    let signal = client.wireless.as_ref().and_then(|w| w.signal_dbm).map_or(
+                        "····",
+                        |dbm| {
+                            if dbm >= -50 {
+                                "▂▄▆█"
+                            } else if dbm >= -60 {
+                                "▂▄▆ "
+                            } else if dbm >= -70 {
+                                "▂▄  "
+                            } else if dbm >= -80 {
+                                "▂   "
                             } else {
-                                Modifier::empty()
-                            }),
-                    ),
-                    Cell::from(ip).style(Style::default().fg(theme::CORAL)),
-                    Cell::from(mac),
-                    Cell::from(signal.to_string()).style(Style::default().fg(signal_color)),
-                    Cell::from(traffic),
-                    Cell::from(duration),
-                ])
-                .style(row_style)
-            })
-            .collect();
+                                "·   "
+                            }
+                        },
+                    );
+
+                    let traffic = bytes_fmt::fmt_tx_rx(
+                        client.tx_bytes.unwrap_or(0),
+                        client.rx_bytes.unwrap_or(0),
+                    );
+
+                    let duration = client.connected_at.map_or_else(
+                        || "─".into(),
+                        |ts| {
+                            let dur = chrono::Utc::now().signed_duration_since(ts);
+                            #[allow(clippy::cast_sign_loss)]
+                            let secs = dur.num_seconds().max(0) as u64;
+                            bytes_fmt::fmt_uptime(secs)
+                        },
+                    );
+
+                    let type_color = if client.is_guest {
+                        theme::ELECTRIC_YELLOW
+                    } else {
+                        match client.client_type {
+                            ClientType::Wireless => theme::NEON_CYAN,
+                            ClientType::Vpn => theme::ELECTRIC_PURPLE,
+                            ClientType::Teleport => theme::CORAL,
+                            _ => theme::DIM_WHITE,
+                        }
+                    };
+
+                    let signal_color = client.wireless.as_ref().and_then(|w| w.signal_dbm).map_or(
+                        theme::BORDER_GRAY,
+                        |dbm| {
+                            if dbm >= -50 {
+                                theme::SUCCESS_GREEN
+                            } else if dbm >= -60 {
+                                theme::NEON_CYAN
+                            } else if dbm >= -70 {
+                                theme::ELECTRIC_YELLOW
+                            } else if dbm >= -80 {
+                                theme::CORAL
+                            } else {
+                                theme::ERROR_RED
+                            }
+                        },
+                    );
+
+                    let row_style = if is_selected {
+                        theme::table_selected()
+                    } else {
+                        theme::table_row()
+                    };
+
+                    Row::new(vec![
+                        Cell::from(type_str).style(Style::default().fg(type_color)),
+                        Cell::from(name.to_string()).style(
+                            Style::default()
+                                .fg(theme::NEON_CYAN)
+                                .add_modifier(if is_selected {
+                                    Modifier::BOLD
+                                } else {
+                                    Modifier::empty()
+                                }),
+                        ),
+                        Cell::from(ip).style(Style::default().fg(theme::CORAL)),
+                        Cell::from(mac),
+                        Cell::from(signal.to_string()).style(Style::default().fg(signal_color)),
+                        Cell::from(traffic),
+                        Cell::from(duration),
+                    ])
+                    .style(row_style)
+                })
+                .collect();
 
         let widths = [
             Constraint::Length(3),

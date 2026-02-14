@@ -4,9 +4,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use unifi_core::model::{AclRule, EventCategory, FirewallPolicy, FirewallZone, WifiBroadcast};
-use unifi_core::{
-    Client, Device, EntityId, Event, Network, Site, UpdateNetworkRequest,
-};
+use unifi_core::{Client, Device, EntityId, Event, Network, Site, UpdateNetworkRequest};
 
 use crate::screen::ScreenId;
 

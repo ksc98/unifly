@@ -75,6 +75,7 @@ impl FirewallScreen {
         self.active_table_state().select(Some(clamped));
     }
 
+    #[allow(clippy::cast_sign_loss, clippy::as_conversions)]
     fn move_selection(&mut self, delta: isize) {
         let len = self.active_len();
         if len == 0 {
@@ -116,7 +117,8 @@ impl FirewallScreen {
                 let prefix = if is_selected { "▸" } else { " " };
 
                 let idx = policy
-                    .index.map_or_else(|| (i + 1).to_string(), |n| n.to_string());
+                    .index
+                    .map_or_else(|| (i + 1).to_string(), |n| n.to_string());
                 let enabled = if policy.enabled { "✓" } else { "✗" };
                 let action_str = format!("{:?}", policy.action);
                 let action_color = match policy.action {

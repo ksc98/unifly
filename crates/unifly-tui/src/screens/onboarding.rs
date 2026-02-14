@@ -9,11 +9,11 @@ use std::collections::HashMap;
 
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Wrap};
-use ratatui::Frame;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::action::Action;
@@ -242,16 +242,12 @@ impl OnboardingScreen {
             site: self.site_input.trim().to_string(),
             auth_mode: self.auth_mode.config_value().to_string(),
             api_key: match self.auth_mode {
-                AuthMode::ApiKey | AuthMode::Hybrid => {
-                    Some(self.api_key_input.trim().to_string())
-                }
+                AuthMode::ApiKey | AuthMode::Hybrid => Some(self.api_key_input.trim().to_string()),
                 AuthMode::Legacy => None,
             },
             api_key_env: None,
             username: match self.auth_mode {
-                AuthMode::Legacy | AuthMode::Hybrid => {
-                    Some(self.username_input.trim().to_string())
-                }
+                AuthMode::Legacy | AuthMode::Hybrid => Some(self.username_input.trim().to_string()),
                 AuthMode::ApiKey => None,
             },
             password: match self.auth_mode {
@@ -277,34 +273,33 @@ impl OnboardingScreen {
         };
 
         tokio::spawn(async move {
-            let result =
-                match unifi_config::profile_to_controller_config(&profile, &profile_name) {
-                    Ok(config) => {
-                        let controller = unifi_core::Controller::new(config);
-                        match controller.connect().await {
-                            Ok(()) => {
-                                controller.disconnect().await;
-                                // Save config on success
-                                let cfg = unifi_config::Config {
-                                    default_profile: Some(profile_name),
-                                    defaults: unifi_config::Defaults::default(),
-                                    profiles: {
-                                        let mut m = HashMap::new();
-                                        m.insert("default".to_string(), profile);
-                                        m
-                                    },
-                                };
-                                if let Err(e) = unifi_config::save_config(&cfg) {
-                                    Err(format!("Connected, but failed to save config: {e}"))
-                                } else {
-                                    Ok(())
-                                }
+            let result = match unifi_config::profile_to_controller_config(&profile, &profile_name) {
+                Ok(config) => {
+                    let controller = unifi_core::Controller::new(config);
+                    match controller.connect().await {
+                        Ok(()) => {
+                            controller.disconnect().await;
+                            // Save config on success
+                            let cfg = unifi_config::Config {
+                                default_profile: Some(profile_name),
+                                defaults: unifi_config::Defaults::default(),
+                                profiles: {
+                                    let mut m = HashMap::new();
+                                    m.insert("default".to_string(), profile);
+                                    m
+                                },
+                            };
+                            if let Err(e) = unifi_config::save_config(&cfg) {
+                                Err(format!("Connected, but failed to save config: {e}"))
+                            } else {
+                                Ok(())
                             }
-                            Err(e) => Err(format!("{e}")),
                         }
+                        Err(e) => Err(format!("{e}")),
                     }
-                    Err(e) => Err(format!("{e}")),
-                };
+                }
+                Err(e) => Err(format!("{e}")),
+            };
 
             let _ = tx.send(Action::OnboardingTestResult(result));
         });
@@ -327,9 +322,11 @@ impl OnboardingScreen {
                 });
             }
             Err(e) => {
-                self.action_tx
-                    .as_ref()
-                    .map(|tx| tx.send(Action::Notify(crate::action::Notification::error(format!("{e}")))));
+                self.action_tx.as_ref().map(|tx| {
+                    tx.send(Action::Notify(crate::action::Notification::error(format!(
+                        "{e}"
+                    ))))
+                });
             }
         }
     }
@@ -351,13 +348,15 @@ impl OnboardingScreen {
     /// Cycle through credential fields for the current auth mode.
     fn next_cred_field(&mut self) {
         self.cred_field = match (self.auth_mode, self.cred_field) {
-            (AuthMode::ApiKey, _) => CredentialField::ApiKey,
-            (AuthMode::Legacy, CredentialField::Username) => CredentialField::Password,
-            (AuthMode::Legacy, CredentialField::Password) => CredentialField::Username,
-            (AuthMode::Legacy, _) => CredentialField::Username,
-            (AuthMode::Hybrid, CredentialField::ApiKey) => CredentialField::Username,
-            (AuthMode::Hybrid, CredentialField::Username) => CredentialField::Password,
-            (AuthMode::Hybrid, CredentialField::Password) => CredentialField::ApiKey,
+            (AuthMode::Legacy | AuthMode::Hybrid, CredentialField::Username) => {
+                CredentialField::Password
+            }
+            (AuthMode::Hybrid, CredentialField::Password) | (AuthMode::ApiKey, _) => {
+                CredentialField::ApiKey
+            }
+            (AuthMode::Legacy, _) | (AuthMode::Hybrid, CredentialField::ApiKey) => {
+                CredentialField::Username
+            }
         };
     }
 
@@ -425,10 +424,7 @@ impl OnboardingScreen {
             .collect();
 
         let line = Line::from(spans);
-        frame.render_widget(
-            Paragraph::new(line).alignment(Alignment::Center),
-            area,
-        );
+        frame.render_widget(Paragraph::new(line).alignment(Alignment::Center), area);
     }
 
     #[allow(clippy::unused_self)]
@@ -452,10 +448,7 @@ impl OnboardingScreen {
         } else {
             Style::default().fg(theme::DIM_WHITE)
         };
-        frame.render_widget(
-            Paragraph::new(Span::styled(label, label_style)),
-            label_area,
-        );
+        frame.render_widget(Paragraph::new(Span::styled(label, label_style)), label_area);
 
         let display = if masked && !value.is_empty() {
             "\u{25CF}".repeat(value.len())
@@ -519,9 +512,11 @@ impl Component for OnboardingScreen {
         }
 
         match self.step {
-            WizardStep::Welcome => if key.code == KeyCode::Enter {
-                self.advance();
-            },
+            WizardStep::Welcome => {
+                if key.code == KeyCode::Enter {
+                    self.advance();
+                }
+            }
 
             WizardStep::Url | WizardStep::Site => match key.code {
                 KeyCode::Enter => self.advance(),
@@ -575,9 +570,11 @@ impl Component for OnboardingScreen {
                 _ => {}
             },
 
-            WizardStep::Testing => if key.code == KeyCode::Esc {
-                self.go_back();
-            },
+            WizardStep::Testing => {
+                if key.code == KeyCode::Esc {
+                    self.go_back();
+                }
+            }
 
             WizardStep::Done => match key.code {
                 KeyCode::Enter => self.send_completion(),
@@ -625,7 +622,7 @@ impl Component for OnboardingScreen {
         // Layout: step indicator, content, error, hints
         let layout = Layout::vertical([
             Constraint::Length(2), // step indicator + spacer
-            Constraint::Min(1),   // content
+            Constraint::Min(1),    // content
             Constraint::Length(1), // error
             Constraint::Length(1), // hints
         ])
@@ -709,10 +706,7 @@ impl OnboardingScreen {
                 Style::default().fg(theme::DIM_WHITE),
             )),
         ];
-        frame.render_widget(
-            Paragraph::new(desc).alignment(Alignment::Center),
-            layout[1],
-        );
+        frame.render_widget(Paragraph::new(desc).alignment(Alignment::Center), layout[1]);
 
         frame.render_widget(
             Paragraph::new(Span::styled(
@@ -743,15 +737,18 @@ impl OnboardingScreen {
             layout[0],
         );
 
-        self.render_input_field(frame, layout[1], "  Controller URL", &self.url_input, true, false);
+        self.render_input_field(
+            frame,
+            layout[1],
+            "  Controller URL",
+            &self.url_input,
+            true,
+            false,
+        );
     }
 
     fn render_auth_mode(&self, frame: &mut Frame, area: Rect) {
-        let layout = Layout::vertical([
-            Constraint::Length(2),
-            Constraint::Min(0),
-        ])
-        .split(area);
+        let layout = Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).split(area);
 
         frame.render_widget(
             Paragraph::new(Span::styled(
@@ -803,11 +800,7 @@ impl OnboardingScreen {
     }
 
     fn render_credentials(&self, frame: &mut Frame, area: Rect) {
-        let layout = Layout::vertical([
-            Constraint::Length(2),
-            Constraint::Min(0),
-        ])
-        .split(area);
+        let layout = Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).split(area);
 
         frame.render_widget(
             Paragraph::new(Span::styled(
@@ -917,11 +910,7 @@ impl OnboardingScreen {
                 .style(Style::default().fg(theme::NEON_CYAN))
                 .throbber_style(Style::default().fg(theme::ELECTRIC_PURPLE));
 
-            frame.render_stateful_widget(
-                throbber,
-                layout[0],
-                &mut self.throbber_state.clone(),
-            );
+            frame.render_stateful_widget(throbber, layout[0], &mut self.throbber_state.clone());
 
             frame.render_widget(
                 Paragraph::new(Span::styled(
@@ -964,7 +953,9 @@ impl OnboardingScreen {
             Paragraph::new(Line::from(vec![
                 Span::styled(
                     "  \u{2713} ",
-                    Style::default().fg(theme::SUCCESS_GREEN).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(theme::SUCCESS_GREEN)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     "Connection successful!",

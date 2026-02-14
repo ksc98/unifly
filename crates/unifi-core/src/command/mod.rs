@@ -8,8 +8,8 @@ pub mod requests;
 
 use crate::error::CoreError;
 use crate::model::{
-    AclRule, Client, Device, DnsPolicy, EntityId, FirewallPolicy, FirewallZone,
-    MacAddress, Network, TrafficMatchingList, Voucher, WifiBroadcast,
+    AclRule, Client, Device, DnsPolicy, EntityId, FirewallPolicy, FirewallZone, MacAddress,
+    Network, TrafficMatchingList, Voucher, WifiBroadcast,
 };
 
 pub use requests::{

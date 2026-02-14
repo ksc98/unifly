@@ -9,7 +9,10 @@ use chrono::{DateTime, Utc};
 use tokio::sync::watch;
 
 use super::collection::EntityCollection;
-use crate::model::{Device, Client, Network, WifiBroadcast, FirewallPolicy, FirewallZone, AclRule, DnsPolicy, Voucher, Site, Event, TrafficMatchingList, MacAddress, EntityId, HealthSummary};
+use crate::model::{
+    AclRule, Client, Device, DnsPolicy, EntityId, Event, FirewallPolicy, FirewallZone,
+    HealthSummary, MacAddress, Network, Site, TrafficMatchingList, Voucher, WifiBroadcast,
+};
 use crate::stream::EntityStream;
 
 /// Central reactive store for all UniFi domain entities.

@@ -52,6 +52,7 @@ impl TopologyScreen {
     }
 
     /// Build positioned topology nodes from devices using a simple tree layout.
+    #[allow(clippy::cast_precision_loss, clippy::as_conversions)]
     fn build_nodes(&self) -> Vec<TopoNode> {
         let mut nodes = Vec::new();
 
@@ -215,6 +216,12 @@ impl Component for TopologyScreen {
         Ok(None)
     }
 
+    #[allow(
+        clippy::too_many_lines,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::as_conversions
+    )]
     fn render(&self, frame: &mut Frame, area: Rect) {
         let zoom_pct = (self.zoom * 100.0) as u32;
         let title = format!(

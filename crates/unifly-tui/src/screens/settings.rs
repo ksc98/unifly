@@ -6,11 +6,11 @@
 
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
-use ratatui::Frame;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::action::Action;
@@ -153,10 +153,7 @@ impl SettingsScreen {
             return;
         };
 
-        let profile_name = cfg
-            .default_profile
-            .as_deref()
-            .unwrap_or("default");
+        let profile_name = cfg.default_profile.as_deref().unwrap_or("default");
         let Some(profile) = cfg.profiles.get(profile_name) else {
             return;
         };
@@ -280,16 +277,12 @@ impl SettingsScreen {
             site: self.site_input.trim().to_string(),
             auth_mode: self.auth_mode.config_value().to_string(),
             api_key: match self.auth_mode {
-                AuthMode::ApiKey | AuthMode::Hybrid => {
-                    Some(self.api_key_input.trim().to_string())
-                }
+                AuthMode::ApiKey | AuthMode::Hybrid => Some(self.api_key_input.trim().to_string()),
                 AuthMode::Legacy => None,
             },
             api_key_env: None,
             username: match self.auth_mode {
-                AuthMode::Legacy | AuthMode::Hybrid => {
-                    Some(self.username_input.trim().to_string())
-                }
+                AuthMode::Legacy | AuthMode::Hybrid => Some(self.username_input.trim().to_string()),
                 AuthMode::ApiKey => None,
             },
             password: match self.auth_mode {
@@ -314,34 +307,29 @@ impl SettingsScreen {
         };
 
         tokio::spawn(async move {
-            let result =
-                match unifi_config::profile_to_controller_config(&profile, &profile_name) {
-                    Ok(config) => {
-                        let controller = unifi_core::Controller::new(config);
-                        match controller.connect().await {
-                            Ok(()) => {
-                                controller.disconnect().await;
-                                // Save config on success
-                                let mut cfg =
-                                    unifi_config::load_config().unwrap_or_default();
-                                cfg.profiles
-                                    .insert(profile_name.clone(), profile);
-                                if cfg.default_profile.is_none() {
-                                    cfg.default_profile = Some(profile_name.clone());
-                                }
-                                if let Err(e) = unifi_config::save_config(&cfg) {
-                                    Err(format!(
-                                        "Connected, but failed to save config: {e}"
-                                    ))
-                                } else {
-                                    Ok(())
-                                }
+            let result = match unifi_config::profile_to_controller_config(&profile, &profile_name) {
+                Ok(config) => {
+                    let controller = unifi_core::Controller::new(config);
+                    match controller.connect().await {
+                        Ok(()) => {
+                            controller.disconnect().await;
+                            // Save config on success
+                            let mut cfg = unifi_config::load_config().unwrap_or_default();
+                            cfg.profiles.insert(profile_name.clone(), profile);
+                            if cfg.default_profile.is_none() {
+                                cfg.default_profile = Some(profile_name.clone());
                             }
-                            Err(e) => Err(format!("{e}")),
+                            if let Err(e) = unifi_config::save_config(&cfg) {
+                                Err(format!("Connected, but failed to save config: {e}"))
+                            } else {
+                                Ok(())
+                            }
                         }
+                        Err(e) => Err(format!("{e}")),
                     }
-                    Err(e) => Err(format!("{e}")),
-                };
+                }
+                Err(e) => Err(format!("{e}")),
+            };
 
             let _ = tx.send(Action::SettingsTestResult(result));
         });
@@ -361,9 +349,9 @@ impl SettingsScreen {
                 });
             }
             Err(e) => {
-                let _ = tx.send(Action::Notify(crate::action::Notification::error(
-                    format!("{e}"),
-                )));
+                let _ = tx.send(Action::Notify(crate::action::Notification::error(format!(
+                    "{e}"
+                ))));
             }
         }
     }
@@ -424,10 +412,7 @@ impl SettingsScreen {
         } else {
             Style::default().fg(theme::DIM_WHITE)
         };
-        frame.render_widget(
-            Paragraph::new(Span::styled(label, label_style)),
-            label_area,
-        );
+        frame.render_widget(Paragraph::new(Span::styled(label, label_style)), label_area);
 
         let display = if masked && !value.is_empty() {
             "\u{25CF}".repeat(value.len())
@@ -563,9 +548,14 @@ impl SettingsScreen {
         }
         constraints.push(Constraint::Length(4)); // Site
         constraints.push(Constraint::Length(1)); // Insecure toggle
-        constraints.push(Constraint::Min(0));   // Spacer
+        constraints.push(Constraint::Min(0)); // Spacer
 
-        let fields_area = Rect::new(area.x + 1, area.y, area.width.saturating_sub(2), area.height);
+        let fields_area = Rect::new(
+            area.x + 1,
+            area.y,
+            area.width.saturating_sub(2),
+            area.height,
+        );
         let chunks = Layout::vertical(constraints).split(fields_area);
 
         let mut i = 0;
@@ -656,11 +646,7 @@ impl SettingsScreen {
             .style(Style::default().fg(theme::NEON_CYAN))
             .throbber_style(Style::default().fg(theme::ELECTRIC_PURPLE));
 
-        frame.render_stateful_widget(
-            throbber,
-            layout[1],
-            &mut self.throbber_state.clone(),
-        );
+        frame.render_stateful_widget(throbber, layout[1], &mut self.throbber_state.clone());
 
         frame.render_widget(
             Paragraph::new(Span::styled(
@@ -815,7 +801,7 @@ impl Component for SettingsScreen {
 
             // Inner = panel minus border (1 each side) + layout spacer (1)
             let content_y = py + 1 + 1; // border + spacer
-            let fields_x = px + 1 + 1;  // border + padding
+            let fields_x = px + 1 + 1; // border + padding
             let fields_w = panel_w.saturating_sub(4);
 
             // Walk the field layout to find which field was clicked
@@ -824,10 +810,7 @@ impl Component for SettingsScreen {
 
             let mut y = content_y;
             let field_order = {
-                let mut v = vec![
-                    (SettingsField::Url, 4u16),
-                    (SettingsField::AuthMode, 4),
-                ];
+                let mut v = vec![(SettingsField::Url, 4u16), (SettingsField::AuthMode, 4)];
                 if has_api_key {
                     v.push((SettingsField::ApiKey, 4));
                 }
@@ -919,7 +902,7 @@ impl Component for SettingsScreen {
 
         let layout = Layout::vertical([
             Constraint::Length(1), // spacer
-            Constraint::Min(1),   // content
+            Constraint::Min(1),    // content
             Constraint::Length(1), // error
             Constraint::Length(1), // hints
         ])

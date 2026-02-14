@@ -364,8 +364,8 @@ fn event_from_raw(msg_type: &str, data: &serde_json::Value) -> UnifiEvent {
 ///
 /// Jitter is +-25% to spread out reconnection storms from multiple clients.
 fn calculate_backoff(attempt: u32, config: &ReconnectConfig) -> Duration {
-    #[allow(clippy::cast_possible_wrap)]
-    let base = config.initial_delay.as_secs_f64() * 2.0_f64.powi(attempt as i32);
+    let base = config.initial_delay.as_secs_f64()
+        * 2.0_f64.powi(i32::try_from(attempt).unwrap_or(i32::MAX));
     let capped = base.min(config.max_delay.as_secs_f64());
 
     // Deterministic "jitter" seeded from the attempt number.

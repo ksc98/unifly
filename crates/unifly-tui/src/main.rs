@@ -143,8 +143,10 @@ fn build_controller_from_config() -> Option<Controller> {
     let profile_name = cfg.default_profile.as_deref().unwrap_or("default");
 
     let Some(profile) = cfg.profiles.get(profile_name) else {
-        tracing::warn!("profile '{profile_name}' not found in config (available: {:?})",
-            cfg.profiles.keys().collect::<Vec<_>>());
+        tracing::warn!(
+            "profile '{profile_name}' not found in config (available: {:?})",
+            cfg.profiles.keys().collect::<Vec<_>>()
+        );
         return None;
     };
 

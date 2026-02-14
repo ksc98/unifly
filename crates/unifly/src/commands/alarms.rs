@@ -53,7 +53,7 @@ pub async fn handle(
             if unarchived {
                 alarms.retain(|a| !a.archived);
             }
-            alarms.truncate(limit as usize);
+            alarms.truncate(usize::try_from(limit).unwrap_or(usize::MAX));
             let out = output::render_list(
                 &global.output,
                 &alarms,

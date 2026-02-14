@@ -118,7 +118,9 @@ impl From<LegacyDevice> for Device {
                 s.cpu_utilization_pct = sys.cpu.as_deref().and_then(|v| v.parse().ok());
                 // Memory utilization as a percentage
                 s.memory_utilization_pct = match (sys.mem_used, sys.mem_total) {
-                    (Some(used), Some(total)) if total > 0 => {
+                    (Some(used), Some(total)) if total > 0 =>
+                    {
+                        #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
                         Some((used as f64 / total as f64) * 100.0)
                     }
                     _ => None,
@@ -244,8 +246,7 @@ impl From<LegacyClientEntry> for Client {
 fn channel_to_frequency(channel: Option<i32>) -> Option<f32> {
     channel.map(|ch| match ch {
         1..=14 => 2.4,
-        32..=68 => 5.0,
-        96..=177 => 5.0,
+        32..=68 | 96..=177 => 5.0,
         _ => 6.0, // Wi-Fi 6E / 7
     })
 }
@@ -349,10 +350,7 @@ fn infer_ws_severity(key: &str) -> EventSeverity {
     let upper = key.to_uppercase();
     if upper.contains("ERROR") || upper.contains("FAIL") {
         EventSeverity::Error
-    } else if upper.contains("DISCONNECT")
-        || upper.contains("LOST")
-        || upper.contains("DOWN")
-    {
+    } else if upper.contains("DISCONNECT") || upper.contains("LOST") || upper.contains("DOWN") {
         EventSeverity::Warning
     } else {
         EventSeverity::Info
@@ -635,7 +633,7 @@ fn net_field<'a>(
 }
 
 /// Parse network configuration from API extra/metadata fields into a `Network`.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn parse_network_fields(
     id: uuid::Uuid,
     name: String,
@@ -676,68 +674,91 @@ fn parse_network_fields(
         .and_then(Value::as_str)
         .and_then(|s| s.parse().ok());
 
-    let subnet = ipv4
-        .and_then(|v| {
-            let host = v.get("hostIpAddress").or_else(|| v.get("host"))?.as_str()?;
-            let prefix = v.get("prefixLength").or_else(|| v.get("prefix"))?.as_u64()?;
-            Some(format!("{host}/{prefix}"))
-        });
+    let subnet = ipv4.and_then(|v| {
+        let host = v.get("hostIpAddress").or_else(|| v.get("host"))?.as_str()?;
+        let prefix = v
+            .get("prefixLength")
+            .or_else(|| v.get("prefix"))?
+            .as_u64()?;
+        Some(format!("{host}/{prefix}"))
+    });
 
     // ── DHCP ────────────────────────────────────────────────────
     // Detail API: dhcpConfiguration.mode/leaseTimeSeconds/ipAddressRange/dnsServerIpAddressesOverride
     // Fallback:   dhcp.server.enabled/rangeStart/rangeStop/leaseTimeSec/dnsOverride.servers
-    let dhcp = ipv4
-        .and_then(|v| {
-            // Try new-style dhcpConfiguration first
-            if let Some(dhcp_cfg) = v.get("dhcpConfiguration") {
-                let mode = dhcp_cfg.get("mode").and_then(Value::as_str).unwrap_or("");
-                let dhcp_enabled = mode == "SERVER";
-                let range = dhcp_cfg.get("ipAddressRange");
-                let range_start = range
-                    .and_then(|r| r.get("start").or_else(|| r.get("rangeStart")))
-                    .and_then(Value::as_str)
-                    .and_then(|s| s.parse().ok());
-                let range_stop = range
-                    .and_then(|r| r.get("end").or_else(|| r.get("rangeStop")))
-                    .and_then(Value::as_str)
-                    .and_then(|s| s.parse().ok());
-                let lease_time_secs = dhcp_cfg
-                    .get("leaseTimeSeconds")
-                    .and_then(Value::as_u64);
-                let dns_servers = dhcp_cfg
-                    .get("dnsServerIpAddressesOverride")
-                    .and_then(Value::as_array)
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|v| v.as_str()?.parse::<IpAddr>().ok())
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                return Some(DhcpConfig {
-                    enabled: dhcp_enabled,
-                    range_start,
-                    range_stop,
-                    lease_time_secs,
-                    dns_servers,
-                    gateway: gateway_ip,
-                });
-            }
-
-            // Fallback: old-style dhcp.server
-            let server = v.get("dhcp")?.get("server")?;
-            let dhcp_enabled = server.get("enabled").and_then(Value::as_bool).unwrap_or(false);
-            let range_start = server.get("rangeStart").and_then(Value::as_str).and_then(|s| s.parse().ok());
-            let range_stop = server.get("rangeStop").and_then(Value::as_str).and_then(|s| s.parse().ok());
-            let lease_time_secs = server.get("leaseTimeSec").and_then(Value::as_u64);
-            let dns_servers = server
-                .get("dnsOverride")
-                .and_then(|d| d.get("servers"))
+    let dhcp = ipv4.and_then(|v| {
+        // Try new-style dhcpConfiguration first
+        if let Some(dhcp_cfg) = v.get("dhcpConfiguration") {
+            let mode = dhcp_cfg.get("mode").and_then(Value::as_str).unwrap_or("");
+            let dhcp_enabled = mode == "SERVER";
+            let range = dhcp_cfg.get("ipAddressRange");
+            let range_start = range
+                .and_then(|r| r.get("start").or_else(|| r.get("rangeStart")))
+                .and_then(Value::as_str)
+                .and_then(|s| s.parse().ok());
+            let range_stop = range
+                .and_then(|r| r.get("end").or_else(|| r.get("rangeStop")))
+                .and_then(Value::as_str)
+                .and_then(|s| s.parse().ok());
+            let lease_time_secs = dhcp_cfg.get("leaseTimeSeconds").and_then(Value::as_u64);
+            let dns_servers = dhcp_cfg
+                .get("dnsServerIpAddressesOverride")
                 .and_then(Value::as_array)
-                .map(|arr| arr.iter().filter_map(|v| v.as_str()?.parse::<IpAddr>().ok()).collect())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str()?.parse::<IpAddr>().ok())
+                        .collect()
+                })
                 .unwrap_or_default();
-            let gateway = server.get("gateway").and_then(Value::as_str).and_then(|s| s.parse().ok()).or(gateway_ip);
-            Some(DhcpConfig { enabled: dhcp_enabled, range_start, range_stop, lease_time_secs, dns_servers, gateway })
-        });
+            return Some(DhcpConfig {
+                enabled: dhcp_enabled,
+                range_start,
+                range_stop,
+                lease_time_secs,
+                dns_servers,
+                gateway: gateway_ip,
+            });
+        }
+
+        // Fallback: old-style dhcp.server
+        let server = v.get("dhcp")?.get("server")?;
+        let dhcp_enabled = server
+            .get("enabled")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let range_start = server
+            .get("rangeStart")
+            .and_then(Value::as_str)
+            .and_then(|s| s.parse().ok());
+        let range_stop = server
+            .get("rangeStop")
+            .and_then(Value::as_str)
+            .and_then(|s| s.parse().ok());
+        let lease_time_secs = server.get("leaseTimeSec").and_then(Value::as_u64);
+        let dns_servers = server
+            .get("dnsOverride")
+            .and_then(|d| d.get("servers"))
+            .and_then(Value::as_array)
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str()?.parse::<IpAddr>().ok())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let gateway = server
+            .get("gateway")
+            .and_then(Value::as_str)
+            .and_then(|s| s.parse().ok())
+            .or(gateway_ip);
+        Some(DhcpConfig {
+            enabled: dhcp_enabled,
+            range_start,
+            range_stop,
+            lease_time_secs,
+            dns_servers,
+            gateway,
+        })
+    });
 
     // ── PXE / NTP / TFTP ────────────────────────────────────────
     let pxe_enabled = ipv4
@@ -784,20 +805,23 @@ fn parse_network_fields(
             v.get("clientAddressAssignment")
                 .and_then(|ca| ca.get("dhcpv6Enabled"))
                 .and_then(Value::as_bool)
-                .or_else(|| v.get("dhcpv6").and_then(|d| d.get("enabled")).and_then(Value::as_bool))
+                .or_else(|| {
+                    v.get("dhcpv6")
+                        .and_then(|d| d.get("enabled"))
+                        .and_then(Value::as_bool)
+                })
         })
         .unwrap_or(false);
-    let ipv6_prefix = ipv6
-        .and_then(|v| {
-            // New: additionalHostIpSubnets[0]
-            v.get("additionalHostIpSubnets")
+    let ipv6_prefix = ipv6.and_then(|v| {
+        // New: additionalHostIpSubnets[0]
+        v.get("additionalHostIpSubnets")
                 .and_then(Value::as_array)
                 .and_then(|a| a.first())
                 .and_then(Value::as_str)
                 .map(String::from)
                 // Fallback: prefix
                 .or_else(|| v.get("prefix").and_then(Value::as_str).map(String::from))
-        });
+    });
 
     // ── Management type inference ───────────────────────────────
     let has_ipv4_config = ipv4.is_some();
@@ -819,6 +843,11 @@ fn parse_network_fields(
         management,
         purpose: None,
         is_default,
+        #[allow(
+            clippy::as_conversions,
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss
+        )]
         vlan_id: Some(vlan_id as u16),
         subnet,
         gateway_ip,
@@ -885,7 +914,6 @@ impl From<integration_types::WifiBroadcastResponse> for WifiBroadcast {
             .get("mode")
             .and_then(|v| v.as_str())
             .map_or(WifiSecurityMode::Open, |mode| match mode {
-                "OPEN" => WifiSecurityMode::Open,
                 "WPA2_PERSONAL" => WifiSecurityMode::Wpa2Personal,
                 "WPA3_PERSONAL" => WifiSecurityMode::Wpa3Personal,
                 "WPA2_WPA3_PERSONAL" => WifiSecurityMode::Wpa2Wpa3Personal,
@@ -925,16 +953,16 @@ impl From<integration_types::WifiBroadcastResponse> for WifiBroadcast {
 
 impl From<integration_types::FirewallPolicyResponse> for FirewallPolicy {
     fn from(p: integration_types::FirewallPolicyResponse) -> Self {
-        let action = p
-            .action
-            .get("type")
-            .and_then(|v| v.as_str())
-            .map_or(FirewallAction::Block, |a| match a {
+        let action = p.action.get("type").and_then(|v| v.as_str()).map_or(
+            FirewallAction::Block,
+            |a| match a {
                 "ALLOW" => FirewallAction::Allow,
                 "REJECT" => FirewallAction::Reject,
                 _ => FirewallAction::Block,
-            });
+            },
+        );
 
+        #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
         let index = p
             .extra
             .get("index")
@@ -1074,6 +1102,7 @@ impl From<integration_types::DnsPolicyResponse> for DnsPolicy {
                 .and_then(|v| v.as_str())
                 .unwrap_or_default()
                 .to_owned(),
+            #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
             ttl_seconds: d
                 .extra
                 .get("ttl")
@@ -1114,6 +1143,11 @@ impl From<integration_types::TrafficMatchingListResponse> for TrafficMatchingLis
 
 impl From<integration_types::VoucherResponse> for Voucher {
     fn from(v: integration_types::VoucherResponse) -> Self {
+        #[allow(
+            clippy::as_conversions,
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss
+        )]
         Voucher {
             id: EntityId::Uuid(v.id),
             code: v.code,
@@ -1173,18 +1207,12 @@ mod tests {
     fn integration_device_type_gateway_by_model() {
         // UCG Max has "switching" but not "routing" — should still be Gateway
         assert_eq!(
-            infer_device_type_integration(
-                &["switching".into()],
-                "UCG-Max"
-            ),
+            infer_device_type_integration(&["switching".into()], "UCG-Max"),
             DeviceType::Gateway
         );
         // UDM with both features
         assert_eq!(
-            infer_device_type_integration(
-                &["switching".into(), "routing".into()],
-                "UDM-Pro"
-            ),
+            infer_device_type_integration(&["switching".into(), "routing".into()], "UDM-Pro"),
             DeviceType::Gateway
         );
     }

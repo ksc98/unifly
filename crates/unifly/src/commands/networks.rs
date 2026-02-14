@@ -52,13 +52,14 @@ fn detail(n: &Arc<Network>) -> String {
         format!("Enabled:    {}", n.enabled),
         format!(
             "Management: {}",
-            n.management
-                .map_or_else(|| "-".into(), |m: unifi_core::model::NetworkManagement| format!("{m:?}"))
+            n.management.map_or_else(
+                || "-".into(),
+                |m: unifi_core::model::NetworkManagement| format!("{m:?}")
+            )
         ),
         format!(
             "VLAN:       {}",
-            n.vlan_id
-                .map_or_else(|| "-".into(), |v: u16| v.to_string())
+            n.vlan_id.map_or_else(|| "-".into(), |v: u16| v.to_string())
         ),
         format!("Subnet:     {}", n.subnet.as_deref().unwrap_or("-")),
         format!(
@@ -83,6 +84,7 @@ fn detail(n: &Arc<Network>) -> String {
 
 // ── Handler ─────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_lines)]
 pub async fn handle(
     controller: &Controller,
     args: NetworksArgs,

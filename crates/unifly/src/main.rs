@@ -54,6 +54,7 @@ fn init_tracing(verbosity: u8) {
         .init();
 }
 
+#[allow(clippy::future_not_send)]
 async fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
         // Config commands don't need a controller connection

@@ -14,7 +14,7 @@ use crate::output;
 
 use super::util;
 
-fn map_dns_type(rt: DnsRecordType) -> DnsPolicyType {
+fn map_dns_type(rt: &DnsRecordType) -> DnsPolicyType {
     match rt {
         DnsRecordType::A => DnsPolicyType::ARecord,
         DnsRecordType::Aaaa => DnsPolicyType::AaaaRecord,
@@ -123,6 +123,7 @@ pub async fn handle(
                 CreateDnsPolicyRequest {
                     name: domain.clone().unwrap_or_default(),
                     policy_type: record_type
+                        .as_ref()
                         .map_or(DnsPolicyType::ARecord, map_dns_type),
                     enabled: true,
                     domains: domain.map(|d| vec![d]),

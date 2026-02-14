@@ -8,7 +8,9 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Cell, Clear, Paragraph, Row, Table, TableState};
+use ratatui::widgets::{
+    Block, BorderType, Borders, Cell, Clear, Paragraph, Row, Table, TableState,
+};
 use tokio::sync::mpsc::UnboundedSender;
 
 use unifi_core::{Network, UpdateNetworkRequest};
@@ -105,8 +107,12 @@ impl NetworkEditState {
 
     fn handle_backspace(&mut self) {
         match self.field_idx {
-            0 => { self.name.pop(); }
-            1 => { self.vlan_id.pop(); }
+            0 => {
+                self.name.pop();
+            }
+            1 => {
+                self.vlan_id.pop();
+            }
             _ => {}
         }
     }
@@ -127,7 +133,11 @@ impl NetworkEditState {
 }
 
 fn bool_label(v: bool) -> String {
-    if v { "Enabled".into() } else { "Disabled".into() }
+    if v {
+        "Enabled".into()
+    } else {
+        "Disabled".into()
+    }
 }
 
 // ── Main screen ──────────────────────────────────────────────────────
@@ -166,6 +176,7 @@ impl NetworksScreen {
         self.table_state.select(Some(clamped));
     }
 
+    #[allow(clippy::cast_sign_loss, clippy::as_conversions)]
     fn move_selection(&mut self, delta: isize) {
         if self.networks.is_empty() {
             return;
@@ -183,7 +194,7 @@ impl NetworksScreen {
 
     // ── Detail rendering ────────────────────────────────────────
 
-    #[allow(clippy::unused_self)]
+    #[allow(clippy::unused_self, clippy::too_many_lines)]
     fn render_detail(&self, frame: &mut Frame, area: Rect, network: &Network) {
         let block = Block::default()
             .title(format!(" {} — Detail ", network.name))
@@ -216,26 +227,21 @@ impl NetworksScreen {
             .as_ref()
             .map_or_else(|| "—".into(), |m| format!("{m:?}"));
 
-        let (dhcp_status, dhcp_style) = network.dhcp.as_ref().map_or(
-            ("—", label),
-            |d| {
-                if d.enabled {
-                    ("Enabled", enabled_style)
-                } else {
-                    ("Disabled", disabled_style)
-                }
-            },
-        );
+        let (dhcp_status, dhcp_style) = network.dhcp.as_ref().map_or(("—", label), |d| {
+            if d.enabled {
+                ("Enabled", enabled_style)
+            } else {
+                ("Disabled", disabled_style)
+            }
+        });
 
-        let dhcp_range = network
-            .dhcp
-            .as_ref()
-            .filter(|d| d.enabled)
-            .map(|d| {
-                let start = d.range_start.map_or_else(|| "?".into(), |ip| ip.to_string());
-                let stop = d.range_stop.map_or_else(|| "?".into(), |ip| ip.to_string());
-                format!("{start} — {stop}")
-            });
+        let dhcp_range = network.dhcp.as_ref().filter(|d| d.enabled).map(|d| {
+            let start = d
+                .range_start
+                .map_or_else(|| "?".into(), |ip| ip.to_string());
+            let stop = d.range_stop.map_or_else(|| "?".into(), |ip| ip.to_string());
+            format!("{start} — {stop}")
+        });
 
         let lease_str = network
             .dhcp
@@ -271,13 +277,19 @@ impl NetworksScreen {
         } else {
             "Disabled".into()
         };
-        let ipv6_style = if network.ipv6_enabled { enabled_style } else { disabled_style };
+        let ipv6_style = if network.ipv6_enabled {
+            enabled_style
+        } else {
+            disabled_style
+        };
 
         // ── Section: Network Config ──
         let mut lines = vec![
             Line::from(Span::styled(
                 " Network Config",
-                Style::default().fg(theme::ELECTRIC_PURPLE).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme::ELECTRIC_PURPLE)
+                    .add_modifier(Modifier::BOLD),
             )),
             Line::from(Span::styled(
                 " ─────────────────────────────────────────",
@@ -301,7 +313,9 @@ impl NetworksScreen {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
             " DHCP Server",
-            Style::default().fg(theme::ELECTRIC_PURPLE).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(theme::ELECTRIC_PURPLE)
+                .add_modifier(Modifier::BOLD),
         )));
         lines.push(Line::from(Span::styled(
             " ─────────────────────────────────────────",
@@ -335,7 +349,9 @@ impl NetworksScreen {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
             " Features",
-            Style::default().fg(theme::ELECTRIC_PURPLE).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(theme::ELECTRIC_PURPLE)
+                .add_modifier(Modifier::BOLD),
         )));
         lines.push(Line::from(Span::styled(
             " ─────────────────────────────────────────",
@@ -367,7 +383,9 @@ impl NetworksScreen {
     fn render_edit_overlay(&self, frame: &mut Frame, area: Rect, edit: &NetworkEditState) {
         // Center the overlay (40 wide, field_count + 6 tall)
         let overlay_w = 44u16.min(area.width.saturating_sub(4));
-        let overlay_h = (NetworkEditState::FIELD_COUNT as u16 + 6).min(area.height.saturating_sub(2));
+        #[allow(clippy::cast_possible_truncation, clippy::as_conversions)]
+        let overlay_h =
+            (NetworkEditState::FIELD_COUNT as u16 + 6).min(area.height.saturating_sub(2));
         let x = area.x + (area.width.saturating_sub(overlay_w)) / 2;
         let y = area.y + (area.height.saturating_sub(overlay_h)) / 2;
         let overlay_area = Rect::new(x, y, overlay_w, overlay_h);
@@ -376,7 +394,11 @@ impl NetworksScreen {
 
         let block = Block::default()
             .title(" Edit Network ")
-            .title_style(Style::default().fg(theme::ELECTRIC_YELLOW).add_modifier(Modifier::BOLD))
+            .title_style(
+                Style::default()
+                    .fg(theme::ELECTRIC_YELLOW)
+                    .add_modifier(Modifier::BOLD),
+            )
             .borders(Borders::ALL)
             .border_type(BorderType::Double)
             .border_style(Style::default().fg(theme::ELECTRIC_PURPLE));
@@ -386,7 +408,9 @@ impl NetworksScreen {
 
         let label = Style::default().fg(theme::DIM_WHITE);
         let value_style = Style::default().fg(theme::NEON_CYAN);
-        let focused_label = Style::default().fg(theme::ELECTRIC_YELLOW).add_modifier(Modifier::BOLD);
+        let focused_label = Style::default()
+            .fg(theme::ELECTRIC_YELLOW)
+            .add_modifier(Modifier::BOLD);
         let enabled_style = Style::default().fg(theme::SUCCESS_GREEN);
         let disabled_style = Style::default().fg(theme::BORDER_GRAY);
 
@@ -401,12 +425,20 @@ impl NetworksScreen {
 
             let val_style = if NetworkEditState::is_bool_field(idx) {
                 let is_enabled = matches!(field_value.as_str(), "Enabled");
-                if is_enabled { enabled_style } else { disabled_style }
+                if is_enabled {
+                    enabled_style
+                } else {
+                    disabled_style
+                }
             } else {
                 value_style
             };
 
-            let cursor = if is_focused && !NetworkEditState::is_bool_field(idx) { "▎" } else { "" };
+            let cursor = if is_focused && !NetworkEditState::is_bool_field(idx) {
+                "▎"
+            } else {
+                ""
+            };
 
             lines.push(Line::from(vec![
                 Span::styled(marker, lbl_style),
@@ -451,7 +483,7 @@ impl Component for NetworksScreen {
         Ok(())
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
     fn handle_key_event(&mut self, key: KeyEvent) -> Result<Option<Action>> {
         // ── Edit overlay input ──────────────────────────────────
         if self.edit_state.is_some() {
@@ -558,6 +590,7 @@ impl Component for NetworksScreen {
         Ok(None)
     }
 
+    #[allow(clippy::too_many_lines)]
     fn render(&self, frame: &mut Frame, area: Rect) {
         let count = self.networks.len();
         let title = format!(" Networks ({count}) ");
@@ -609,9 +642,7 @@ impl Component for NetworksScreen {
                 let is_selected = i == selected_idx;
                 let prefix = if is_selected { "▸" } else { " " };
 
-                let vlan = net
-                    .vlan_id
-                    .map_or_else(|| "—".into(), |v| v.to_string());
+                let vlan = net.vlan_id.map_or_else(|| "—".into(), |v| v.to_string());
                 let gateway = net
                     .gateway_ip
                     .map_or_else(|| "—".into(), |ip| ip.to_string());

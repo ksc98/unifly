@@ -7,7 +7,7 @@ use unifi_core::DeviceState;
 use crate::theme;
 
 /// Returns a styled `Span` with the appropriate status dot and color.
-pub fn status_span(state: &DeviceState) -> Span<'static> {
+pub fn status_span(state: DeviceState) -> Span<'static> {
     let (symbol, color) = match state {
         DeviceState::Online => ("●", theme::SUCCESS_GREEN),
         DeviceState::Offline | DeviceState::ConnectionInterrupted | DeviceState::Isolated => {
@@ -24,7 +24,7 @@ pub fn status_span(state: &DeviceState) -> Span<'static> {
 }
 
 /// Returns the status dot character without styling (for raw output).
-pub fn status_char(state: &DeviceState) -> &'static str {
+pub fn status_char(state: DeviceState) -> &'static str {
     match state {
         DeviceState::Online => "●",
         DeviceState::Offline | DeviceState::ConnectionInterrupted | DeviceState::Isolated => "○",

@@ -18,7 +18,7 @@ use crate::output;
 
 use super::util;
 
-fn map_fw_action(a: FirewallAction) -> ModelFirewallAction {
+fn map_fw_action(a: &FirewallAction) -> ModelFirewallAction {
     match a {
         FirewallAction::Allow => ModelFirewallAction::Allow,
         FirewallAction::Block => ModelFirewallAction::Block,
@@ -140,6 +140,7 @@ pub async fn handle(
     }
 }
 
+#[allow(clippy::too_many_lines)]
 async fn handle_policies(
     controller: &Controller,
     cmd: FirewallPoliciesCommand,
@@ -193,6 +194,7 @@ async fn handle_policies(
                 CreateFirewallPolicyRequest {
                     name: name.unwrap_or_default(),
                     action: action
+                        .as_ref()
                         .map_or(ModelFirewallAction::Block, map_fw_action),
                     source_zone_id: EntityId::from(""),
                     destination_zone_id: EntityId::from(""),

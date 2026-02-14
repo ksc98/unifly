@@ -118,7 +118,9 @@ impl LegacyClient {
             "minutes": minutes,
         });
 
-        let obj = body.as_object_mut().expect("json! macro always produces an object");
+        let obj = body
+            .as_object_mut()
+            .expect("json! macro always produces an object");
         if let Some(up) = up_kbps {
             obj.insert("up".into(), json!(up));
         }

@@ -135,6 +135,7 @@ fn prompt_keyring_storage(
 
 // ── Handler ─────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_lines)]
 pub fn handle(args: ConfigArgs, global: &GlobalOpts) -> Result<(), CliError> {
     match args.command {
         // ── Init: interactive wizard ────────────────────────────────

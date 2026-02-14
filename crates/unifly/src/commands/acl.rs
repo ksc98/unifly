@@ -58,6 +58,7 @@ fn detail(r: &Arc<AclRule>) -> String {
 
 // ── Handler ─────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_lines)]
 pub async fn handle(
     controller: &Controller,
     args: AclArgs,

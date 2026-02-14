@@ -51,12 +51,14 @@ pub fn resolve_profile(
             AuthCredentials::ApiKey(secret)
         }
         "legacy" => {
-            let (username, password) = unifi_config::resolve_legacy_credentials(profile, profile_name)?;
+            let (username, password) =
+                unifi_config::resolve_legacy_credentials(profile, profile_name)?;
             AuthCredentials::Credentials { username, password }
         }
         "hybrid" => {
             let api_key = resolve_api_key_with_flag(profile, profile_name, global)?;
-            let (username, password) = unifi_config::resolve_legacy_credentials(profile, profile_name)?;
+            let (username, password) =
+                unifi_config::resolve_legacy_credentials(profile, profile_name)?;
             AuthCredentials::Hybrid {
                 api_key,
                 username,

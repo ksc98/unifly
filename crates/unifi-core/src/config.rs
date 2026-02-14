@@ -52,9 +52,9 @@ pub enum TlsVerification {
 impl PartialEq for TlsVerification {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::SystemDefaults, Self::SystemDefaults) => true,
             (Self::CustomCa(a), Self::CustomCa(b)) => a == b,
-            (Self::DangerAcceptInvalid, Self::DangerAcceptInvalid) => true,
+            (Self::SystemDefaults, Self::SystemDefaults)
+            | (Self::DangerAcceptInvalid, Self::DangerAcceptInvalid) => true,
             _ => false,
         }
     }

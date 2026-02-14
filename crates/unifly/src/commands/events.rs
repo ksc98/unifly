@@ -38,6 +38,7 @@ impl From<&Arc<Event>> for EventRow {
 
 // ── Handler ─────────────────────────────────────────────────────────
 
+#[allow(clippy::future_not_send)]
 pub async fn handle(
     controller: &Controller,
     args: EventsArgs,
@@ -50,7 +51,7 @@ pub async fn handle(
             let filtered: Vec<_> = snap
                 .iter()
                 .filter(|e| e.timestamp >= cutoff)
-                .take(limit as usize)
+                .take(usize::try_from(limit).unwrap_or(usize::MAX))
                 .cloned()
                 .collect();
             let out = output::render_list(
@@ -72,6 +73,7 @@ pub async fn handle(
 /// Stream live events from the controller's WebSocket broadcast channel.
 ///
 /// Prints each event as it arrives; Ctrl+C terminates cleanly.
+#[allow(clippy::future_not_send)]
 async fn watch_events(
     controller: &Controller,
     format: &OutputFormat,

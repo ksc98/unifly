@@ -29,13 +29,13 @@ jobs:
         with:
           node-version: 20
 
-      - uses: pnpm/action-setup@v3
+      - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
 
       - name: Install dependencies
         working-directory: docs
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build docs
         working-directory: docs

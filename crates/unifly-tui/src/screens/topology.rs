@@ -12,7 +12,7 @@ use ratatui::widgets::canvas::{Canvas, Context, Rectangle};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 use tokio::sync::mpsc::UnboundedSender;
 
-use unifi_core::{Device, DeviceState, DeviceType};
+use unifly_core::{Device, DeviceState, DeviceType};
 
 use crate::action::Action;
 use crate::component::Component;

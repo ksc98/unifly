@@ -1,5 +1,5 @@
 [package]
-name = "unifi-core"
+name = "unifly-core"
 description = "Business logic and shared services for unifly"
 version.workspace = true
 edition.workspace = true
@@ -12,7 +12,7 @@ authors.workspace = true
 workspace = true
 
 [dependencies]
-unifi-api    = { workspace = true }
+unifly-api   = { workspace = true }
 tokio        = { workspace = true }
 tokio-util   = { workspace = true }
 tokio-stream = { workspace = true, features = ["sync"] }

@@ -23,7 +23,7 @@ pub mod vpn;
 pub mod wans;
 pub mod wifi;
 
-use unifi_core::Controller;
+use unifly_core::Controller;
 
 use crate::cli::{Command, GlobalOpts};
 use crate::error::CliError;

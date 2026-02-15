@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use tabled::Tabled;
-use unifi_core::{Controller, Event};
+use unifly_core::{Controller, Event};
 
 use crate::cli::{EventsArgs, EventsCommand, GlobalOpts, OutputFormat};
 use crate::error::CliError;

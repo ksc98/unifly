@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use tabled::Tabled;
-use unifi_core::model::AclRule;
-use unifi_core::{Command as CoreCommand, Controller, EntityId};
+use unifly_core::model::AclRule;
+use unifly_core::{Command as CoreCommand, Controller, EntityId};
 
 use crate::cli::{AclArgs, AclCommand, GlobalOpts};
 use crate::error::CliError;
@@ -106,14 +106,14 @@ pub async fn handle(
             let req = if let Some(ref path) = from_file {
                 serde_json::from_value(util::read_json_file(path)?)?
             } else {
-                unifi_core::command::CreateAclRuleRequest {
+                unifly_core::command::CreateAclRuleRequest {
                     name: name.unwrap_or_default(),
                     action: match action {
                         Some(crate::cli::AclAction::Allow) => {
-                            unifi_core::model::FirewallAction::Allow
+                            unifly_core::model::FirewallAction::Allow
                         }
                         Some(crate::cli::AclAction::Block) | None => {
-                            unifi_core::model::FirewallAction::Block
+                            unifly_core::model::FirewallAction::Block
                         }
                     },
                     source_zone_id: EntityId::from(""),
@@ -135,7 +135,7 @@ pub async fn handle(
             let update = if let Some(ref path) = from_file {
                 serde_json::from_value(util::read_json_file(path)?)?
             } else {
-                unifi_core::command::UpdateAclRuleRequest::default()
+                unifly_core::command::UpdateAclRuleRequest::default()
             };
             let eid = EntityId::from(id);
             controller

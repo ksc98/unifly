@@ -15,8 +15,8 @@
 //! with configurable TLS ([`TlsMode`]: system CA, custom PEM, or danger-accept for
 //! self-signed controllers) and timeout settings.
 //!
-//! Higher-level consumers (e.g. `unifi-core`) compose both clients behind a unified
-//! [`Controller`](../unifi_core/struct.Controller.html) facade and merge their
+//! Higher-level consumers (e.g. `unifly-core`) compose both clients behind a unified
+//! [`Controller`](../unifly_core/struct.Controller.html) facade and merge their
 //! responses into canonical domain types.
 
 pub mod auth;

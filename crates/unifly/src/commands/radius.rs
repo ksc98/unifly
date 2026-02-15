@@ -1,7 +1,7 @@
 //! RADIUS profile command handlers.
 
 use tabled::Tabled;
-use unifi_core::{Controller, RadiusProfile};
+use unifly_core::{Controller, RadiusProfile};
 
 use crate::cli::{GlobalOpts, RadiusArgs, RadiusCommand};
 use crate::error::CliError;

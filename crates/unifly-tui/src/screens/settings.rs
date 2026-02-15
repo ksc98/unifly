@@ -149,7 +149,7 @@ impl SettingsScreen {
 
     /// Pre-populate form fields from the saved config file.
     fn load_from_config(&mut self) {
-        let Ok(cfg) = unifi_config::load_config() else {
+        let Ok(cfg) = unifly_config::load_config() else {
             return;
         };
 
@@ -271,8 +271,8 @@ impl SettingsScreen {
         Ok(())
     }
 
-    fn build_profile(&self) -> unifi_config::Profile {
-        unifi_config::Profile {
+    fn build_profile(&self) -> unifly_config::Profile {
+        unifly_config::Profile {
             controller: self.url_input.trim().to_string(),
             site: self.site_input.trim().to_string(),
             auth_mode: self.auth_mode.config_value().to_string(),
@@ -307,19 +307,19 @@ impl SettingsScreen {
         };
 
         tokio::spawn(async move {
-            let result = match unifi_config::profile_to_controller_config(&profile, &profile_name) {
+            let result = match unifly_config::profile_to_controller_config(&profile, &profile_name) {
                 Ok(config) => {
-                    let controller = unifi_core::Controller::new(config);
+                    let controller = unifly_core::Controller::new(config);
                     match controller.connect().await {
                         Ok(()) => {
                             controller.disconnect().await;
                             // Save config on success
-                            let mut cfg = unifi_config::load_config().unwrap_or_default();
+                            let mut cfg = unifly_config::load_config().unwrap_or_default();
                             cfg.profiles.insert(profile_name.clone(), profile);
                             if cfg.default_profile.is_none() {
                                 cfg.default_profile = Some(profile_name.clone());
                             }
-                            if let Err(e) = unifi_config::save_config(&cfg) {
+                            if let Err(e) = unifly_config::save_config(&cfg) {
                                 Err(format!("Connected, but failed to save config: {e}"))
                             } else {
                                 Ok(())
@@ -341,7 +341,7 @@ impl SettingsScreen {
             return;
         };
 
-        match unifi_config::profile_to_controller_config(&profile, &self.profile_name) {
+        match unifly_config::profile_to_controller_config(&profile, &self.profile_name) {
             Ok(config) => {
                 let _ = tx.send(Action::SettingsApply {
                     profile_name: self.profile_name.clone(),

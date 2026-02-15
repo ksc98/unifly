@@ -1,6 +1,6 @@
 // ── API-to-domain type conversions ──
 //
-// Bridges raw `unifi_api` response types into canonical `unifi_core::model`
+// Bridges raw `unifly_api` response types into canonical `unifly_core::model`
 // domain types. Each `From` impl normalizes field names, parses strings into
 // strong types, and fills sensible defaults for missing optional data.
 
@@ -10,11 +10,11 @@ use std::net::{IpAddr, Ipv4Addr};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
-use unifi_api::integration_types;
-use unifi_api::legacy::models::{
+use unifly_api::integration_types;
+use unifly_api::legacy::models::{
     LegacyAlarm, LegacyClientEntry, LegacyDevice, LegacyEvent, LegacySite,
 };
-use unifi_api::websocket::UnifiEvent;
+use unifly_api::websocket::UnifiEvent;
 
 use crate::model::{
     client::{Client, ClientType, GuestAuth, WirelessInfo},

@@ -1,10 +1,10 @@
 use thiserror::Error;
 
-/// Top-level error type for the `unifi-api` crate.
+/// Top-level error type for the `unifly-api` crate.
 ///
 /// Covers every failure mode across all API surfaces:
 /// authentication, transport, Integration API, Legacy API, WebSocket, and cloud.
-/// `unifi-core` maps these into user-facing diagnostics.
+/// `unifly-core` maps these into user-facing diagnostics.
 #[derive(Debug, Error)]
 pub enum Error {
     // ── Authentication ──────────────────────────────────────────────

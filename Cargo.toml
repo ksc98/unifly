@@ -1,8 +1,8 @@
 [workspace]
 members = [
-    "crates/unifi-api",
-    "crates/unifi-core",
-    "crates/unifi-config",
+    "crates/unifly-api",
+    "crates/unifly-core",
+    "crates/unifly-config",
     "crates/unifly",
     "crates/unifly-tui",
 ]
@@ -19,9 +19,9 @@ authors = ["Stefanie Jane <stef@hyperbliss.tech>"]
 
 [workspace.dependencies]
 # ── Internal crates ──
-unifi-api    = { path = "crates/unifi-api", version = "0.1.0" }
-unifi-core   = { path = "crates/unifi-core", version = "0.1.0" }
-unifi-config = { path = "crates/unifi-config", version = "0.1.0" }
+unifly-api    = { path = "crates/unifly-api", version = "0.1.0" }
+unifly-core   = { path = "crates/unifly-core", version = "0.1.0" }
+unifly-config = { path = "crates/unifly-config", version = "0.1.0" }
 
 # ── Async runtime ──
 tokio = { version = "1", features = ["sync", "time", "rt"] }

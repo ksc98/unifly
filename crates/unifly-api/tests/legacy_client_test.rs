@@ -6,7 +6,7 @@ use url::Url;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use unifi_api::{ControllerPlatform, Error, LegacyClient};
+use unifly_api::{ControllerPlatform, Error, LegacyClient};
 
 // ── Helpers ─────────────────────────────────────────────────────────
 

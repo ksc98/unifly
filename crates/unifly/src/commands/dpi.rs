@@ -1,7 +1,7 @@
 //! DPI reference data command handlers.
 
 use tabled::Tabled;
-use unifi_core::{Controller, DpiApplication, DpiCategory};
+use unifly_core::{Controller, DpiApplication, DpiCategory};
 
 use crate::cli::{DpiArgs, DpiCommand, GlobalOpts};
 use crate::error::CliError;

@@ -24,8 +24,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Axis, Block, BorderType, Borders, Chart, Dataset, GraphType, Paragraph};
 use tokio::sync::mpsc::UnboundedSender;
 
-use unifi_core::model::{EventSeverity, Ipv6Mode};
-use unifi_core::{Client, Device, DeviceType, Event, HealthSummary, Network};
+use unifly_core::model::{EventSeverity, Ipv6Mode};
+use unifly_core::{Client, Device, DeviceType, Event, HealthSummary, Network};
 
 use crate::action::Action;
 use crate::component::Component;
@@ -446,19 +446,19 @@ impl DashboardScreen {
             let online = self
                 .devices
                 .iter()
-                .filter(|d| d.state == unifi_core::DeviceState::Online)
+                .filter(|d| d.state == unifly_core::DeviceState::Online)
                 .count();
             let offline = total_devices - online;
             let total_clients = self.clients.len();
             let wireless = self
                 .clients
                 .iter()
-                .filter(|c| c.client_type == unifi_core::ClientType::Wireless)
+                .filter(|c| c.client_type == unifly_core::ClientType::Wireless)
                 .count();
             let wired = self
                 .clients
                 .iter()
-                .filter(|c| c.client_type == unifi_core::ClientType::Wired)
+                .filter(|c| c.client_type == unifly_core::ClientType::Wired)
                 .count();
 
             let count_text = format!(
@@ -518,12 +518,12 @@ impl DashboardScreen {
                 let cli_count: usize = if sub_name == "wlan" {
                     self.clients
                         .iter()
-                        .filter(|c| c.client_type == unifi_core::ClientType::Wireless)
+                        .filter(|c| c.client_type == unifly_core::ClientType::Wireless)
                         .count()
                 } else {
                     self.clients
                         .iter()
-                        .filter(|c| c.client_type == unifi_core::ClientType::Wired)
+                        .filter(|c| c.client_type == unifly_core::ClientType::Wired)
                         .count()
                 };
 

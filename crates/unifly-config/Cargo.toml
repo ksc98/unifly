@@ -1,5 +1,5 @@
 [package]
-name = "unifi-config"
+name = "unifly-config"
 description = "Shared configuration types, loading, and credential resolution for UniFi tools"
 version.workspace = true
 edition.workspace = true
@@ -12,7 +12,7 @@ authors.workspace = true
 workspace = true
 
 [dependencies]
-unifi-core   = { workspace = true }
+unifly-core  = { workspace = true }
 serde        = { workspace = true }
 toml         = { workspace = true }
 figment      = { workspace = true }

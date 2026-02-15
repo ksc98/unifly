@@ -1,7 +1,7 @@
 //! Alarm command handlers.
 
 use tabled::Tabled;
-use unifi_core::{Alarm, Command as CoreCommand, Controller, EntityId};
+use unifly_core::{Alarm, Command as CoreCommand, Controller, EntityId};
 
 use crate::cli::{AlarmsArgs, AlarmsCommand, GlobalOpts};
 use crate::error::CliError;

@@ -1,5 +1,5 @@
 [package]
-name = "unifi-api"
+name = "unifly-api"
 description = "Async Rust client for the Ubiquiti UniFi controller API (Integration + Legacy)"
 version.workspace = true
 edition.workspace = true

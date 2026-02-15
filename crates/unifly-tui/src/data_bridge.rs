@@ -8,7 +8,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
-use unifi_core::{ConnectionState, Controller};
+use unifly_core::{ConnectionState, Controller};
 
 use crate::action::Action;
 

@@ -16,7 +16,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
-use unifi_core::{Command, Controller, EntityId, MacAddress};
+use unifly_core::{Command, Controller, EntityId, MacAddress};
 
 use crate::action::{Action, ConfirmAction, Notification};
 use crate::component::Component;

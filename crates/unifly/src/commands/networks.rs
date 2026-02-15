@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use tabled::Tabled;
-use unifi_core::{
+use unifly_core::{
     Command as CoreCommand, Controller, CreateNetworkRequest, EntityId, Network,
     UpdateNetworkRequest,
 };
@@ -54,7 +54,7 @@ fn detail(n: &Arc<Network>) -> String {
             "Management: {}",
             n.management.map_or_else(
                 || "-".into(),
-                |m: unifi_core::model::NetworkManagement| format!("{m:?}")
+                |m: unifly_core::model::NetworkManagement| format!("{m:?}")
             )
         ),
         format!(

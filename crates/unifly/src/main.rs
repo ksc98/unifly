@@ -5,7 +5,7 @@
 //! output modes. Run `unifi config init` for an interactive first-time
 //! setup wizard that creates a named controller profile.
 //!
-//! Connects to the controller via `unifi-core`'s [`Controller`], dispatches
+//! Connects to the controller via `unifly-core`'s [`Controller`], dispatches
 //! the requested command, then disconnects and exits.
 
 mod cli;
@@ -17,7 +17,7 @@ mod output;
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
-use unifi_core::Controller;
+use unifly_core::Controller;
 
 use crate::cli::{Cli, Command};
 use crate::error::CliError;
@@ -88,7 +88,7 @@ async fn run(cli: Cli) -> Result<(), CliError> {
 /// Build a `ControllerConfig` from the config file, profile, and CLI overrides.
 fn build_controller_config(
     global: &cli::GlobalOpts,
-) -> Result<unifi_core::ControllerConfig, CliError> {
+) -> Result<unifly_core::ControllerConfig, CliError> {
     let cfg = config::load_config_or_default();
     let profile_name = config::active_profile_name(global, &cfg);
 
@@ -111,7 +111,7 @@ fn build_controller_config(
     })?;
 
     let auth = if let Some(ref key) = global.api_key {
-        unifi_core::AuthCredentials::ApiKey(secrecy::SecretString::from(key.clone()))
+        unifly_core::AuthCredentials::ApiKey(secrecy::SecretString::from(key.clone()))
     } else {
         return Err(CliError::NoCredentials {
             profile: profile_name,
@@ -119,12 +119,12 @@ fn build_controller_config(
     };
 
     let tls = if global.insecure {
-        unifi_core::TlsVerification::DangerAcceptInvalid
+        unifly_core::TlsVerification::DangerAcceptInvalid
     } else {
-        unifi_core::TlsVerification::SystemDefaults
+        unifly_core::TlsVerification::SystemDefaults
     };
 
-    Ok(unifi_core::ControllerConfig {
+    Ok(unifly_core::ControllerConfig {
         url,
         auth,
         site: global.site.clone().unwrap_or_else(|| "default".into()),

@@ -1,7 +1,7 @@
 //! System command handlers.
 
 use tabled::Tabled;
-use unifi_core::{Command as CoreCommand, Controller, HealthSummary, SysInfo, SystemInfo};
+use unifly_core::{Command as CoreCommand, Controller, HealthSummary, SysInfo, SystemInfo};
 
 use crate::cli::{BackupCommand, GlobalOpts, SystemArgs, SystemCommand};
 use crate::error::CliError;

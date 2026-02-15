@@ -47,7 +47,7 @@ pub struct FirewallPolicy {
     pub source_zone_id: Option<EntityId>,
     pub destination_zone_id: Option<EntityId>,
 
-    // Simplified traffic filter summary (the full filter tree is in unifi-api)
+    // Simplified traffic filter summary (the full filter tree is in unifly-api)
     pub source_summary: Option<String>,
     pub destination_summary: Option<String>,
 

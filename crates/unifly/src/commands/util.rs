@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use unifi_core::{Controller, EntityId, MacAddress};
+use unifly_core::{Controller, EntityId, MacAddress};
 
 use crate::error::CliError;
 

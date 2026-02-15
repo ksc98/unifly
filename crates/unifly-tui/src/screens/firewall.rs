@@ -11,7 +11,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, Table, TableState};
 use tokio::sync::mpsc::UnboundedSender;
 
-use unifi_core::model::{AclRule, FirewallPolicy, FirewallZone};
+use unifly_core::model::{AclRule, FirewallPolicy, FirewallZone};
 
 use crate::action::{Action, Direction, FirewallSubTab};
 use crate::component::Component;
@@ -122,9 +122,9 @@ impl FirewallScreen {
                 let enabled = if policy.enabled { "✓" } else { "✗" };
                 let action_str = format!("{:?}", policy.action);
                 let action_color = match policy.action {
-                    unifi_core::model::FirewallAction::Allow => theme::SUCCESS_GREEN,
-                    unifi_core::model::FirewallAction::Block => theme::ERROR_RED,
-                    unifi_core::model::FirewallAction::Reject => theme::CORAL,
+                    unifly_core::model::FirewallAction::Allow => theme::SUCCESS_GREEN,
+                    unifly_core::model::FirewallAction::Block => theme::ERROR_RED,
+                    unifly_core::model::FirewallAction::Reject => theme::CORAL,
                 };
                 let protocol = policy.protocol_summary.as_deref().unwrap_or("Any");
                 let src = policy.source_summary.as_deref().unwrap_or("─");
@@ -249,8 +249,8 @@ impl FirewallScreen {
                 let rule_type = format!("{:?}", rule.rule_type);
                 let action_str = format!("{:?}", rule.action);
                 let action_color = match rule.action {
-                    unifi_core::model::AclAction::Allow => theme::SUCCESS_GREEN,
-                    unifi_core::model::AclAction::Block => theme::ERROR_RED,
+                    unifly_core::model::AclAction::Allow => theme::SUCCESS_GREEN,
+                    unifly_core::model::AclAction::Block => theme::ERROR_RED,
                 };
                 let src = rule.source_summary.as_deref().unwrap_or("─");
                 let dst = rule.destination_summary.as_deref().unwrap_or("─");

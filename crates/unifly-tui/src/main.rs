@@ -1,7 +1,7 @@
 //! `unifly-tui` — Real-time terminal dashboard for UniFi network monitoring.
 //!
 //! Built on [ratatui](https://ratatui.rs) with reactive data from
-//! `unifi-core`'s [`EntityStream`](unifi_core::EntityStream). Screens are
+//! `unifly-core`'s [`EntityStream`](unifly_core::EntityStream). Screens are
 //! navigable via number keys (1-8): Dashboard, Devices, Clients, Networks,
 //! Firewall, Topology, Events, and Stats.
 //!
@@ -31,7 +31,7 @@ use tracing::info;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
-use unifi_core::{AuthCredentials, Controller, ControllerConfig, TlsVerification};
+use unifly_core::{AuthCredentials, Controller, ControllerConfig, TlsVerification};
 
 use crate::app::App;
 
@@ -73,7 +73,7 @@ fn setup_tracing(cli: &Cli) -> WorkerGuard {
 
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         EnvFilter::new(format!(
-            "unifly_tui={log_level},unifi_core={log_level},unifi_api={log_level}"
+            "unifly_tui={log_level},unifly_core={log_level},unifly_api={log_level}"
         ))
     });
 
@@ -132,7 +132,7 @@ fn build_controller(cli: &Cli) -> Option<Controller> {
 
 /// Try loading a controller from the shared config file (default profile).
 fn build_controller_from_config() -> Option<Controller> {
-    let cfg = match unifi_config::load_config() {
+    let cfg = match unifly_config::load_config() {
         Ok(cfg) => cfg,
         Err(e) => {
             tracing::warn!("failed to load config: {e}");
@@ -150,7 +150,7 @@ fn build_controller_from_config() -> Option<Controller> {
         return None;
     };
 
-    match unifi_config::profile_to_controller_config(profile, profile_name) {
+    match unifly_config::profile_to_controller_config(profile, profile_name) {
         Ok(config) => Some(Controller::new(config)),
         Err(e) => {
             tracing::warn!("failed to build controller from profile '{profile_name}': {e}");

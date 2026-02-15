@@ -11,7 +11,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, Table, TableState};
 use tokio::sync::mpsc::UnboundedSender;
 
-use unifi_core::{Device, DeviceState};
+use unifly_core::{Device, DeviceState};
 
 use crate::action::{Action, DeviceDetailTab};
 use crate::component::Component;
@@ -339,9 +339,9 @@ impl DevicesScreen {
                 let idx_str = port.index.to_string();
                 let name = port.name.as_deref().unwrap_or(&idx_str);
                 let state_color = match port.state {
-                    unifi_core::model::PortState::Up => theme::SUCCESS_GREEN,
-                    unifi_core::model::PortState::Down => theme::ERROR_RED,
-                    unifi_core::model::PortState::Unknown => theme::DIM_WHITE,
+                    unifly_core::model::PortState::Up => theme::SUCCESS_GREEN,
+                    unifly_core::model::PortState::Down => theme::ERROR_RED,
+                    unifly_core::model::PortState::Unknown => theme::DIM_WHITE,
                 };
                 let state_str = format!("{:?}", port.state);
                 let speed = port.speed_mbps.map_or_else(

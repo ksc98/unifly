@@ -1,4 +1,4 @@
-//! Reactive data layer between `unifi-api` and UI consumers (CLI / TUI).
+//! Reactive data layer between `unifly-api` and UI consumers (CLI / TUI).
 //!
 //! This crate owns the business logic, domain model, and reactive data
 //! infrastructure for the UniFi CLI workspace:

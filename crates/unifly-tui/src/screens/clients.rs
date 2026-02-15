@@ -11,7 +11,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, Table, TableState};
 use tokio::sync::mpsc::UnboundedSender;
 
-use unifi_core::{Client, ClientType};
+use unifly_core::{Client, ClientType};
 
 use crate::action::{Action, ClientTypeFilter};
 use crate::component::Component;

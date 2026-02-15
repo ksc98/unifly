@@ -2,7 +2,7 @@
 
 use ratatui::style::Style;
 use ratatui::text::Span;
-use unifi_core::DeviceState;
+use unifly_core::DeviceState;
 
 use crate::theme;
 

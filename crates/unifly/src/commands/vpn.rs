@@ -1,7 +1,7 @@
 //! VPN command handlers.
 
 use tabled::Tabled;
-use unifi_core::{Controller, VpnServer, VpnTunnel};
+use unifly_core::{Controller, VpnServer, VpnTunnel};
 
 use crate::cli::{GlobalOpts, VpnArgs, VpnCommand};
 use crate::error::CliError;

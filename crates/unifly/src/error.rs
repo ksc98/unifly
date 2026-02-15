@@ -9,7 +9,7 @@
 use miette::Diagnostic;
 use thiserror::Error;
 
-use unifi_core::CoreError;
+use unifly_core::CoreError;
 
 /// Exit codes per the CLI spec.
 pub mod exit_code {
@@ -177,7 +177,7 @@ pub enum CliError {
     // ── Config crate errors ──────────────────────────────────────────
     #[error(transparent)]
     #[diagnostic(code(unifi::config_error))]
-    ConfigError(#[from] unifi_config::ConfigError),
+    ConfigError(#[from] unifly_config::ConfigError),
 }
 
 impl From<figment::Error> for CliError {

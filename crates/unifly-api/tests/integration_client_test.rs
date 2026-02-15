@@ -8,10 +8,10 @@ use uuid::Uuid;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use unifi_api::integration_types::{
+use unifly_api::integration_types::{
     DeviceDetailsResponse, NetworkCreateUpdate, NetworkDetailsResponse, Page, SiteResponse,
 };
-use unifi_api::{ControllerPlatform, Error, IntegrationClient};
+use unifly_api::{ControllerPlatform, Error, IntegrationClient};
 
 // ── Helpers ─────────────────────────────────────────────────────────
 

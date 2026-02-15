@@ -11,8 +11,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 use tokio::sync::mpsc::UnboundedSender;
 
-use unifi_core::Event;
-use unifi_core::model::EventSeverity;
+use unifly_core::Event;
+use unifly_core::model::EventSeverity;
 
 use crate::action::Action;
 use crate::component::Component;

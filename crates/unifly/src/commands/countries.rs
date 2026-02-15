@@ -1,7 +1,7 @@
 //! Country code command handler.
 
 use tabled::Tabled;
-use unifi_core::{Controller, Country};
+use unifly_core::{Controller, Country};
 
 use crate::cli::GlobalOpts;
 use crate::error::CliError;

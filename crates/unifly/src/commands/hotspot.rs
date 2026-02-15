@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use tabled::Tabled;
-use unifi_core::model::Voucher;
-use unifi_core::{Command as CoreCommand, Controller, CreateVouchersRequest, EntityId};
+use unifly_core::model::Voucher;
+use unifly_core::{Command as CoreCommand, Controller, CreateVouchersRequest, EntityId};
 
 use crate::cli::{GlobalOpts, HotspotArgs, HotspotCommand};
 use crate::error::CliError;

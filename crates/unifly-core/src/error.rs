@@ -1,8 +1,8 @@
 // ── Core error types ──
 //
-// User-facing errors from unifi-core. These are NOT API-specific --
+// User-facing errors from unifly-core. These are NOT API-specific --
 // consumers never see HTTP status codes or JSON parse failures directly.
-// The `From<unifi_api::Error>` impl translates transport-layer errors
+// The `From<unifly_api::Error>` impl translates transport-layer errors
 // into domain-appropriate variants.
 
 use thiserror::Error;
@@ -76,27 +76,27 @@ pub enum CoreError {
 
 // ── Conversion from transport-layer errors ───────────────────────────
 
-impl From<unifi_api::Error> for CoreError {
-    fn from(err: unifi_api::Error) -> Self {
+impl From<unifly_api::Error> for CoreError {
+    fn from(err: unifly_api::Error) -> Self {
         match err {
-            unifi_api::Error::Authentication { message } => {
+            unifly_api::Error::Authentication { message } => {
                 CoreError::AuthenticationFailed { message }
             }
-            unifi_api::Error::TwoFactorRequired => CoreError::AuthenticationFailed {
+            unifly_api::Error::TwoFactorRequired => CoreError::AuthenticationFailed {
                 message: "Two-factor authentication token required".into(),
             },
-            unifi_api::Error::SessionExpired => CoreError::AuthenticationFailed {
+            unifly_api::Error::SessionExpired => CoreError::AuthenticationFailed {
                 message: "Session expired -- re-authentication required".into(),
             },
-            unifi_api::Error::InvalidApiKey => CoreError::AuthenticationFailed {
+            unifly_api::Error::InvalidApiKey => CoreError::AuthenticationFailed {
                 message: "Invalid API key".into(),
             },
-            unifi_api::Error::WrongAuthStrategy { expected, got } => {
+            unifly_api::Error::WrongAuthStrategy { expected, got } => {
                 CoreError::AuthenticationFailed {
                     message: format!("Wrong auth strategy: expected {expected}, got {got}"),
                 }
             }
-            unifi_api::Error::Transport(ref e) => {
+            unifly_api::Error::Transport(ref e) => {
                 if e.is_timeout() {
                     CoreError::Timeout { timeout_secs: 0 }
                 } else if e.is_connect() {
@@ -119,20 +119,20 @@ impl From<unifi_api::Error> for CoreError {
                     }
                 }
             }
-            unifi_api::Error::InvalidUrl(e) => CoreError::Config {
+            unifly_api::Error::InvalidUrl(e) => CoreError::Config {
                 message: format!("Invalid URL: {e}"),
             },
-            unifi_api::Error::Timeout { timeout_secs } => CoreError::Timeout { timeout_secs },
-            unifi_api::Error::Tls(msg) => CoreError::ConnectionFailed {
+            unifly_api::Error::Timeout { timeout_secs } => CoreError::Timeout { timeout_secs },
+            unifly_api::Error::Tls(msg) => CoreError::ConnectionFailed {
                 url: String::new(),
                 reason: format!("TLS error: {msg}"),
             },
-            unifi_api::Error::RateLimited { retry_after_secs } => CoreError::Api {
+            unifly_api::Error::RateLimited { retry_after_secs } => CoreError::Api {
                 message: format!("Rate limited -- retry after {retry_after_secs}s"),
                 code: Some("rate_limited".into()),
                 status: Some(429),
             },
-            unifi_api::Error::Integration {
+            unifly_api::Error::Integration {
                 message,
                 code,
                 status,
@@ -141,23 +141,23 @@ impl From<unifi_api::Error> for CoreError {
                 code,
                 status: Some(status),
             },
-            unifi_api::Error::LegacyApi { message } => CoreError::Api {
+            unifly_api::Error::LegacyApi { message } => CoreError::Api {
                 message,
                 code: None,
                 status: None,
             },
-            unifi_api::Error::WebSocketConnect(reason) => CoreError::ConnectionFailed {
+            unifly_api::Error::WebSocketConnect(reason) => CoreError::ConnectionFailed {
                 url: String::new(),
                 reason: format!("WebSocket connection failed: {reason}"),
             },
-            unifi_api::Error::WebSocketClosed { code, reason } => CoreError::ConnectionFailed {
+            unifly_api::Error::WebSocketClosed { code, reason } => CoreError::ConnectionFailed {
                 url: String::new(),
                 reason: format!("WebSocket closed (code {code}): {reason}"),
             },
-            unifi_api::Error::Deserialization { message, body: _ } => {
+            unifly_api::Error::Deserialization { message, body: _ } => {
                 CoreError::Internal(format!("Deserialization error: {message}"))
             }
-            unifi_api::Error::UnsupportedOperation(op) => CoreError::Unsupported {
+            unifly_api::Error::UnsupportedOperation(op) => CoreError::Unsupported {
                 operation: op.to_string(),
                 required: "a newer controller firmware".into(),
             },

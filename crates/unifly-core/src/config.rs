@@ -10,7 +10,7 @@ use url::Url;
 /// How to authenticate with a controller.
 ///
 /// Named `AuthCredentials` (not `AuthMethod`) to avoid collision with
-/// `unifi_api::AuthStrategy` which is a zero-data marker enum.
+/// `unifly_api::AuthStrategy` which is a zero-data marker enum.
 /// This type carries the actual credential data.
 #[derive(Debug, Clone)]
 pub enum AuthCredentials {

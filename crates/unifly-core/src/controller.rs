@@ -25,9 +25,9 @@ use crate::model::{
 use crate::store::DataStore;
 use crate::stream::EntityStream;
 
-use unifi_api::transport::{TlsMode, TransportConfig};
-use unifi_api::websocket::{ReconnectConfig, WebSocketHandle};
-use unifi_api::{IntegrationClient, LegacyClient};
+use unifly_api::transport::{TlsMode, TransportConfig};
+use unifly_api::websocket::{ReconnectConfig, WebSocketHandle};
+use unifly_api::{IntegrationClient, LegacyClient};
 
 const COMMAND_CHANNEL_SIZE: usize = 64;
 const EVENT_CHANNEL_SIZE: usize = 256;
@@ -548,8 +548,8 @@ impl Controller {
             let (legacy_events, legacy_health, legacy_clients, legacy_devices): (
                 Vec<Event>,
                 Vec<HealthSummary>,
-                Vec<unifi_api::legacy::models::LegacyClientEntry>,
-                Vec<unifi_api::legacy::models::LegacyDevice>,
+                Vec<unifly_api::legacy::models::LegacyClientEntry>,
+                Vec<unifly_api::legacy::models::LegacyDevice>,
             ) = match *self.inner.legacy_client.lock().await {
                 Some(ref legacy) => {
                     let (events_res, health_res, clients_res, devices_res) = tokio::join!(
@@ -609,7 +609,7 @@ impl Controller {
             // Match by IP address — Integration API clients often lack real MAC addresses
             // in the access object, falling back to UUIDs which don't match Legacy MACs.
             if !legacy_clients.is_empty() {
-                let legacy_by_ip: HashMap<&str, &unifi_api::legacy::models::LegacyClientEntry> =
+                let legacy_by_ip: HashMap<&str, &unifly_api::legacy::models::LegacyClientEntry> =
                     legacy_clients
                         .iter()
                         .filter_map(|lc| lc.ip.as_deref().map(|ip| (ip, lc)))
@@ -648,7 +648,7 @@ impl Controller {
 
             // Merge Legacy device num_sta (client counts) into Integration devices
             if !legacy_devices.is_empty() {
-                let legacy_by_mac: HashMap<&str, &unifi_api::legacy::models::LegacyDevice> =
+                let legacy_by_mac: HashMap<&str, &unifly_api::legacy::models::LegacyDevice> =
                     legacy_devices.iter().map(|d| (d.mac.as_str(), d)).collect();
                 for device in &mut devices {
                     if let Some(ld) = legacy_by_mac.get(device.mac.as_str()) {
@@ -1733,7 +1733,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
         // ── Network CRUD (Integration API) ───────────────────────
         Command::CreateNetwork(req) => {
             let (ic, sid) = require_integration(&integration_guard, site_id, "CreateNetwork")?;
-            let body = unifi_api::integration_types::NetworkCreateUpdate {
+            let body = unifly_api::integration_types::NetworkCreateUpdate {
                 name: req.name,
                 enabled: req.enabled,
                 management: "USER_DEFINED".into(),
@@ -1771,7 +1771,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
                     extra.remove("ipv6Configuration");
                 }
             }
-            let body = unifi_api::integration_types::NetworkCreateUpdate {
+            let body = unifly_api::integration_types::NetworkCreateUpdate {
                 name: update.name.unwrap_or(existing.name),
                 enabled: update.enabled.unwrap_or(existing.enabled),
                 management: existing.management,
@@ -1798,7 +1798,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             if let Some(pass) = &req.passphrase {
                 extra.insert("passphrase".into(), serde_json::Value::String(pass.clone()));
             }
-            let body = unifi_api::integration_types::WifiBroadcastCreateUpdate {
+            let body = unifly_api::integration_types::WifiBroadcastCreateUpdate {
                 name: req.name,
                 broadcast_type: "STANDARD".into(),
                 enabled: req.enabled,
@@ -1836,7 +1836,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
                 FirewallAction::Block => "DROP",
                 FirewallAction::Reject => "REJECT",
             };
-            let body = unifi_api::integration_types::FirewallPolicyCreateUpdate {
+            let body = unifly_api::integration_types::FirewallPolicyCreateUpdate {
                 name: req.name,
                 description: req.description,
                 enabled: req.enabled,
@@ -1874,7 +1874,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             let (ic, sid) =
                 require_integration(&integration_guard, site_id, "PatchFirewallPolicy")?;
             let uuid = require_uuid(&id)?;
-            let body = unifi_api::integration_types::FirewallPolicyPatch {
+            let body = unifly_api::integration_types::FirewallPolicyPatch {
                 enabled: Some(enabled),
                 logging_enabled: None,
             };
@@ -1889,7 +1889,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             let (ic, sid) =
                 require_integration(&integration_guard, site_id, "ReorderFirewallPolicies")?;
             let uuids: Result<Vec<uuid::Uuid>, _> = ordered_ids.iter().map(require_uuid).collect();
-            let body = unifi_api::integration_types::FirewallPolicyOrdering {
+            let body = unifly_api::integration_types::FirewallPolicyOrdering {
                 before_system_defined: uuids?,
                 after_system_defined: Vec::new(),
             };
@@ -1902,7 +1902,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             let (ic, sid) = require_integration(&integration_guard, site_id, "CreateFirewallZone")?;
             let network_uuids: Result<Vec<uuid::Uuid>, _> =
                 req.network_ids.iter().map(require_uuid).collect();
-            let body = unifi_api::integration_types::FirewallZoneCreateUpdate {
+            let body = unifly_api::integration_types::FirewallZoneCreateUpdate {
                 name: req.name,
                 network_ids: network_uuids?,
             };
@@ -1920,7 +1920,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             } else {
                 existing.network_ids
             };
-            let body = unifi_api::integration_types::FirewallZoneCreateUpdate {
+            let body = unifly_api::integration_types::FirewallZoneCreateUpdate {
                 name: update.name.unwrap_or(existing.name),
                 network_ids,
             };
@@ -1943,7 +1943,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
                 FirewallAction::Block => "BLOCK",
                 FirewallAction::Reject => "REJECT",
             };
-            let body = unifi_api::integration_types::AclRuleCreateUpdate {
+            let body = unifly_api::integration_types::AclRuleCreateUpdate {
                 name: req.name,
                 rule_type: "DEVICE".into(),
                 action: action_str.into(),
@@ -1967,7 +1967,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
                 Some(FirewallAction::Reject) => "REJECT".into(),
                 None => existing.action,
             };
-            let body = unifi_api::integration_types::AclRuleCreateUpdate {
+            let body = unifly_api::integration_types::AclRuleCreateUpdate {
                 name: update.name.unwrap_or(existing.name),
                 rule_type: existing.rule_type,
                 action: action_str,
@@ -1991,7 +1991,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
         Command::ReorderAclRules { ordered_ids } => {
             let (ic, sid) = require_integration(&integration_guard, site_id, "ReorderAclRules")?;
             let uuids: Result<Vec<uuid::Uuid>, _> = ordered_ids.iter().map(require_uuid).collect();
-            let body = unifi_api::integration_types::AclRuleOrdering {
+            let body = unifly_api::integration_types::AclRuleOrdering {
                 ordered_acl_rule_ids: uuids?,
             };
             ic.set_acl_rule_ordering(&sid, &body).await?;
@@ -2010,7 +2010,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
                 crate::model::DnsPolicyType::SrvRecord => "SRV",
                 crate::model::DnsPolicyType::ForwardDomain => "FORWARD_DOMAIN",
             };
-            let body = unifi_api::integration_types::DnsPolicyCreateUpdate {
+            let body = unifly_api::integration_types::DnsPolicyCreateUpdate {
                 policy_type: policy_type_str.into(),
                 enabled: req.enabled,
                 fields: serde_json::Map::new(),
@@ -2051,7 +2051,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             if let Some(desc) = req.description {
                 fields.insert("description".into(), serde_json::Value::String(desc));
             }
-            let body = unifi_api::integration_types::TrafficMatchingListCreateUpdate {
+            let body = unifly_api::integration_types::TrafficMatchingListCreateUpdate {
                 name: req.name,
                 list_type: "IPV4".into(),
                 fields,
@@ -2084,7 +2084,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             } else if let Some(existing_desc) = existing.extra.get("description") {
                 fields.insert("description".into(), existing_desc.clone());
             }
-            let body = unifi_api::integration_types::TrafficMatchingListCreateUpdate {
+            let body = unifly_api::integration_types::TrafficMatchingListCreateUpdate {
                 name: update.name.unwrap_or(existing.name),
                 list_type: existing.list_type,
                 fields,
@@ -2105,7 +2105,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
         Command::CreateVouchers(req) => {
             let (ic, sid) = require_integration(&integration_guard, site_id, "CreateVouchers")?;
             #[allow(clippy::as_conversions, clippy::cast_possible_wrap)]
-            let body = unifi_api::integration_types::VoucherCreateRequest {
+            let body = unifly_api::integration_types::VoucherCreateRequest {
                 name: req.name.unwrap_or_else(|| "Voucher".into()),
                 count: Some(req.count as i32),
                 time_limit_minutes: i64::from(req.time_limit_minutes.unwrap_or(60)),
@@ -2207,7 +2207,7 @@ fn tls_to_transport(tls: &TlsVerification) -> TlsMode {
 /// Some Integration API endpoints (ACL rules, DNS policies, vouchers) are not
 /// available on all controller firmware versions. Rather than failing the entire
 /// refresh, we log a debug message and return an empty collection.
-fn unwrap_or_empty<S, D>(endpoint: &str, result: Result<Vec<S>, unifi_api::Error>) -> Vec<D>
+fn unwrap_or_empty<S, D>(endpoint: &str, result: Result<Vec<S>, unifly_api::Error>) -> Vec<D>
 where
     D: From<S>,
 {

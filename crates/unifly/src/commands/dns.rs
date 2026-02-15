@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use tabled::Tabled;
-use unifi_core::model::{DnsPolicy, DnsPolicyType};
-use unifi_core::{
+use unifly_core::model::{DnsPolicy, DnsPolicyType};
+use unifly_core::{
     Command as CoreCommand, Controller, CreateDnsPolicyRequest, EntityId, UpdateDnsPolicyRequest,
 };
 

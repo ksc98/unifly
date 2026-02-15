@@ -1,4 +1,4 @@
-//! CLI configuration — thin wrapper around `unifi_config` shared types.
+//! CLI configuration — thin wrapper around `unifly_config` shared types.
 //!
 //! Re-exports the shared types and adds CLI-specific resolution that
 //! respects `GlobalOpts` flag overrides (--controller, --api-key, etc.).
@@ -7,14 +7,14 @@ use std::time::Duration;
 
 use secrecy::SecretString;
 
-use unifi_core::{AuthCredentials, ControllerConfig, TlsVerification};
+use unifly_core::{AuthCredentials, ControllerConfig, TlsVerification};
 
 use crate::cli::GlobalOpts;
 use crate::error::CliError;
 
 // ── Re-exports from shared crate ────────────────────────────────────
 
-pub use unifi_config::{
+pub use unifly_config::{
     Config, Defaults, Profile, config_path, load_config_or_default, save_config,
 };
 
@@ -52,13 +52,13 @@ pub fn resolve_profile(
         }
         "legacy" => {
             let (username, password) =
-                unifi_config::resolve_legacy_credentials(profile, profile_name)?;
+                unifly_config::resolve_legacy_credentials(profile, profile_name)?;
             AuthCredentials::Credentials { username, password }
         }
         "hybrid" => {
             let api_key = resolve_api_key_with_flag(profile, profile_name, global)?;
             let (username, password) =
-                unifi_config::resolve_legacy_credentials(profile, profile_name)?;
+                unifly_config::resolve_legacy_credentials(profile, profile_name)?;
             AuthCredentials::Hybrid {
                 api_key,
                 username,
@@ -110,5 +110,5 @@ fn resolve_api_key_with_flag(
     if let Some(ref key) = global.api_key {
         return Ok(SecretString::from(key.clone()));
     }
-    Ok(unifi_config::resolve_api_key(profile, profile_name)?)
+    Ok(unifly_config::resolve_api_key(profile, profile_name)?)
 }

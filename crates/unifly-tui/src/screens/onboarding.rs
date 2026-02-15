@@ -236,8 +236,8 @@ impl OnboardingScreen {
     }
 
     /// Build a Profile from wizard inputs.
-    fn build_profile(&self) -> unifi_config::Profile {
-        unifi_config::Profile {
+    fn build_profile(&self) -> unifly_config::Profile {
+        unifly_config::Profile {
             controller: self.url_input.trim().to_string(),
             site: self.site_input.trim().to_string(),
             auth_mode: self.auth_mode.config_value().to_string(),
@@ -273,23 +273,23 @@ impl OnboardingScreen {
         };
 
         tokio::spawn(async move {
-            let result = match unifi_config::profile_to_controller_config(&profile, &profile_name) {
+            let result = match unifly_config::profile_to_controller_config(&profile, &profile_name) {
                 Ok(config) => {
-                    let controller = unifi_core::Controller::new(config);
+                    let controller = unifly_core::Controller::new(config);
                     match controller.connect().await {
                         Ok(()) => {
                             controller.disconnect().await;
                             // Save config on success
-                            let cfg = unifi_config::Config {
+                            let cfg = unifly_config::Config {
                                 default_profile: Some(profile_name),
-                                defaults: unifi_config::Defaults::default(),
+                                defaults: unifly_config::Defaults::default(),
                                 profiles: {
                                     let mut m = HashMap::new();
                                     m.insert("default".to_string(), profile);
                                     m
                                 },
                             };
-                            if let Err(e) = unifi_config::save_config(&cfg) {
+                            if let Err(e) = unifly_config::save_config(&cfg) {
                                 Err(format!("Connected, but failed to save config: {e}"))
                             } else {
                                 Ok(())
@@ -314,7 +314,7 @@ impl OnboardingScreen {
             return;
         };
 
-        match unifi_config::profile_to_controller_config(&profile, profile_name) {
+        match unifly_config::profile_to_controller_config(&profile, profile_name) {
             Ok(config) => {
                 let _ = tx.send(Action::OnboardingComplete {
                     profile_name: profile_name.to_string(),
@@ -968,7 +968,7 @@ impl OnboardingScreen {
             layout[0],
         );
 
-        let saved_path = unifi_config::config_path();
+        let saved_path = unifly_config::config_path();
         let details = vec![
             Line::from(Span::styled(
                 "  Profile: default".to_string(),

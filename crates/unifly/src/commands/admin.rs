@@ -1,7 +1,7 @@
 //! Admin command handlers.
 
 use tabled::Tabled;
-use unifi_core::{Admin, Command as CoreCommand, Controller, EntityId};
+use unifly_core::{Admin, Command as CoreCommand, Controller, EntityId};
 
 use crate::cli::{AdminArgs, AdminCommand, GlobalOpts};
 use crate::error::CliError;

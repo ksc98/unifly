@@ -1,6 +1,6 @@
 //! Statistics command handlers.
 
-use unifi_core::Controller;
+use unifly_core::Controller;
 
 use crate::cli::{DpiGroupBy, GlobalOpts, OutputFormat, StatsArgs, StatsCommand, StatsInterval};
 use crate::error::CliError;

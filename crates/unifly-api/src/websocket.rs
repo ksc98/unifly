@@ -7,7 +7,7 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use unifi_api::websocket::{WebSocketHandle, ReconnectConfig};
+//! use unifly_api::websocket::{WebSocketHandle, ReconnectConfig};
 //! use tokio_util::sync::CancellationToken;
 //! use url::Url;
 //!

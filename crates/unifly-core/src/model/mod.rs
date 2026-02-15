@@ -20,7 +20,7 @@ pub mod supporting;
 pub mod wifi;
 
 // ── Re-exports ──────────────────────────────────────────────────────
-// Flat access: `use unifi_core::model::*` gives you everything.
+// Flat access: `use unifly_core::model::*` gives you everything.
 
 // Core identity
 pub use entity_id::{EntityId, MacAddress};

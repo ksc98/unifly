@@ -13,7 +13,7 @@ use ratatui::widgets::{
 };
 use tokio::sync::mpsc::UnboundedSender;
 
-use unifi_core::{Network, UpdateNetworkRequest};
+use unifly_core::{Network, UpdateNetworkRequest};
 
 use crate::action::Action;
 use crate::component::Component;

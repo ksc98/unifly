@@ -1,7 +1,7 @@
 //! Shared configuration for UniFi CLI and TUI.
 //!
 //! TOML profiles, credential resolution (keyring + env + plaintext),
-//! and translation to `unifi_core::ControllerConfig`. Both binaries
+//! and translation to `unifly_core::ControllerConfig`. Both binaries
 //! depend on this crate — the CLI adds `GlobalOpts`-aware wrappers on top.
 
 use std::collections::HashMap;
@@ -17,7 +17,7 @@ use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use unifi_core::{AuthCredentials, ControllerConfig, TlsVerification};
+use unifly_core::{AuthCredentials, ControllerConfig, TlsVerification};
 
 // ── Error ───────────────────────────────────────────────────────────
 

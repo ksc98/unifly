@@ -1,7 +1,7 @@
 //! WAN interface command handlers.
 
 use tabled::Tabled;
-use unifi_core::{Controller, WanInterface};
+use unifly_core::{Controller, WanInterface};
 
 use crate::cli::{GlobalOpts, WansArgs, WansCommand};
 use crate::error::CliError;

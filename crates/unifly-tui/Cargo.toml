@@ -16,8 +16,8 @@ name = "unifly-tui"
 path = "src/main.rs"
 
 [dependencies]
-unifi-core           = { workspace = true }
-unifi-config         = { workspace = true }
+unifly-core          = { workspace = true }
+unifly-config        = { workspace = true }
 tokio                = { workspace = true, features = ["full"] }
 serde                = { workspace = true }
 serde_json           = { workspace = true }

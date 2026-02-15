@@ -3,8 +3,8 @@
 use std::fmt;
 use std::sync::Arc;
 
-use unifi_core::model::{AclRule, EventCategory, FirewallPolicy, FirewallZone, WifiBroadcast};
-use unifi_core::{Client, Device, EntityId, Event, Network, Site, UpdateNetworkRequest};
+use unifly_core::model::{AclRule, EventCategory, FirewallPolicy, FirewallZone, WifiBroadcast};
+use unifly_core::{Client, Device, EntityId, Event, Network, Site, UpdateNetworkRequest};
 
 use crate::screen::ScreenId;
 
@@ -197,7 +197,7 @@ pub enum Action {
     FocusNext,
     FocusPrev,
 
-    // ── Data Events (from unifi-core streams) ─────────────────────
+    // ── Data Events (from unifly-core streams) ─────────────────────
     DevicesUpdated(Arc<Vec<Arc<Device>>>),
     ClientsUpdated(Arc<Vec<Arc<Client>>>),
     NetworksUpdated(Arc<Vec<Arc<Network>>>),
@@ -206,7 +206,7 @@ pub enum Action {
     AclRulesUpdated(Arc<Vec<Arc<AclRule>>>),
     WifiBroadcastsUpdated(Arc<Vec<Arc<WifiBroadcast>>>),
     EventReceived(Arc<Event>),
-    HealthUpdated(Arc<Vec<unifi_core::HealthSummary>>),
+    HealthUpdated(Arc<Vec<unifly_core::HealthSummary>>),
     SiteUpdated(Arc<Site>),
 
     // ── Connection Status ─────────────────────────────────────────
@@ -294,7 +294,7 @@ pub enum Action {
     // ── Onboarding ─────────────────────────────────────────────────
     OnboardingComplete {
         profile_name: String,
-        config: Box<unifi_core::ControllerConfig>,
+        config: Box<unifly_core::ControllerConfig>,
     },
     OnboardingTestResult(Result<(), String>),
 
@@ -304,6 +304,6 @@ pub enum Action {
     SettingsTestResult(Result<(), String>),
     SettingsApply {
         profile_name: String,
-        config: Box<unifi_core::ControllerConfig>,
+        config: Box<unifly_core::ControllerConfig>,
     },
 }

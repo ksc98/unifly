@@ -4096,72 +4096,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
-name = "unifi-api"
-version = "0.1.0"
-dependencies = [
- "async-stream",
- "chrono",
- "futures-util",
- "insta",
- "reqwest",
- "secrecy",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-test",
- "tokio-tungstenite",
- "tokio-util",
- "tracing",
- "url",
- "uuid",
- "wiremock",
-]
-
-[[package]]
-name = "unifi-config"
-version = "0.1.0"
-dependencies = [
- "directories",
- "figment",
- "keyring",
- "secrecy",
- "serde",
- "thiserror 2.0.18",
- "toml 0.8.23",
- "unifi-core",
- "url",
-]
-
-[[package]]
-name = "unifi-core"
-version = "0.1.0"
-dependencies = [
- "arc-swap",
- "bytes",
- "chrono",
- "dashmap",
- "futures-core",
- "futures-util",
- "insta",
- "secrecy",
- "serde",
- "serde_json",
- "strum 0.26.3",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-stream",
- "tokio-test",
- "tokio-util",
- "tracing",
- "unifi-api",
- "url",
- "uuid",
-]
-
-[[package]]
 name = "unifly"
 version = "0.1.0"
 dependencies = [
@@ -4191,10 +4125,76 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
- "unifi-config",
- "unifi-core",
+ "unifly-config",
+ "unifly-core",
  "url",
  "wiremock",
+]
+
+[[package]]
+name = "unifly-api"
+version = "0.1.0"
+dependencies = [
+ "async-stream",
+ "chrono",
+ "futures-util",
+ "insta",
+ "reqwest",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-test",
+ "tokio-tungstenite",
+ "tokio-util",
+ "tracing",
+ "url",
+ "uuid",
+ "wiremock",
+]
+
+[[package]]
+name = "unifly-config"
+version = "0.1.0"
+dependencies = [
+ "directories",
+ "figment",
+ "keyring",
+ "secrecy",
+ "serde",
+ "thiserror 2.0.18",
+ "toml 0.8.23",
+ "unifly-core",
+ "url",
+]
+
+[[package]]
+name = "unifly-core"
+version = "0.1.0"
+dependencies = [
+ "arc-swap",
+ "bytes",
+ "chrono",
+ "dashmap",
+ "futures-core",
+ "futures-util",
+ "insta",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "strum 0.26.3",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+ "tokio-test",
+ "tokio-util",
+ "tracing",
+ "unifly-api",
+ "url",
+ "uuid",
 ]
 
 [[package]]
@@ -4231,8 +4231,8 @@ dependencies = [
  "tui-scrollview",
  "tui-tree-widget",
  "tui-widget-list",
- "unifi-config",
- "unifi-core",
+ "unifly-config",
+ "unifly-core",
  "url",
  "uuid",
 ]

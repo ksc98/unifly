@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use tabled::Tabled;
-use unifi_core::{Command as CoreCommand, Controller, EntityId, TrafficMatchingList};
+use unifly_core::{Command as CoreCommand, Controller, EntityId, TrafficMatchingList};
 
 use crate::cli::{GlobalOpts, TrafficListsArgs, TrafficListsCommand};
 use crate::error::CliError;
@@ -105,7 +105,7 @@ pub async fn handle(
             let req = if let Some(ref path) = from_file {
                 serde_json::from_value(util::read_json_file(path)?)?
             } else {
-                unifi_core::command::CreateTrafficMatchingListRequest {
+                unifly_core::command::CreateTrafficMatchingListRequest {
                     name: name.unwrap_or_default(),
                     entries: items.unwrap_or_default(),
                     description: None,
@@ -124,7 +124,7 @@ pub async fn handle(
             let update = if let Some(ref path) = from_file {
                 serde_json::from_value(util::read_json_file(path)?)?
             } else {
-                unifi_core::command::UpdateTrafficMatchingListRequest::default()
+                unifly_core::command::UpdateTrafficMatchingListRequest::default()
             };
             let eid = EntityId::from(id);
             controller

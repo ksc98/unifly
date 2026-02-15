@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use tabled::Tabled;
-use unifi_core::{Client, Command as CoreCommand, Controller, EntityId, MacAddress};
+use unifly_core::{Client, Command as CoreCommand, Controller, EntityId, MacAddress};
 
 use crate::cli::{ClientsArgs, ClientsCommand, GlobalOpts};
 use crate::error::CliError;

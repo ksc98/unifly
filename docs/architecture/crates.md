@@ -1,6 +1,6 @@
 # Crate Structure
 
-## unifi-api
+## unifly-api
 
 **Role:** Async HTTP/WebSocket transport layer.
 
@@ -17,7 +17,7 @@ Key design decisions:
 - CSRF tokens captured from login response, rotated via `X-Updated-CSRF-Token` header
 - WebSocket reconnection handled at the transport level
 
-## unifi-core
+## unifly-core
 
 **Role:** Business logic and shared services.
 
@@ -34,7 +34,7 @@ Provides two connection modes:
 - `Controller::connect()` — Full lifecycle with background refresh and WebSocket events
 - `Controller::oneshot()` — Fire-and-forget for CLI commands (no background tasks)
 
-## unifi-config
+## unifly-config
 
 **Role:** Configuration and credential management.
 

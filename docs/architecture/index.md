@@ -8,9 +8,9 @@ Unifly is a five-crate Rust workspace with a clean dependency chain. Each crate 
 graph TD
     CLI["unifly<br/><i>CLI binary</i>"]
     TUI["unifly-tui<br/><i>TUI binary</i>"]
-    CORE["unifi-core<br/><i>Business logic</i>"]
-    API["unifi-api<br/><i>HTTP/WS transport</i>"]
-    CONFIG["unifi-config<br/><i>Profiles & keyring</i>"]
+    CORE["unifly-core<br/><i>Business logic</i>"]
+    API["unifly-api<br/><i>HTTP/WS transport</i>"]
+    CONFIG["unifly-config<br/><i>Profiles & keyring</i>"]
 
     CLI --> CORE
     TUI --> CORE
@@ -32,7 +32,7 @@ The `DataStore` uses `DashMap` for lock-free concurrent reads and `tokio::watch`
 
 ### Dual API Transparency
 
-`unifi-core` transparently routes requests to the correct API backend. Callers don't need to know whether a feature uses the Integration API or the Legacy API — the controller handles routing, authentication, and response normalization.
+`unifly-core` transparently routes requests to the correct API backend. Callers don't need to know whether a feature uses the Integration API or the Legacy API — the controller handles routing, authentication, and response normalization.
 
 ## Key Types
 

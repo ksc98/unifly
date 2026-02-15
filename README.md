@@ -286,21 +286,21 @@ Five crates, clean dependency chain:
                     unifly (CLI binary)
                          │
                          ▼
-  unifly-tui ───▶ unifi-core ───▶ unifi-api
+  unifly-tui ───▶ unifly-core ───▶ unifly-api
   (TUI binary)   (business       (HTTP/WS
                    logic)          transport)
                      │
                      ▼
-                unifi-config
+                unifly-config
                 (profiles, keyring,
                  TOML config)
 ```
 
 | Crate | Purpose |
 | --- | --- |
-| **unifi-api** | Async HTTP/WebSocket client — Integration API, Legacy API (with CSRF), WebSocket event stream |
-| **unifi-core** | Controller lifecycle, DataStore (`DashMap` + `tokio::watch`), entity models, reactive streams |
-| **unifi-config** | Profile management, keyring integration, TOML config, environment variable overlay |
+| **unifly-api** | Async HTTP/WebSocket client — Integration API, Legacy API (with CSRF), WebSocket event stream |
+| **unifly-core** | Controller lifecycle, DataStore (`DashMap` + `tokio::watch`), entity models, reactive streams |
+| **unifly-config** | Profile management, keyring integration, TOML config, environment variable overlay |
 | **unifly** | CLI binary — clap-based command routing, output formatting, shell completions |
 | **unifly-tui** | TUI binary — ratatui screens, Braille charts, SilkCircuit theme, real-time data bridge |
 
@@ -398,11 +398,11 @@ cargo run -p unifly-tui
 
 ```
 crates/
-  unifi-api/      # Async HTTP/WS client
-  unifi-core/     # Business logic, Controller, DataStore
-  unifi-config/   # Profiles, keyring, TOML config
-  unifly/         # CLI binary (unifly)
-  unifly-tui/     # TUI binary (unifly-tui)
+  unifly-api/      # Async HTTP/WS client
+  unifly-core/     # Business logic, Controller, DataStore
+  unifly-config/   # Profiles, keyring, TOML config
+  unifly/          # CLI binary (unifly)
+  unifly-tui/      # TUI binary (unifly-tui)
 ```
 
 ### Lint Policy

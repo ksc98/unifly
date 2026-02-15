@@ -35,12 +35,12 @@ Unifly unifies these into a single, coherent interface. You don't need to know w
                     unifly (CLI)
                          │
                          ▼
-  unifly-tui ───▶ unifi-core ───▶ unifi-api
+  unifly-tui ───▶ unifly-core ───▶ unifly-api
   (TUI)          (business       (HTTP/WS
                    logic)          transport)
                      │
                      ▼
-                unifi-config
+                unifly-config
                 (profiles, keyring)
 ```
 

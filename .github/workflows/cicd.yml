@@ -87,7 +87,7 @@ jobs:
       - name: Publish crates (dependency order)
         run: |
           # Publish in dependency order with retry
-          for crate in unifi-api unifi-core unifi-config unifly unifly-tui; do
+          for crate in unifly-api unifly-core unifly-config unifly unifly-tui; do
             echo "Publishing $crate..."
             cargo publish -p $crate --locked || echo "Warning: $crate may already be published"
             sleep 30  # Wait for crates.io index to update

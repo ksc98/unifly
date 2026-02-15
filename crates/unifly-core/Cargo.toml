@@ -7,6 +7,10 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+keywords = ["unifi", "ubiquiti", "networking", "controller", "async"]
+categories = ["api-bindings", "network-programming"]
+readme = "README.md"
+documentation = "https://docs.rs/unifly-core"
 
 [lints]
 workspace = true

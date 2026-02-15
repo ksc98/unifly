@@ -24,6 +24,8 @@
   <a href="#-cli">CLI</a> •
   <a href="#-tui">TUI</a> •
   <a href="#-architecture">Architecture</a> •
+  <a href="#-library">Library</a> •
+  <a href="#-ai-agent-skill">AI Agent Skill</a> •
   <a href="#-development">Development</a>
 </p>
 
@@ -362,6 +364,101 @@ unifly config use office       # Switch active profile
 unifly config profiles         # List profiles (* marks active)
 unifly --profile home devices  # One-off override
 ```
+
+---
+
+## 📦 Library
+
+The core engine is available as two published crates on [crates.io](https://crates.io) — use them to build your own UniFi tools, integrations, or automations in Rust.
+
+| Crate | Description |
+| --- | --- |
+| [![unifly-api](https://img.shields.io/crates/v/unifly-api.svg)](https://crates.io/crates/unifly-api) | Async HTTP/WebSocket transport — Integration API + Legacy API clients |
+| [![unifly-core](https://img.shields.io/crates/v/unifly-core.svg)](https://crates.io/crates/unifly-core) | High-level Controller, reactive DataStore, domain models, command dispatch |
+
+### Quick Start
+
+**Low-level API access** — talk directly to the controller:
+
+```rust
+use unifly_api::{IntegrationClient, TransportConfig, TlsMode, ControllerPlatform};
+use secrecy::SecretString;
+
+let transport = TransportConfig::new(TlsMode::DangerAcceptInvalid);
+let client = IntegrationClient::from_api_key(
+    "https://192.168.1.1",
+    &SecretString::from("your-api-key"),
+    &transport,
+    ControllerPlatform::UnifiOs,
+)?;
+let devices = client.list_devices("default").await?;
+```
+
+**High-level Controller** — reactive streams, automatic refresh, data merging:
+
+```rust
+use unifly_core::{Controller, ControllerConfig, AuthCredentials, TlsVerification};
+use secrecy::SecretString;
+
+let config = ControllerConfig {
+    base_url: "https://192.168.1.1".parse()?,
+    auth: AuthCredentials::ApiKey(SecretString::from("your-api-key")),
+    tls: TlsVerification::DangerAcceptInvalid,
+    ..Default::default()
+};
+let controller = Controller::new(config);
+controller.connect().await?;
+
+let devices = controller.devices().current();
+println!("Found {} devices", devices.len());
+```
+
+Full API documentation on [docs.rs/unifly-api](https://docs.rs/unifly-api) and [docs.rs/unifly-core](https://docs.rs/unifly-core).
+
+---
+
+## 🤖 AI Agent Skill
+
+unifly ships an AI agent skill that teaches coding assistants how to manage UniFi infrastructure. It includes a comprehensive CLI reference, automation workflows, and an autonomous network manager agent.
+
+### Install via npx (Vercel Skills)
+
+Works with Claude Code, Cursor, Copilot, Codex, Gemini, and more:
+
+```bash
+npx skills add hyperb1iss/unifly
+```
+
+Target a specific agent:
+
+```bash
+npx skills add hyperb1iss/unifly -a claude-code
+npx skills add hyperb1iss/unifly -a cursor
+npx skills add hyperb1iss/unifly -a copilot
+```
+
+### Install via Claude Code Plugin
+
+```bash
+/plugin marketplace add hyperb1iss/unifly
+```
+
+### Manual Installation
+
+```bash
+git clone https://github.com/hyperb1iss/unifly.git
+ln -s $(pwd)/unifly ~/.claude/plugins/unifly
+```
+
+### What's Included
+
+| Component | Description |
+| --- | --- |
+| **unifly skill** | Complete CLI reference, command patterns, output formats, automation tips |
+| **Network Manager agent** | Autonomous agent for infrastructure provisioning, diagnostics, and security audits |
+| **Reference docs** | Detailed command reference, UniFi networking concepts, workflow patterns |
+
+The skill enables agents to create VLANs, manage firewall policies, provision WiFi, diagnose connectivity issues, generate guest vouchers, and more — all through the unifly CLI.
 
 ---
 

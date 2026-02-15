@@ -1,8 +1,8 @@
 {
   "name": "hyperb1iss",
   "owner": {
-    "name": "Bliss",
-    "url": "https://github.com/hyperb1iss"
+    "name": "Stefanie Jane",
+    "url": "https://hyperbliss.tech"
   },
   "plugins": [
     {
@@ -11,8 +11,8 @@
       "description": "UniFi network management CLI, TUI, and AI agent skill — full infrastructure control",
       "version": "1.0.0",
       "author": {
-        "name": "Bliss",
-        "url": "https://github.com/hyperb1iss"
+        "name": "Stefanie Jane",
+        "url": "https://hyperbliss.tech"
       },
       "homepage": "https://github.com/hyperb1iss/unifly",
       "repository": "https://github.com/hyperb1iss/unifly",

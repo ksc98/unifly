@@ -48,7 +48,7 @@ Provides two connection modes:
 
 **Role:** CLI binary.
 
-Thin shell over `unifi-core`:
+Thin shell over `unifly-core`:
 
 - **clap-derived** command tree with 20+ resource commands
 - **Output formatting** — Table, JSON, YAML, plain text via `tabled`

@@ -30,15 +30,14 @@ command -v unifly >/dev/null 2>&1 && unifly --version || echo "unifly not instal
 **Installation:**
 
 ```bash
-# From crates.io
-cargo install unifly
+# Homebrew
+brew install hyperb1iss/tap/unifly
+
+# Shell script
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/hyperb1iss/unifly/releases/latest/download/unifly-installer.sh | sh
 
 # From source
-git clone https://github.com/hyperb1iss/unifly.git
-cd unifly && cargo install --path unifi-cli
-
-# TUI (optional)
-cargo install unifly-tui
+cargo install --git https://github.com/hyperb1iss/unifly.git unifly
 ```
 
 After installation, run `unifly config init` to set up a controller profile,

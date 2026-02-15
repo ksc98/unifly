@@ -24,7 +24,7 @@ graph TD
 
 ### Thin Binaries, Fat Core
 
-The CLI and TUI binaries are thin shells — they handle argument parsing and rendering, but all business logic lives in `unifi-core`. This means both binaries share identical controller lifecycle, data fetching, and entity management.
+The CLI and TUI binaries are thin shells — they handle argument parsing and rendering, but all business logic lives in `unifly-core`. This means both binaries share identical controller lifecycle, data fetching, and entity management.
 
 ### Reactive Data Store
 

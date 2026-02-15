@@ -86,8 +86,8 @@ jobs:
 
       - name: Publish crates (dependency order)
         run: |
-          # Publish in dependency order with retry
-          for crate in unifly-api unifly-core unifly-config unifly unifly-tui; do
+          # Publish only public crates in dependency order
+          for crate in unifly-api unifly-core; do
             echo "Publishing $crate..."
             cargo publish -p $crate --locked || echo "Warning: $crate may already be published"
             sleep 30  # Wait for crates.io index to update
@@ -180,15 +180,18 @@ jobs:
         id: sha
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          RELEASE_URL="https://github.com/hyperb1iss/unifly/releases/download/${GITHUB_REF_NAME}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-          MACOS_ARM64=$(curl -fsSL "https://github.com/hyperb1iss/unifly/releases/download/${GITHUB_REF_NAME}/unifly-macos-arm64" | shasum -a 256 | cut -d' ' -f1)
-          LINUX_ARM64=$(curl -fsSL "https://github.com/hyperb1iss/unifly/releases/download/${GITHUB_REF_NAME}/unifly-linux-arm64" | shasum -a 256 | cut -d' ' -f1)
-          LINUX_AMD64=$(curl -fsSL "https://github.com/hyperb1iss/unifly/releases/download/${GITHUB_REF_NAME}/unifly-linux-amd64" | shasum -a 256 | cut -d' ' -f1)
+          # unifly CLI checksums
+          echo "cli_macos_arm64=$(curl -fsSL "${RELEASE_URL}/unifly-macos-arm64" | shasum -a 256 | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+          echo "cli_linux_arm64=$(curl -fsSL "${RELEASE_URL}/unifly-linux-arm64" | shasum -a 256 | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+          echo "cli_linux_amd64=$(curl -fsSL "${RELEASE_URL}/unifly-linux-amd64" | shasum -a 256 | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
-          echo "macos_arm64=$MACOS_ARM64" >> $GITHUB_OUTPUT
-          echo "linux_arm64=$LINUX_ARM64" >> $GITHUB_OUTPUT
-          echo "linux_amd64=$LINUX_AMD64" >> $GITHUB_OUTPUT
+          # unifly-tui checksums
+          echo "tui_macos_arm64=$(curl -fsSL "${RELEASE_URL}/unifly-tui-macos-arm64" | shasum -a 256 | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+          echo "tui_linux_arm64=$(curl -fsSL "${RELEASE_URL}/unifly-tui-linux-arm64" | shasum -a 256 | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+          echo "tui_linux_amd64=$(curl -fsSL "${RELEASE_URL}/unifly-tui-linux-amd64" | shasum -a 256 | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
       - name: Generate formula
         run: |
@@ -202,27 +205,46 @@ jobs:
             on_macos do
               on_arm do
                 url "https://github.com/hyperb1iss/unifly/releases/download/v#{version}/unifly-macos-arm64"
-                sha256 "${{ steps.sha.outputs.macos_arm64 }}"
+                sha256 "${{ steps.sha.outputs.cli_macos_arm64 }}"
+
+                resource "unifly-tui" do
+                  url "https://github.com/hyperb1iss/unifly/releases/download/v#{version}/unifly-tui-macos-arm64"
+                  sha256 "${{ steps.sha.outputs.tui_macos_arm64 }}"
+                end
               end
             end
 
             on_linux do
               on_arm do
                 url "https://github.com/hyperb1iss/unifly/releases/download/v#{version}/unifly-linux-arm64"
-                sha256 "${{ steps.sha.outputs.linux_arm64 }}"
+                sha256 "${{ steps.sha.outputs.cli_linux_arm64 }}"
+
+                resource "unifly-tui" do
+                  url "https://github.com/hyperb1iss/unifly/releases/download/v#{version}/unifly-tui-linux-arm64"
+                  sha256 "${{ steps.sha.outputs.tui_linux_arm64 }}"
+                end
               end
               on_intel do
                 url "https://github.com/hyperb1iss/unifly/releases/download/v#{version}/unifly-linux-amd64"
-                sha256 "${{ steps.sha.outputs.linux_amd64 }}"
+                sha256 "${{ steps.sha.outputs.cli_linux_amd64 }}"
+
+                resource "unifly-tui" do
+                  url "https://github.com/hyperb1iss/unifly/releases/download/v#{version}/unifly-tui-linux-amd64"
+                  sha256 "${{ steps.sha.outputs.tui_linux_amd64 }}"
+                end
               end
             end
 
             def install
               bin.install Dir["unifly*"].first => "unifly"
+              resource("unifly-tui").stage do
+                bin.install Dir["unifly-tui*"].first => "unifly-tui"
+              end
             end
 
             test do
               assert_match "unifly #{version}", shell_output("#{bin}/unifly --version")
+              assert_match "unifly-tui #{version}", shell_output("#{bin}/unifly-tui --version")
             end
           end
           FORMULA

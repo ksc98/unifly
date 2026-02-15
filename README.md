@@ -63,8 +63,9 @@ The Integration API handles CRUD. The Legacy API fills the gaps with events, sta
 
 ```bash
 brew install hyperb1iss/tap/unifly
-brew install hyperb1iss/tap/unifly-tui
 ```
+
+Installs both `unifly` (CLI) and `unifly-tui` (TUI) in one shot.
 
 ### Shell Script (Linux / macOS)
 

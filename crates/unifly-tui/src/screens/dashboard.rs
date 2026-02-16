@@ -11,6 +11,7 @@
 //! ├─ Recent Events (compact) ────────────────────────────────────────────┤
 //! └──────────────────────────────────────────────────────────────────────┘
 
+use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -31,6 +32,63 @@ use crate::action::Action;
 use crate::component::Component;
 use crate::theme;
 use crate::widgets::bytes_fmt;
+
+fn parse_ipv6_from_text(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if let Ok(ip) = trimmed.parse::<IpAddr>() {
+        if ip.is_ipv6() {
+            return Some(ip.to_string());
+        }
+    }
+
+    for token in trimmed.split([',', ';', ' ', '\t', '\n']) {
+        let cleaned = token.trim_matches(|c: char| matches!(c, '[' | ']' | '(' | ')' | '"' | '\''));
+        if cleaned.is_empty() {
+            continue;
+        }
+        if let Ok(ip) = cleaned.parse::<IpAddr>() {
+            if ip.is_ipv6() {
+                return Some(ip.to_string());
+            }
+        }
+    }
+
+    None
+}
+
+fn parse_ipv6_from_value(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::String(s) => parse_ipv6_from_text(s),
+        serde_json::Value::Array(items) => items.iter().find_map(parse_ipv6_from_value),
+        serde_json::Value::Object(obj) => {
+            const PRIORITY_KEYS: &[&str] = &[
+                "wan_ip6",
+                "wan_ip6s",
+                "wan_ipv6",
+                "ip6",
+                "ip6Address",
+                "ip6_address",
+                "ipv6",
+                "ipv6Address",
+                "ipv6_address",
+                "address",
+                "ipAddress",
+                "ip_address",
+                "ip",
+                "value",
+            ];
+
+            for key in PRIORITY_KEYS {
+                if let Some(ipv6) = obj.get(*key).and_then(parse_ipv6_from_value) {
+                    return Some(ipv6);
+                }
+            }
+
+            obj.values().find_map(parse_ipv6_from_value)
+        }
+        _ => None,
+    }
+}
 
 /// Dashboard screen state.
 pub struct DashboardScreen {
@@ -248,7 +306,36 @@ impl DashboardScreen {
         let gw_ip = wan_health
             .and_then(|h| h.extra.get("gateways").and_then(|v| v.as_array()))
             .and_then(|a| a.first().and_then(|v| v.as_str()));
-        let wan_ipv6 = wan_health.and_then(|h| h.extra.get("wan_ip6").and_then(|v| v.as_str()));
+        let wan_ipv6 = wan_health.and_then(|h| {
+            const IPV6_KEYS: &[&str] = &[
+                "wan_ip6",
+                "wan_ip6s",
+                "wan_ipv6",
+                "wan_ipv6s",
+                "ipv6",
+                "ipv6Address",
+                "ipv6_address",
+            ];
+
+            for key in IPV6_KEYS {
+                if let Some(ipv6) = h.extra.get(*key).and_then(parse_ipv6_from_value) {
+                    return Some(ipv6);
+                }
+            }
+
+            if let Some(ipv6) = h
+                .extra
+                .get("wan_ip")
+                .and_then(parse_ipv6_from_value)
+                .or_else(|| h.wan_ip.as_deref().and_then(parse_ipv6_from_text))
+            {
+                return Some(ipv6);
+            }
+
+            h.gateways
+                .as_ref()
+                .and_then(|gateways| gateways.iter().find_map(|gw| parse_ipv6_from_text(gw)))
+        });
         let gw_version =
             wan_health.and_then(|h| h.extra.get("gw_version").and_then(|v| v.as_str()));
         let latency = www_health.and_then(|h| h.latency);
@@ -297,7 +384,11 @@ impl DashboardScreen {
             &wan_ip.unwrap_or_else(|| "─".into()),
             theme::CORAL,
         ));
-        lines.push(kv("IPv6", wan_ipv6.unwrap_or("─"), theme::LIGHT_BLUE));
+        lines.push(kv(
+            "IPv6",
+            wan_ipv6.as_deref().unwrap_or("─"),
+            theme::LIGHT_BLUE,
+        ));
 
         if let Some(gw) = gw_ip {
             lines.push(kv("GW", gw, theme::DIM_WHITE));

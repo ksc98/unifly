@@ -211,6 +211,18 @@ pub async fn handle(
             Ok(())
         }
 
-        NetworksCommand::Refs { id: _ } => util::not_yet_implemented("network cross-references"),
+        NetworksCommand::Refs { id } => {
+            let refs = controller
+                .get_network_references(&EntityId::from(id.clone()))
+                .await?;
+            let out = output::render_single(
+                &global.output,
+                &refs,
+                |v| serde_json::to_string_pretty(v).unwrap_or_default(),
+                |_| id.clone(),
+            );
+            output::print_output(&out, global.quiet);
+            Ok(())
+        }
     }
 }

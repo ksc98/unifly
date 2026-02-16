@@ -184,6 +184,8 @@ async fn handle_policies(
             from_file,
             name,
             action,
+            source_zone,
+            dest_zone,
             enabled,
             description,
             logging,
@@ -196,8 +198,8 @@ async fn handle_policies(
                     action: action
                         .as_ref()
                         .map_or(ModelFirewallAction::Block, map_fw_action),
-                    source_zone_id: EntityId::from(""),
-                    destination_zone_id: EntityId::from(""),
+                    source_zone_id: EntityId::from(source_zone.unwrap_or_default()),
+                    destination_zone_id: EntityId::from(dest_zone.unwrap_or_default()),
                     enabled,
                     logging_enabled: logging,
                     description,
@@ -278,9 +280,43 @@ async fn handle_policies(
                     eprintln!("Firewall policy order updated");
                 }
             } else {
-                // Default to --get behavior
                 let _ = get;
-                util::not_yet_implemented("firewall policy ordering query")?;
+                let ordering = controller.get_firewall_policy_ordering().await?;
+                let out = match &global.output {
+                    crate::cli::OutputFormat::Table | crate::cli::OutputFormat::Plain => {
+                        let before = ordering
+                            .before_system_defined
+                            .iter()
+                            .map(|id| format!("  - {id}"))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        let after = ordering
+                            .after_system_defined
+                            .iter()
+                            .map(|id| format!("  - {id}"))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        format!(
+                            "Before System Defined:\n{}\n\nAfter System Defined:\n{}",
+                            if before.is_empty() {
+                                "  (none)"
+                            } else {
+                                &before
+                            },
+                            if after.is_empty() { "  (none)" } else { &after }
+                        )
+                    }
+                    crate::cli::OutputFormat::Json => {
+                        serde_json::to_string_pretty(&ordering).unwrap_or_default()
+                    }
+                    crate::cli::OutputFormat::JsonCompact => {
+                        serde_json::to_string(&ordering).unwrap_or_default()
+                    }
+                    crate::cli::OutputFormat::Yaml => {
+                        serde_yaml::to_string(&ordering).unwrap_or_default()
+                    }
+                };
+                output::print_output(&out, global.quiet);
             }
             Ok(())
         }

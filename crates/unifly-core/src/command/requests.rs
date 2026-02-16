@@ -59,6 +59,7 @@ pub struct UpdateNetworkRequest {
 // ── WiFi ───────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct CreateWifiBroadcastRequest {
     pub name: String,
     pub ssid: String,
@@ -69,6 +70,14 @@ pub struct CreateWifiBroadcastRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub network_id: Option<EntityId>,
     pub hide_ssid: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub broadcast_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frequencies_ghz: Option<Vec<f32>>,
+    #[serde(default)]
+    pub band_steering: bool,
+    #[serde(default)]
+    pub fast_roaming: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -154,6 +163,8 @@ pub struct UpdateFirewallZoneRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateAclRuleRequest {
     pub name: String,
+    #[serde(default = "default_acl_rule_type")]
+    pub rule_type: String,
     pub action: FirewallAction,
     pub source_zone_id: EntityId,
     pub destination_zone_id: EntityId,
@@ -164,6 +175,10 @@ pub struct CreateAclRuleRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub destination_port: Option<String>,
     pub enabled: bool,
+}
+
+fn default_acl_rule_type() -> String {
+    "IPV4".into()
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -189,6 +204,12 @@ pub struct CreateDnsPolicyRequest {
     pub domains: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub upstream: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ttl_seconds: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<u16>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -201,6 +222,12 @@ pub struct UpdateDnsPolicyRequest {
     pub domains: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub upstream: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ttl_seconds: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<u16>,
 }
 
 // ── Traffic Matching List ──────────────────────────────────────────
@@ -208,6 +235,8 @@ pub struct UpdateDnsPolicyRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateTrafficMatchingListRequest {
     pub name: String,
+    #[serde(default = "default_traffic_list_type")]
+    pub list_type: String,
     pub entries: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -221,6 +250,10 @@ pub struct UpdateTrafficMatchingListRequest {
     pub entries: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+}
+
+fn default_traffic_list_type() -> String {
+    "IPV4".into()
 }
 
 // ── Vouchers ───────────────────────────────────────────────────────

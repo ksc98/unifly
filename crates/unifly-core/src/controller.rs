@@ -1181,6 +1181,89 @@ impl Controller {
             })
             .collect())
     }
+
+    /// Fetch references for a specific network (Integration API).
+    pub async fn get_network_references(
+        &self,
+        network_id: &EntityId,
+    ) -> Result<serde_json::Value, CoreError> {
+        let guard = self.inner.integration_client.lock().await;
+        let site_id = *self.inner.site_id.lock().await;
+        let (ic, sid) = require_integration(&guard, site_id, "get_network_references")?;
+        let uuid = require_uuid(network_id)?;
+        let refs = ic.get_network_references(&sid, &uuid).await?;
+        Ok(serde_json::to_value(refs).unwrap_or_default())
+    }
+
+    /// Fetch firewall policy ordering (Integration API).
+    pub async fn get_firewall_policy_ordering(
+        &self,
+    ) -> Result<unifly_api::integration_types::FirewallPolicyOrdering, CoreError> {
+        let guard = self.inner.integration_client.lock().await;
+        let site_id = *self.inner.site_id.lock().await;
+        let (ic, sid) = require_integration(&guard, site_id, "get_firewall_policy_ordering")?;
+        Ok(ic.get_firewall_policy_ordering(&sid).await?)
+    }
+
+    /// List pending devices.
+    ///
+    /// Prefers Integration API pending endpoint, falls back to filtering
+    /// the canonical device snapshot by pending adoption state.
+    pub async fn list_pending_devices(&self) -> Result<Vec<serde_json::Value>, CoreError> {
+        let integration_guard = self.inner.integration_client.lock().await;
+        let site_id = *self.inner.site_id.lock().await;
+
+        if let (Some(ic), Some(sid)) = (integration_guard.as_ref(), site_id) {
+            let raw = ic
+                .paginate_all(200, |off, lim| ic.list_pending_devices(&sid, off, lim))
+                .await?;
+            return Ok(raw
+                .into_iter()
+                .map(|v| serde_json::to_value(v).unwrap_or_default())
+                .collect());
+        }
+
+        let snapshot = self.devices_snapshot();
+        Ok(snapshot
+            .iter()
+            .filter(|d| d.state == crate::model::DeviceState::PendingAdoption)
+            .map(|d| serde_json::to_value(d.as_ref()).unwrap_or_default())
+            .collect())
+    }
+
+    /// List device tags.
+    ///
+    /// Uses Integration API when available.
+    pub async fn list_device_tags(&self) -> Result<Vec<serde_json::Value>, CoreError> {
+        let integration_guard = self.inner.integration_client.lock().await;
+        let site_id = *self.inner.site_id.lock().await;
+        if let (Some(ic), Some(sid)) = (integration_guard.as_ref(), site_id) {
+            let raw = ic
+                .paginate_all(200, |off, lim| ic.list_device_tags(&sid, off, lim))
+                .await?;
+            return Ok(raw
+                .into_iter()
+                .map(|v| serde_json::to_value(v).unwrap_or_default())
+                .collect());
+        }
+
+        Ok(Vec::new())
+    }
+
+    /// List controller backups (legacy API).
+    pub async fn list_backups(&self) -> Result<Vec<serde_json::Value>, CoreError> {
+        let guard = self.inner.legacy_client.lock().await;
+        let legacy = require_legacy(&guard)?;
+        Ok(legacy.list_backups().await?)
+    }
+
+    /// Download a controller backup file (legacy API).
+    pub async fn download_backup(&self, filename: &str) -> Result<Vec<u8>, CoreError> {
+        let guard = self.inner.legacy_client.lock().await;
+        let legacy = require_legacy(&guard)?;
+        Ok(legacy.download_backup(filename).await?)
+    }
+
     // ── Statistics (Legacy API) ────────────────────────────────────
 
     /// Fetch site-level historical statistics.
@@ -1826,12 +1909,51 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             let (ic, sid) =
                 require_integration(&integration_guard, site_id, "CreateWifiBroadcast")?;
             let mut extra = serde_json::Map::new();
-            if let Some(pass) = &req.passphrase {
-                extra.insert("passphrase".into(), serde_json::Value::String(pass.clone()));
+            extra.insert("ssid".into(), serde_json::Value::String(req.ssid));
+            let security_mode = match req.security_mode {
+                crate::model::WifiSecurityMode::Open => "OPEN",
+                crate::model::WifiSecurityMode::Wpa2Personal => "WPA2_PERSONAL",
+                crate::model::WifiSecurityMode::Wpa3Personal => "WPA3_PERSONAL",
+                crate::model::WifiSecurityMode::Wpa2Wpa3Personal => "WPA2_WPA3_PERSONAL",
+                crate::model::WifiSecurityMode::Wpa2Enterprise => "WPA2_ENTERPRISE",
+                crate::model::WifiSecurityMode::Wpa3Enterprise => "WPA3_ENTERPRISE",
+                crate::model::WifiSecurityMode::Wpa2Wpa3Enterprise => "WPA2_WPA3_ENTERPRISE",
+            };
+            let mut security_configuration = serde_json::Map::new();
+            security_configuration.insert(
+                "mode".into(),
+                serde_json::Value::String(security_mode.into()),
+            );
+            if let Some(pass) = req.passphrase {
+                security_configuration.insert("passphrase".into(), serde_json::Value::String(pass));
+            }
+            extra.insert(
+                "securityConfiguration".into(),
+                serde_json::Value::Object(security_configuration),
+            );
+            if let Some(network_id) = req.network_id {
+                extra.insert(
+                    "network".into(),
+                    serde_json::json!({ "id": network_id.to_string() }),
+                );
+            }
+            extra.insert("hideSsid".into(), serde_json::Value::Bool(req.hide_ssid));
+            if req.band_steering {
+                extra.insert("bandSteering".into(), serde_json::Value::Bool(true));
+            }
+            if req.fast_roaming {
+                extra.insert("fastRoaming".into(), serde_json::Value::Bool(true));
+            }
+            if let Some(freqs) = req.frequencies_ghz {
+                let values = freqs
+                    .into_iter()
+                    .map(|f| serde_json::Value::from(f64::from(f)))
+                    .collect::<Vec<_>>();
+                extra.insert("frequencies".into(), serde_json::Value::Array(values));
             }
             let body = unifly_api::integration_types::WifiBroadcastCreateUpdate {
                 name: req.name,
-                broadcast_type: "STANDARD".into(),
+                broadcast_type: req.broadcast_type.unwrap_or_else(|| "STANDARD".into()),
                 enabled: req.enabled,
                 body: extra,
             };
@@ -2101,14 +2223,38 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
                 FirewallAction::Block => "BLOCK",
                 FirewallAction::Reject => "REJECT",
             };
+            let mut source_filter = serde_json::Map::new();
+            source_filter.insert(
+                "zoneId".into(),
+                serde_json::Value::String(req.source_zone_id.to_string()),
+            );
+            if let Some(source_port) = req.source_port {
+                source_filter.insert("port".into(), serde_json::Value::String(source_port));
+            }
+            if let Some(protocol) = req.protocol.clone() {
+                source_filter.insert("protocol".into(), serde_json::Value::String(protocol));
+            }
+
+            let mut destination_filter = serde_json::Map::new();
+            destination_filter.insert(
+                "zoneId".into(),
+                serde_json::Value::String(req.destination_zone_id.to_string()),
+            );
+            if let Some(destination_port) = req.destination_port {
+                destination_filter
+                    .insert("port".into(), serde_json::Value::String(destination_port));
+            }
+            if let Some(protocol) = req.protocol {
+                destination_filter.insert("protocol".into(), serde_json::Value::String(protocol));
+            }
             let body = unifly_api::integration_types::AclRuleCreateUpdate {
                 name: req.name,
-                rule_type: "DEVICE".into(),
+                rule_type: req.rule_type,
                 action: action_str.into(),
                 enabled: req.enabled,
                 description: None,
-                source_filter: None,
-                destination_filter: None,
+                source_filter: Some(serde_json::Value::Object(source_filter)),
+                destination_filter: Some(serde_json::Value::Object(destination_filter)),
                 enforcing_device_filter: None,
             };
             ic.create_acl_rule(&sid, &body).await?;
@@ -2183,6 +2329,21 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             if let Some(upstream) = req.upstream {
                 fields.insert("upstream".into(), serde_json::Value::String(upstream));
             }
+            if let Some(value) = req.value {
+                fields.insert("value".into(), serde_json::Value::String(value));
+            }
+            if let Some(ttl) = req.ttl_seconds {
+                fields.insert(
+                    "ttl".into(),
+                    serde_json::Value::Number(serde_json::Number::from(ttl)),
+                );
+            }
+            if let Some(priority) = req.priority {
+                fields.insert(
+                    "priority".into(),
+                    serde_json::Value::Number(serde_json::Number::from(priority)),
+                );
+            }
             fields.insert("name".into(), serde_json::Value::String(req.name));
             let body = unifly_api::integration_types::DnsPolicyCreateUpdate {
                 policy_type: policy_type_str.into(),
@@ -2222,6 +2383,21 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             if let Some(upstream) = update.upstream {
                 fields.insert("upstream".into(), serde_json::Value::String(upstream));
             }
+            if let Some(value) = update.value {
+                fields.insert("value".into(), serde_json::Value::String(value));
+            }
+            if let Some(ttl) = update.ttl_seconds {
+                fields.insert(
+                    "ttl".into(),
+                    serde_json::Value::Number(serde_json::Number::from(ttl)),
+                );
+            }
+            if let Some(priority) = update.priority {
+                fields.insert(
+                    "priority".into(),
+                    serde_json::Value::Number(serde_json::Number::from(priority)),
+                );
+            }
 
             let body = unifly_api::integration_types::DnsPolicyCreateUpdate {
                 policy_type: existing.policy_type,
@@ -2258,7 +2434,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             }
             let body = unifly_api::integration_types::TrafficMatchingListCreateUpdate {
                 name: req.name,
-                list_type: "IPV4".into(),
+                list_type: req.list_type,
                 fields,
             };
             ic.create_traffic_matching_list(&sid, &body).await?;

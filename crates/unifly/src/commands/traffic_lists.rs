@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tabled::Tabled;
 use unifly_core::{Command as CoreCommand, Controller, EntityId, TrafficMatchingList};
 
-use crate::cli::{GlobalOpts, TrafficListsArgs, TrafficListsCommand};
+use crate::cli::{GlobalOpts, TrafficListType, TrafficListsArgs, TrafficListsCommand};
 use crate::error::CliError;
 use crate::output;
 
@@ -99,7 +99,7 @@ pub async fn handle(
         TrafficListsCommand::Create {
             from_file,
             name,
-            list_type: _,
+            list_type,
             items,
         } => {
             let req = if let Some(ref path) = from_file {
@@ -107,6 +107,14 @@ pub async fn handle(
             } else {
                 unifly_core::command::CreateTrafficMatchingListRequest {
                     name: name.unwrap_or_default(),
+                    list_type: list_type.map_or_else(
+                        || "IPV4".into(),
+                        |t| match t {
+                            TrafficListType::Ports => "PORT".into(),
+                            TrafficListType::Ipv4 => "IPV4".into(),
+                            TrafficListType::Ipv6 => "IPV6".into(),
+                        },
+                    ),
                     entries: items.unwrap_or_default(),
                     description: None,
                 }

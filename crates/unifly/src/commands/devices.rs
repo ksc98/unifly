@@ -31,6 +31,28 @@ struct DeviceRow {
     mac: String,
 }
 
+#[derive(Tabled)]
+struct PendingDeviceRow {
+    #[tabled(rename = "ID")]
+    id: String,
+    #[tabled(rename = "Name")]
+    name: String,
+    #[tabled(rename = "Model")]
+    model: String,
+    #[tabled(rename = "MAC")]
+    mac: String,
+    #[tabled(rename = "State")]
+    state: String,
+}
+
+#[derive(Tabled)]
+struct DeviceTagRow {
+    #[tabled(rename = "ID")]
+    id: String,
+    #[tabled(rename = "Name")]
+    name: String,
+}
+
 impl From<&Arc<Device>> for DeviceRow {
     fn from(d: &Arc<Device>) -> Self {
         Self {
@@ -69,6 +91,51 @@ fn detail(d: &Arc<Device>) -> String {
         lines.push(format!("Memory:   {mem:.1}%"));
     }
     lines.join("\n")
+}
+
+fn stats_detail(d: &Arc<Device>) -> String {
+    [
+        format!("ID:          {}", d.id),
+        format!("Name:        {}", d.name.as_deref().unwrap_or("-")),
+        format!("MAC:         {}", d.mac),
+        format!(
+            "Uptime:      {}",
+            d.stats
+                .uptime_secs
+                .map_or_else(|| "-".into(), |v| format!("{v}s"))
+        ),
+        format!(
+            "CPU:         {}",
+            d.stats
+                .cpu_utilization_pct
+                .map_or_else(|| "-".into(), |v| format!("{v:.1}%"))
+        ),
+        format!(
+            "Memory:      {}",
+            d.stats
+                .memory_utilization_pct
+                .map_or_else(|| "-".into(), |v| format!("{v:.1}%"))
+        ),
+        format!(
+            "Load Avg 1m: {}",
+            d.stats
+                .load_average_1m
+                .map_or_else(|| "-".into(), |v| format!("{v:.2}"))
+        ),
+        format!(
+            "Load Avg 5m: {}",
+            d.stats
+                .load_average_5m
+                .map_or_else(|| "-".into(), |v| format!("{v:.2}"))
+        ),
+        format!(
+            "Load Avg15m: {}",
+            d.stats
+                .load_average_15m
+                .map_or_else(|| "-".into(), |v| format!("{v:.2}"))
+        ),
+    ]
+    .join("\n")
 }
 
 // ── Handler ─────────────────────────────────────────────────────────
@@ -175,9 +242,74 @@ pub async fn handle(
             Ok(())
         }
 
-        DevicesCommand::Stats { device: _ } => util::not_yet_implemented("device real-time stats"),
+        DevicesCommand::Stats { device } => {
+            let snap = controller.devices_snapshot();
+            let found = snap
+                .iter()
+                .find(|d| d.id.to_string() == device || d.mac.to_string() == device);
+            match found {
+                Some(d) => {
+                    let out = output::render_single(&global.output, d, stats_detail, |d| {
+                        d.id.to_string()
+                    });
+                    output::print_output(&out, global.quiet);
+                }
+                None => {
+                    return Err(CliError::NotFound {
+                        resource_type: "device".into(),
+                        identifier: device,
+                        list_command: "devices list".into(),
+                    });
+                }
+            }
+            Ok(())
+        }
 
-        DevicesCommand::Pending(_list) => util::not_yet_implemented("pending device listing"),
+        DevicesCommand::Pending(_list) => {
+            let pending = controller.list_pending_devices().await?;
+            let out = output::render_list(
+                &global.output,
+                &pending,
+                |v| PendingDeviceRow {
+                    id: v
+                        .get("id")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("")
+                        .to_owned(),
+                    name: v
+                        .get("name")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("")
+                        .to_owned(),
+                    model: v
+                        .get("model")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("")
+                        .to_owned(),
+                    mac: v
+                        .get("macAddress")
+                        .or_else(|| v.get("mac"))
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("")
+                        .to_owned(),
+                    state: v
+                        .get("state")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("PENDING")
+                        .to_owned(),
+                },
+                |v| {
+                    v.get("id")
+                        .and_then(serde_json::Value::as_str)
+                        .or_else(|| v.get("macAddress").and_then(serde_json::Value::as_str))
+                        .or_else(|| v.get("mac").and_then(serde_json::Value::as_str))
+                        .unwrap_or("")
+                        .to_owned()
+                },
+            );
+            output::print_output(&out, global.quiet);
+            Ok(())
+        }
 
         DevicesCommand::Upgrade { device, url } => {
             let mac = util::resolve_device_mac(controller, &device)?;
@@ -212,6 +344,34 @@ pub async fn handle(
             Ok(())
         }
 
-        DevicesCommand::Tags(_list) => util::not_yet_implemented("device tags"),
+        DevicesCommand::Tags(_list) => {
+            let tags = controller.list_device_tags().await?;
+            let out = output::render_list(
+                &global.output,
+                &tags,
+                |v| DeviceTagRow {
+                    id: v
+                        .get("id")
+                        .or_else(|| v.get("_id"))
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("")
+                        .to_owned(),
+                    name: v
+                        .get("name")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("")
+                        .to_owned(),
+                },
+                |v| {
+                    v.get("id")
+                        .or_else(|| v.get("_id"))
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("")
+                        .to_owned()
+                },
+            );
+            output::print_output(&out, global.quiet);
+            Ok(())
+        }
     }
 }

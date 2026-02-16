@@ -1,5 +1,7 @@
 //! System command handlers.
 
+use std::path::PathBuf;
+
 use tabled::Tabled;
 use unifly_core::{Command as CoreCommand, Controller, HealthSummary, SysInfo, SystemInfo};
 
@@ -21,6 +23,16 @@ struct HealthRow {
     devices: String,
     #[tabled(rename = "Clients")]
     clients: String,
+}
+
+#[derive(Tabled)]
+struct BackupRow {
+    #[tabled(rename = "Filename")]
+    filename: String,
+    #[tabled(rename = "Created")]
+    created: String,
+    #[tabled(rename = "Size")]
+    size: String,
 }
 
 impl From<&HealthSummary> for HealthRow {
@@ -170,9 +182,59 @@ async fn handle_backup(
             Ok(())
         }
 
-        BackupCommand::List => util::not_yet_implemented("backup listing"),
+        BackupCommand::List => {
+            let backups = controller.list_backups().await?;
+            let out = output::render_list(
+                &global.output,
+                &backups,
+                |v| BackupRow {
+                    filename: v
+                        .get("filename")
+                        .or_else(|| v.get("name"))
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("")
+                        .to_owned(),
+                    created: v
+                        .get("create_time")
+                        .or_else(|| v.get("createdAt"))
+                        .map(|t| {
+                            t.as_str()
+                                .map_or_else(|| t.to_string(), ToOwned::to_owned)
+                        })
+                        .unwrap_or_default(),
+                    size: v
+                        .get("size")
+                        .or_else(|| v.get("file_size"))
+                        .map(|s| {
+                            s.as_str()
+                                .map_or_else(|| s.to_string(), ToOwned::to_owned)
+                        })
+                        .unwrap_or_default(),
+                },
+                |v| {
+                    v.get("filename")
+                        .or_else(|| v.get("name"))
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("")
+                        .to_owned()
+                },
+            );
+            output::print_output(&out, global.quiet);
+            Ok(())
+        }
 
-        BackupCommand::Download { .. } => util::not_yet_implemented("backup download"),
+        BackupCommand::Download { filename, output } => {
+            let bytes = controller.download_backup(&filename).await?;
+            let mut target = output.unwrap_or_else(|| PathBuf::from(&filename));
+            if target.is_dir() {
+                target = target.join(&filename);
+            }
+            std::fs::write(&target, bytes)?;
+            if !global.quiet {
+                eprintln!("Backup downloaded to {}", target.display());
+            }
+            Ok(())
+        }
 
         BackupCommand::Delete { filename } => {
             if !util::confirm(&format!("Delete backup '{filename}'?"), global.yes)? {

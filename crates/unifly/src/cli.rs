@@ -674,6 +674,14 @@ pub enum FirewallPoliciesCommand {
         #[arg(long, required_unless_present = "from_file", value_enum)]
         action: Option<FirewallAction>,
 
+        /// Source zone ID (UUID)
+        #[arg(long, required_unless_present = "from_file")]
+        source_zone: Option<String>,
+
+        /// Destination zone ID (UUID)
+        #[arg(long, required_unless_present = "from_file")]
+        dest_zone: Option<String>,
+
         /// Enable the policy (default: true)
         #[arg(long, default_value = "true", action = clap::ArgAction::Set)]
         enabled: bool,
@@ -687,7 +695,7 @@ pub enum FirewallPoliciesCommand {
         logging: bool,
 
         /// Create from JSON file (complex policies)
-        #[arg(long, short = 'F', conflicts_with_all = &["name", "action"])]
+        #[arg(long, short = 'F', conflicts_with_all = &["name", "action", "source_zone", "dest_zone"])]
         from_file: Option<PathBuf>,
     },
 
@@ -832,8 +840,28 @@ pub enum AclCommand {
         #[arg(long, required_unless_present = "from_file", value_enum)]
         action: Option<AclAction>,
 
+        /// Source zone ID (UUID)
+        #[arg(long, required_unless_present = "from_file")]
+        source_zone: Option<String>,
+
+        /// Destination zone ID (UUID)
+        #[arg(long, required_unless_present = "from_file")]
+        dest_zone: Option<String>,
+
+        /// Optional IP protocol filter (e.g. TCP, UDP, ICMP)
+        #[arg(long)]
+        protocol: Option<String>,
+
+        /// Optional source port/range (e.g. 80 or 1000-2000)
+        #[arg(long)]
+        source_port: Option<String>,
+
+        /// Optional destination port/range (e.g. 443 or 3000-4000)
+        #[arg(long)]
+        destination_port: Option<String>,
+
         /// Create from JSON file
-        #[arg(long, short = 'F', conflicts_with_all = &["name", "rule_type"])]
+        #[arg(long, short = 'F', conflicts_with_all = &["name", "rule_type", "source_zone", "dest_zone", "protocol", "source_port", "destination_port"])]
         from_file: Option<PathBuf>,
     },
 

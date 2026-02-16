@@ -100,14 +100,23 @@ pub async fn handle(
         AclCommand::Create {
             from_file,
             name,
-            rule_type: _,
+            rule_type,
             action,
+            source_zone,
+            dest_zone,
+            protocol,
+            source_port,
+            destination_port,
         } => {
             let req = if let Some(ref path) = from_file {
                 serde_json::from_value(util::read_json_file(path)?)?
             } else {
                 unifly_core::command::CreateAclRuleRequest {
                     name: name.unwrap_or_default(),
+                    rule_type: rule_type.as_ref().map_or("IPV4".into(), |rt| match rt {
+                        crate::cli::AclRuleType::Ipv4 => "IPV4".into(),
+                        crate::cli::AclRuleType::Mac => "DEVICE".into(),
+                    }),
                     action: match action {
                         Some(crate::cli::AclAction::Allow) => {
                             unifly_core::model::FirewallAction::Allow
@@ -116,11 +125,11 @@ pub async fn handle(
                             unifly_core::model::FirewallAction::Block
                         }
                     },
-                    source_zone_id: EntityId::from(""),
-                    destination_zone_id: EntityId::from(""),
-                    protocol: None,
-                    source_port: None,
-                    destination_port: None,
+                    source_zone_id: EntityId::from(source_zone.unwrap_or_default()),
+                    destination_zone_id: EntityId::from(dest_zone.unwrap_or_default()),
+                    protocol,
+                    source_port,
+                    destination_port,
                     enabled: true,
                 }
             };

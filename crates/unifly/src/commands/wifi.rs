@@ -9,7 +9,7 @@ use unifly_core::{
     UpdateWifiBroadcastRequest,
 };
 
-use crate::cli::{GlobalOpts, WifiArgs, WifiCommand, WifiSecurity};
+use crate::cli::{GlobalOpts, WifiArgs, WifiBroadcastType, WifiCommand, WifiSecurity};
 use crate::error::CliError;
 use crate::output;
 
@@ -24,6 +24,13 @@ fn map_security(s: &WifiSecurity) -> WifiSecurityMode {
         WifiSecurity::Wpa2Enterprise => WifiSecurityMode::Wpa2Enterprise,
         WifiSecurity::Wpa3Enterprise => WifiSecurityMode::Wpa3Enterprise,
         WifiSecurity::Wpa2Wpa3Enterprise => WifiSecurityMode::Wpa2Wpa3Enterprise,
+    }
+}
+
+fn map_broadcast_type(t: &WifiBroadcastType) -> String {
+    match t {
+        WifiBroadcastType::Standard => "STANDARD".into(),
+        WifiBroadcastType::IotOptimized => "IOT_OPTIMIZED".into(),
     }
 }
 
@@ -129,14 +136,14 @@ pub async fn handle(
         WifiCommand::Create {
             from_file,
             name,
-            broadcast_type: _,
+            broadcast_type,
             network,
             security,
             passphrase,
-            frequencies: _,
+            frequencies,
             hidden,
-            band_steering: _,
-            fast_roaming: _,
+            band_steering,
+            fast_roaming,
         } => {
             let req = if let Some(ref path) = from_file {
                 serde_json::from_value(util::read_json_file(path)?)?
@@ -149,6 +156,10 @@ pub async fn handle(
                     enabled: true,
                     network_id: network.map(EntityId::from),
                     hide_ssid: hidden,
+                    broadcast_type: Some(map_broadcast_type(&broadcast_type)),
+                    frequencies_ghz: frequencies,
+                    band_steering,
+                    fast_roaming,
                 }
             };
 

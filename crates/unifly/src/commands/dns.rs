@@ -113,9 +113,9 @@ pub async fn handle(
             from_file,
             record_type,
             domain,
-            value: _,
-            ttl: _,
-            priority: _,
+            value,
+            ttl,
+            priority,
         } => {
             let req = if let Some(ref path) = from_file {
                 serde_json::from_value(util::read_json_file(path)?)?
@@ -128,6 +128,9 @@ pub async fn handle(
                     enabled: true,
                     domains: domain.map(|d| vec![d]),
                     upstream: None,
+                    value,
+                    ttl_seconds: Some(ttl),
+                    priority,
                 }
             };
 

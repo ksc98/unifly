@@ -411,11 +411,12 @@ impl IntegrationClient {
 
     pub async fn list_pending_devices(
         &self,
+        site_id: &Uuid,
         offset: i64,
         limit: i32,
     ) -> Result<types::Page<types::PendingDeviceResponse>, Error> {
         self.get_with_params(
-            "v1/pending-devices",
+            &format!("v1/sites/{site_id}/devices/pending"),
             &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await
@@ -428,7 +429,7 @@ impl IntegrationClient {
         limit: i32,
     ) -> Result<types::Page<types::DeviceTagResponse>, Error> {
         self.get_with_params(
-            &format!("v1/sites/{site_id}/device-tags"),
+            &format!("v1/sites/{site_id}/devices/tags"),
             &[("offset", offset.to_string()), ("limit", limit.to_string())],
         )
         .await

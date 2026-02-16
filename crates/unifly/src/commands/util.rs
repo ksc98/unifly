@@ -74,10 +74,3 @@ pub fn read_json_file(path: &Path) -> Result<serde_json::Value, CliError> {
         reason: format!("invalid JSON: {e}"),
     })
 }
-
-/// Return a proper error for features that require direct Legacy API access.
-pub fn not_yet_implemented(feature: &str) -> Result<(), CliError> {
-    Err(CliError::NotYetImplemented {
-        feature: feature.into(),
-    })
-}

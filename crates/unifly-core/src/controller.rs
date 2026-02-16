@@ -5,7 +5,7 @@
 // and reactive data streaming through the DataStore.
 
 use std::collections::HashMap;
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -682,6 +682,9 @@ impl Controller {
                     if let Some(ld) = legacy_by_mac.get(device.mac.as_str()) {
                         if device.client_count.is_none() {
                             device.client_count = ld.num_sta.and_then(|n| n.try_into().ok());
+                        }
+                        if device.wan_ipv6.is_none() {
+                            device.wan_ipv6 = parse_legacy_device_wan_ipv6(&ld.extra);
                         }
                     }
                 }
@@ -1619,6 +1622,12 @@ fn apply_device_sync(store: &DataStore, data: &serde_json::Value) {
         #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
         {
             device.client_count = Some(num_sta as u32);
+        }
+    }
+
+    if let Some(obj) = data.as_object() {
+        if let Some(wan_ipv6) = parse_legacy_device_wan_ipv6(obj) {
+            device.wan_ipv6 = Some(wan_ipv6);
         }
     }
 
@@ -2667,6 +2676,50 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
+
+fn parse_ipv6_text(raw: &str) -> Option<Ipv6Addr> {
+    let candidate = raw.trim().split('/').next().unwrap_or(raw).trim();
+    candidate.parse::<Ipv6Addr>().ok()
+}
+
+fn pick_ipv6_from_value(value: &serde_json::Value) -> Option<String> {
+    let mut first_link_local: Option<String> = None;
+
+    let iter: Box<dyn Iterator<Item = &serde_json::Value> + '_> = match value {
+        serde_json::Value::Array(items) => Box::new(items.iter()),
+        _ => Box::new(std::iter::once(value)),
+    };
+
+    for item in iter {
+        if let Some(ipv6) = item.as_str().and_then(parse_ipv6_text) {
+            let ip_text = ipv6.to_string();
+            if !ipv6.is_unicast_link_local() {
+                return Some(ip_text);
+            }
+            if first_link_local.is_none() {
+                first_link_local = Some(ip_text);
+            }
+        }
+    }
+
+    first_link_local
+}
+
+fn parse_legacy_device_wan_ipv6(
+    extra: &serde_json::Map<String, serde_json::Value>,
+) -> Option<String> {
+    // Primary source on gateways: wan1.ipv6 = ["global", "link-local"].
+    if let Some(v) = extra
+        .get("wan1")
+        .and_then(|wan| wan.get("ipv6"))
+        .and_then(pick_ipv6_from_value)
+    {
+        return Some(v);
+    }
+
+    // Fallback source on some firmware: top-level ipv6 array.
+    extra.get("ipv6").and_then(pick_ipv6_from_value)
+}
 
 /// Convert raw health JSON values into domain `HealthSummary` types.
 fn convert_health_summaries(raw: Vec<serde_json::Value>) -> Vec<HealthSummary> {

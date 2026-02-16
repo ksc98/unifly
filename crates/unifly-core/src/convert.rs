@@ -49,6 +49,48 @@ fn parse_datetime(raw: Option<&String>) -> Option<DateTime<Utc>> {
         .map(|dt| dt.with_timezone(&Utc))
 }
 
+fn parse_ipv6_text(raw: &str) -> Option<std::net::Ipv6Addr> {
+    let candidate = raw.trim().split('/').next().unwrap_or(raw).trim();
+    candidate.parse::<std::net::Ipv6Addr>().ok()
+}
+
+fn pick_ipv6_from_value(value: &Value) -> Option<String> {
+    let mut first_link_local: Option<String> = None;
+
+    let iter: Box<dyn Iterator<Item = &Value> + '_> = match value {
+        Value::Array(items) => Box::new(items.iter()),
+        _ => Box::new(std::iter::once(value)),
+    };
+
+    for item in iter {
+        if let Some(ipv6) = item.as_str().and_then(parse_ipv6_text) {
+            let ip_text = ipv6.to_string();
+            if !ipv6.is_unicast_link_local() {
+                return Some(ip_text);
+            }
+            if first_link_local.is_none() {
+                first_link_local = Some(ip_text);
+            }
+        }
+    }
+
+    first_link_local
+}
+
+fn parse_legacy_wan_ipv6(extra: &serde_json::Map<String, Value>) -> Option<String> {
+    // Primary source on gateways: wan1.ipv6 = ["global", "link-local"].
+    if let Some(v) = extra
+        .get("wan1")
+        .and_then(|wan| wan.get("ipv6"))
+        .and_then(pick_ipv6_from_value)
+    {
+        return Some(v);
+    }
+
+    // Fallback source on some firmware: top-level ipv6 array.
+    extra.get("ipv6").and_then(pick_ipv6_from_value)
+}
+
 // ── Device ─────────────────────────────────────────────────────────
 
 /// Infer `DeviceType` from the legacy `type` field and optional `model` string.
@@ -133,6 +175,7 @@ impl From<LegacyDevice> for Device {
             id: EntityId::from(d.id),
             mac: MacAddress::new(&d.mac),
             ip: parse_ip(d.ip.as_ref()),
+            wan_ipv6: parse_legacy_wan_ipv6(&d.extra),
             name: d.name,
             model: d.model,
             device_type,
@@ -488,6 +531,7 @@ impl From<integration_types::DeviceResponse> for Device {
             id: EntityId::Uuid(d.id),
             mac: MacAddress::new(&d.mac_address),
             ip: d.ip_address.as_deref().and_then(|s| s.parse().ok()),
+            wan_ipv6: None,
             name: Some(d.name),
             model: Some(d.model),
             device_type,

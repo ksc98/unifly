@@ -306,36 +306,38 @@ impl DashboardScreen {
         let gw_ip = wan_health
             .and_then(|h| h.extra.get("gateways").and_then(|v| v.as_array()))
             .and_then(|a| a.first().and_then(|v| v.as_str()));
-        let wan_ipv6 = wan_health.and_then(|h| {
-            const IPV6_KEYS: &[&str] = &[
-                "wan_ip6",
-                "wan_ip6s",
-                "wan_ipv6",
-                "wan_ipv6s",
-                "ipv6",
-                "ipv6Address",
-                "ipv6_address",
-            ];
+        let wan_ipv6 = wan_health
+            .and_then(|h| {
+                const IPV6_KEYS: &[&str] = &[
+                    "wan_ip6",
+                    "wan_ip6s",
+                    "wan_ipv6",
+                    "wan_ipv6s",
+                    "ipv6",
+                    "ipv6Address",
+                    "ipv6_address",
+                ];
 
-            for key in IPV6_KEYS {
-                if let Some(ipv6) = h.extra.get(*key).and_then(parse_ipv6_from_value) {
+                for key in IPV6_KEYS {
+                    if let Some(ipv6) = h.extra.get(*key).and_then(parse_ipv6_from_value) {
+                        return Some(ipv6);
+                    }
+                }
+
+                if let Some(ipv6) = h
+                    .extra
+                    .get("wan_ip")
+                    .and_then(parse_ipv6_from_value)
+                    .or_else(|| h.wan_ip.as_deref().and_then(parse_ipv6_from_text))
+                {
                     return Some(ipv6);
                 }
-            }
 
-            if let Some(ipv6) = h
-                .extra
-                .get("wan_ip")
-                .and_then(parse_ipv6_from_value)
-                .or_else(|| h.wan_ip.as_deref().and_then(parse_ipv6_from_text))
-            {
-                return Some(ipv6);
-            }
-
-            h.gateways
-                .as_ref()
-                .and_then(|gateways| gateways.iter().find_map(|gw| parse_ipv6_from_text(gw)))
-        });
+                h.gateways
+                    .as_ref()
+                    .and_then(|gateways| gateways.iter().find_map(|gw| parse_ipv6_from_text(gw)))
+            })
+            .or_else(|| gateway.and_then(|g| g.wan_ipv6.clone()));
         let gw_version =
             wan_health.and_then(|h| h.extra.get("gw_version").and_then(|v| v.as_str()));
         let latency = www_health.and_then(|h| h.latency);

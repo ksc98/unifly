@@ -112,6 +112,7 @@ pub struct Device {
     pub id: EntityId,
     pub mac: MacAddress,
     pub ip: Option<IpAddr>,
+    pub wan_ipv6: Option<String>,
     pub name: Option<String>,
     pub model: Option<String>,
     pub device_type: DeviceType,

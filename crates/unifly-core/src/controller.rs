@@ -20,8 +20,8 @@ use crate::error::CoreError;
 use crate::model::{
     AclRule, Admin, Alarm, Client, Country, Device, DnsPolicy, DpiApplication, DpiCategory,
     EntityId, Event, FirewallAction, FirewallPolicy, FirewallZone, HealthSummary, MacAddress,
-    Network, NetworkManagement, RadiusProfile, Site, SysInfo, SystemInfo, TrafficMatchingList,
-    Voucher, VpnServer, VpnTunnel, WanInterface, WifiBroadcast,
+    Network, NetworkManagement, NetworkPurpose, RadiusProfile, Site, SysInfo, SystemInfo,
+    TrafficMatchingList, Voucher, VpnServer, VpnTunnel, WanInterface, WifiBroadcast,
 };
 use crate::store::DataStore;
 use crate::stream::EntityStream;
@@ -1885,7 +1885,7 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
                 vlan_id,
                 subnet,
                 management,
-                purpose: _,
+                purpose,
                 dhcp_enabled,
                 enabled,
                 dhcp_range_start,
@@ -1897,7 +1897,9 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             } = req;
 
             let management = management.unwrap_or_else(|| {
-                if subnet.is_some() || dhcp_enabled {
+                if matches!(purpose, Some(NetworkPurpose::VlanOnly)) {
+                    NetworkManagement::Unmanaged
+                } else if purpose.is_some() || subnet.is_some() || dhcp_enabled {
                     NetworkManagement::Gateway
                 } else {
                     NetworkManagement::Unmanaged

@@ -307,7 +307,8 @@ impl SettingsScreen {
         };
 
         tokio::spawn(async move {
-            let result = match unifly_config::profile_to_controller_config(&profile, &profile_name) {
+            let result = match unifly_config::profile_to_controller_config(&profile, &profile_name)
+            {
                 Ok(config) => {
                     let controller = unifly_core::Controller::new(config);
                     match controller.connect().await {

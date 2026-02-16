@@ -7,6 +7,8 @@ use crate::cli::{GlobalOpts, WansArgs, WansCommand};
 use crate::error::CliError;
 use crate::output;
 
+use super::util;
+
 // ── Table row ───────────────────────────────────────────────────────
 
 #[derive(Tabled)]
@@ -40,8 +42,12 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        WansCommand::List(_) => {
-            let wans = controller.list_wans().await?;
+        WansCommand::List(list) => {
+            let wans = util::apply_list_args(
+                controller.list_wans().await?,
+                &list,
+                util::matches_json_filter,
+            );
             let out = output::render_list(
                 &global.output,
                 &wans,

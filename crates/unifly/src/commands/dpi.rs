@@ -7,6 +7,8 @@ use crate::cli::{DpiArgs, DpiCommand, GlobalOpts};
 use crate::error::CliError;
 use crate::output;
 
+use super::util;
+
 // ── Table rows ──────────────────────────────────────────────────────
 
 #[derive(Tabled)]
@@ -69,8 +71,12 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        DpiCommand::Apps(_) => {
-            let apps = controller.list_dpi_applications().await?;
+        DpiCommand::Apps(list) => {
+            let apps = util::apply_list_args(
+                controller.list_dpi_applications().await?,
+                &list,
+                util::matches_json_filter,
+            );
             let out = output::render_list(
                 &global.output,
                 &apps,
@@ -81,8 +87,12 @@ pub async fn handle(
             Ok(())
         }
 
-        DpiCommand::Categories(_) => {
-            let cats = controller.list_dpi_categories().await?;
+        DpiCommand::Categories(list) => {
+            let cats = util::apply_list_args(
+                controller.list_dpi_categories().await?,
+                &list,
+                util::matches_json_filter,
+            );
             let out = output::render_list(
                 &global.output,
                 &cats,

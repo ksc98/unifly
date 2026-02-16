@@ -1291,10 +1291,11 @@ impl Controller {
         interval: &str,
         start: Option<i64>,
         end: Option<i64>,
+        attrs: Option<&[String]>,
     ) -> Result<Vec<serde_json::Value>, CoreError> {
         let guard = self.inner.legacy_client.lock().await;
         let legacy = require_legacy(&guard)?;
-        Ok(legacy.get_site_stats(interval, start, end).await?)
+        Ok(legacy.get_site_stats(interval, start, end, attrs).await?)
     }
 
     /// Fetch per-device historical statistics.
@@ -1302,10 +1303,11 @@ impl Controller {
         &self,
         interval: &str,
         macs: Option<&[String]>,
+        attrs: Option<&[String]>,
     ) -> Result<Vec<serde_json::Value>, CoreError> {
         let guard = self.inner.legacy_client.lock().await;
         let legacy = require_legacy(&guard)?;
-        Ok(legacy.get_device_stats(interval, macs).await?)
+        Ok(legacy.get_device_stats(interval, macs, attrs).await?)
     }
 
     /// Fetch per-client historical statistics.
@@ -1313,10 +1315,11 @@ impl Controller {
         &self,
         interval: &str,
         macs: Option<&[String]>,
+        attrs: Option<&[String]>,
     ) -> Result<Vec<serde_json::Value>, CoreError> {
         let guard = self.inner.legacy_client.lock().await;
         let legacy = require_legacy(&guard)?;
-        Ok(legacy.get_client_stats(interval, macs).await?)
+        Ok(legacy.get_client_stats(interval, macs, attrs).await?)
     }
 
     /// Fetch gateway historical statistics.
@@ -1325,17 +1328,24 @@ impl Controller {
         interval: &str,
         start: Option<i64>,
         end: Option<i64>,
+        attrs: Option<&[String]>,
     ) -> Result<Vec<serde_json::Value>, CoreError> {
         let guard = self.inner.legacy_client.lock().await;
         let legacy = require_legacy(&guard)?;
-        Ok(legacy.get_gateway_stats(interval, start, end).await?)
+        Ok(legacy
+            .get_gateway_stats(interval, start, end, attrs)
+            .await?)
     }
 
     /// Fetch DPI statistics.
-    pub async fn get_dpi_stats(&self, group_by: &str) -> Result<Vec<serde_json::Value>, CoreError> {
+    pub async fn get_dpi_stats(
+        &self,
+        group_by: &str,
+        macs: Option<&[String]>,
+    ) -> Result<Vec<serde_json::Value>, CoreError> {
         let guard = self.inner.legacy_client.lock().await;
         let legacy = require_legacy(&guard)?;
-        Ok(legacy.get_dpi_stats(group_by).await?)
+        Ok(legacy.get_dpi_stats(group_by, macs).await?)
     }
 
     // ── Ad-hoc Legacy API queries ──────────────────────────────────
@@ -1670,9 +1680,13 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
 
     match cmd {
         // ── Device operations ────────────────────────────────────
-        Command::AdoptDevice { mac } => {
+        Command::AdoptDevice {
+            mac,
+            ignore_device_limit,
+        } => {
             if let (Some(ic), Some(sid)) = (integration_guard.as_ref(), site_id) {
-                ic.adopt_device(&sid, mac.as_str()).await?;
+                ic.adopt_device(&sid, mac.as_str(), ignore_device_limit)
+                    .await?;
             } else {
                 let legacy = require_legacy(&legacy_guard)?;
                 legacy.adopt_device(mac.as_str()).await?;

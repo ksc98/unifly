@@ -10,6 +10,10 @@ use tracing::debug;
 use crate::error::Error;
 use crate::legacy::client::LegacyClient;
 
+fn attrs_or_default(attrs: Option<&[String]>, default: &[&str]) -> serde_json::Value {
+    attrs.map_or_else(|| json!(default), |custom| json!(custom))
+}
+
 impl LegacyClient {
     /// Fetch site-level historical statistics.
     ///
@@ -22,6 +26,7 @@ impl LegacyClient {
         interval: &str,
         start: Option<i64>,
         end: Option<i64>,
+        attrs: Option<&[String]>,
     ) -> Result<Vec<serde_json::Value>, Error> {
         let path = format!("stat/report/{interval}.site");
         let url = self.site_url(&path);
@@ -30,7 +35,10 @@ impl LegacyClient {
         // The report endpoint requires a POST with attribute selection.
         // Requesting common attributes; the API ignores unknown ones.
         let mut body = json!({
-            "attrs": ["bytes", "num_sta", "time", "wlan-num_sta", "lan-num_sta"],
+            "attrs": attrs_or_default(
+                attrs,
+                &["bytes", "num_sta", "time", "wlan-num_sta", "lan-num_sta"],
+            ),
         });
         if let Some(s) = start {
             body["start"] = json!(s);
@@ -51,13 +59,14 @@ impl LegacyClient {
         &self,
         interval: &str,
         macs: Option<&[String]>,
+        attrs: Option<&[String]>,
     ) -> Result<Vec<serde_json::Value>, Error> {
         let path = format!("stat/report/{interval}.device");
         let url = self.site_url(&path);
         debug!(interval, "fetching device stats");
 
         let mut body = json!({
-            "attrs": ["bytes", "num_sta", "time", "rx_bytes", "tx_bytes"],
+            "attrs": attrs_or_default(attrs, &["bytes", "num_sta", "time", "rx_bytes", "tx_bytes"]),
         });
         if let Some(m) = macs {
             body["macs"] = json!(m);
@@ -75,13 +84,14 @@ impl LegacyClient {
         &self,
         interval: &str,
         macs: Option<&[String]>,
+        attrs: Option<&[String]>,
     ) -> Result<Vec<serde_json::Value>, Error> {
         let path = format!("stat/report/{interval}.user");
         let url = self.site_url(&path);
         debug!(interval, "fetching client stats");
 
         let mut body = json!({
-            "attrs": ["bytes", "time", "rx_bytes", "tx_bytes"],
+            "attrs": attrs_or_default(attrs, &["bytes", "time", "rx_bytes", "tx_bytes"]),
         });
         if let Some(m) = macs {
             body["macs"] = json!(m);
@@ -98,13 +108,24 @@ impl LegacyClient {
         interval: &str,
         start: Option<i64>,
         end: Option<i64>,
+        attrs: Option<&[String]>,
     ) -> Result<Vec<serde_json::Value>, Error> {
         let path = format!("stat/report/{interval}.gw");
         let url = self.site_url(&path);
         debug!(interval, ?start, ?end, "fetching gateway stats");
 
         let mut body = json!({
-            "attrs": ["bytes", "time", "wan-tx_bytes", "wan-rx_bytes", "lan-rx_bytes", "lan-tx_bytes"],
+            "attrs": attrs_or_default(
+                attrs,
+                &[
+                    "bytes",
+                    "time",
+                    "wan-tx_bytes",
+                    "wan-rx_bytes",
+                    "lan-rx_bytes",
+                    "lan-tx_bytes",
+                ],
+            ),
         });
         if let Some(s) = start {
             body["start"] = json!(s);
@@ -122,10 +143,17 @@ impl LegacyClient {
     ///
     /// The `group_by` parameter selects the DPI grouping: `"by_app"` or `"by_cat"`.
     /// Returns empty data if DPI tracking is not enabled on the controller.
-    pub async fn get_dpi_stats(&self, group_by: &str) -> Result<Vec<serde_json::Value>, Error> {
+    pub async fn get_dpi_stats(
+        &self,
+        group_by: &str,
+        macs: Option<&[String]>,
+    ) -> Result<Vec<serde_json::Value>, Error> {
         let url = self.site_url("stat/sitedpi");
         debug!(group_by, "fetching site DPI stats");
-        let body = json!({"type": group_by});
+        let mut body = json!({"type": group_by});
+        if let Some(m) = macs {
+            body["macs"] = json!(m);
+        }
         self.post(url, &body).await
     }
 }

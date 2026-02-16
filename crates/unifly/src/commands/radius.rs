@@ -7,6 +7,8 @@ use crate::cli::{GlobalOpts, RadiusArgs, RadiusCommand};
 use crate::error::CliError;
 use crate::output;
 
+use super::util;
+
 // ── Table row ───────────────────────────────────────────────────────
 
 #[derive(Tabled)]
@@ -34,8 +36,12 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        RadiusCommand::Profiles(_) => {
-            let profiles = controller.list_radius_profiles().await?;
+        RadiusCommand::Profiles(list) => {
+            let profiles = util::apply_list_args(
+                controller.list_radius_profiles().await?,
+                &list,
+                util::matches_json_filter,
+            );
             let out = output::render_list(
                 &global.output,
                 &profiles,

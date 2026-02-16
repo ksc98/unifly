@@ -709,6 +709,7 @@ impl App {
                 self.execute_command(
                     Command::AdoptDevice {
                         mac: MacAddress::new(&mac),
+                        ignore_device_limit: false,
                     },
                     format!("Adopting {mac}"),
                 );
@@ -787,9 +788,9 @@ impl App {
 
         tokio::spawn(async move {
             let (gw_res, site_res, dpi_res) = tokio::join!(
-                controller.get_gateway_stats(interval, start, end),
-                controller.get_site_stats(interval, start, end),
-                controller.get_dpi_stats("by_app"),
+                controller.get_gateway_stats(interval, start, end, None),
+                controller.get_site_stats(interval, start, end, None),
+                controller.get_dpi_stats("by_app", None),
             );
 
             // If a newer request was issued while we were fetching, discard.

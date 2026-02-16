@@ -184,12 +184,14 @@ pub async fn handle(
             Ok(())
         }
 
-        DevicesCommand::Adopt {
-            mac,
-            ignore_limit: _,
-        } => {
+        DevicesCommand::Adopt { mac, ignore_limit } => {
             let mac = MacAddress::new(&mac);
-            controller.execute(CoreCommand::AdoptDevice { mac }).await?;
+            controller
+                .execute(CoreCommand::AdoptDevice {
+                    mac,
+                    ignore_device_limit: ignore_limit,
+                })
+                .await?;
             if !global.quiet {
                 eprintln!("Device adoption initiated");
             }

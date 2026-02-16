@@ -112,3 +112,41 @@ pub fn matches_json_filter<T: serde::Serialize>(item: &T, filter: &str) -> bool 
         .map(|haystack| haystack.to_ascii_lowercase().contains(&needle))
         .unwrap_or(false)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{apply_list_args, matches_json_filter};
+    use crate::cli::ListArgs;
+
+    #[test]
+    fn apply_list_args_respects_offset_limit() {
+        let args = ListArgs {
+            limit: 2,
+            offset: 1,
+            all: false,
+            filter: None,
+        };
+        let rows = vec![1, 2, 3, 4];
+        let sliced = apply_list_args(rows, &args, |_, _| true);
+        assert_eq!(sliced, vec![2, 3]);
+    }
+
+    #[test]
+    fn apply_list_args_respects_filter_case_insensitive() {
+        let args = ListArgs {
+            limit: 25,
+            offset: 0,
+            all: false,
+            filter: Some("BETA".into()),
+        };
+        let rows = vec![
+            serde_json::json!({"name":"alpha"}),
+            serde_json::json!({"name":"beta"}),
+        ];
+        let filtered = apply_list_args(rows, &args, |item, filter| {
+            matches_json_filter(item, filter)
+        });
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0]["name"], "beta");
+    }
+}

@@ -64,8 +64,11 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        TrafficListsCommand::List(_) => {
-            let snap = controller.traffic_matching_lists_snapshot();
+        TrafficListsCommand::List(list) => {
+            let all = controller.traffic_matching_lists_snapshot();
+            let snap = util::apply_list_args(all.iter().cloned(), &list, |t, filter| {
+                util::matches_json_filter(t, filter)
+            });
             let out = output::render_list(
                 &global.output,
                 &snap,

@@ -349,6 +349,7 @@ impl IntegrationClient {
         &self,
         site_id: &Uuid,
         mac: &str,
+        ignore_device_limit: bool,
     ) -> Result<types::DeviceDetailsResponse, Error> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
@@ -361,7 +362,7 @@ impl IntegrationClient {
             &format!("v1/sites/{site_id}/devices"),
             &Body {
                 mac_address: mac,
-                ignore_device_limit: false,
+                ignore_device_limit,
             },
         )
         .await

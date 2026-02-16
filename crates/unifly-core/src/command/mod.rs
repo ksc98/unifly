@@ -33,6 +33,7 @@ pub enum Command {
     // ── Device operations ────────────────────────────────────────────
     AdoptDevice {
         mac: MacAddress,
+        ignore_device_limit: bool,
     },
     RemoveDevice {
         id: EntityId,

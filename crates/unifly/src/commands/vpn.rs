@@ -7,6 +7,8 @@ use crate::cli::{GlobalOpts, VpnArgs, VpnCommand};
 use crate::error::CliError;
 use crate::output;
 
+use super::util;
+
 // ── Table rows ──────────────────────────────────────────────────────
 
 #[derive(Tabled)]
@@ -69,8 +71,12 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        VpnCommand::Servers(_) => {
-            let servers = controller.list_vpn_servers().await?;
+        VpnCommand::Servers(list) => {
+            let servers = util::apply_list_args(
+                controller.list_vpn_servers().await?,
+                &list,
+                util::matches_json_filter,
+            );
             let out = output::render_list(
                 &global.output,
                 &servers,
@@ -81,8 +87,12 @@ pub async fn handle(
             Ok(())
         }
 
-        VpnCommand::Tunnels(_) => {
-            let tunnels = controller.list_vpn_tunnels().await?;
+        VpnCommand::Tunnels(list) => {
+            let tunnels = util::apply_list_args(
+                controller.list_vpn_tunnels().await?,
+                &list,
+                util::matches_json_filter,
+            );
             let out = output::render_list(
                 &global.output,
                 &tunnels,

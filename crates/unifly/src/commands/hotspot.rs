@@ -77,8 +77,11 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        HotspotCommand::List { .. } => {
-            let snap = controller.vouchers_snapshot();
+        HotspotCommand::List { limit, offset } => {
+            let all = controller.vouchers_snapshot();
+            let offset = usize::try_from(offset).unwrap_or(usize::MAX);
+            let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+            let snap: Vec<_> = all.iter().skip(offset).take(limit).cloned().collect();
             let out = output::render_list(
                 &global.output,
                 &snap,

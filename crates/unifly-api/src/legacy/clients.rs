@@ -134,4 +134,22 @@ impl LegacyClient {
         let _: Vec<serde_json::Value> = self.post(url, &body).await?;
         Ok(())
     }
+
+    /// Revoke guest authorization for a client.
+    ///
+    /// `POST /api/s/{site}/cmd/stamgr` with `{"cmd": "unauthorize-guest", "mac": "..."}`
+    pub async fn unauthorize_guest(&self, mac: &str) -> Result<(), Error> {
+        let url = self.site_url("cmd/stamgr");
+        debug!(mac, "revoking guest authorization");
+        let _: Vec<serde_json::Value> = self
+            .post(
+                url,
+                &json!({
+                    "cmd": "unauthorize-guest",
+                    "mac": mac,
+                }),
+            )
+            .await?;
+        Ok(())
+    }
 }

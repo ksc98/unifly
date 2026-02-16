@@ -90,6 +90,34 @@ impl LegacyClient {
         Ok(())
     }
 
+    /// Force re-provision a device configuration.
+    ///
+    /// `POST /api/s/{site}/cmd/devmgr` with `{"cmd": "force-provision", "mac": "..."}`
+    pub async fn provision_device(&self, mac: &str) -> Result<(), Error> {
+        let url = self.site_url("cmd/devmgr");
+        debug!(mac, "force-provisioning device");
+        let _: Vec<serde_json::Value> = self
+            .post(
+                url,
+                &json!({
+                    "cmd": "force-provision",
+                    "mac": mac,
+                }),
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Trigger a site speed test (gateway).
+    ///
+    /// `POST /api/s/{site}/cmd/devmgr` with `{"cmd": "speedtest"}`
+    pub async fn speedtest(&self) -> Result<(), Error> {
+        let url = self.site_url("cmd/devmgr");
+        debug!("starting speed test");
+        let _: Vec<serde_json::Value> = self.post(url, &json!({ "cmd": "speedtest" })).await?;
+        Ok(())
+    }
+
     /// Toggle the LED locator on a device.
     ///
     /// `enable: true` sends `set-locate`, `false` sends `unset-locate`.

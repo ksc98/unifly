@@ -53,4 +53,21 @@ impl LegacyClient {
             .await?;
         Ok(())
     }
+
+    /// Archive all alarms for the active site.
+    ///
+    /// `POST /api/s/{site}/cmd/evtmgr` with `{"cmd": "archive-all-alarms"}`
+    pub async fn archive_all_alarms(&self) -> Result<(), Error> {
+        let url = self.site_url("cmd/evtmgr");
+        debug!("archiving all alarms");
+        let _: Vec<serde_json::Value> = self
+            .post(
+                url,
+                &json!({
+                    "cmd": "archive-all-alarms",
+                }),
+            )
+            .await?;
+        Ok(())
+    }
 }

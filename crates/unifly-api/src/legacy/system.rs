@@ -43,6 +43,53 @@ impl LegacyClient {
         self.post(url, &json!({ "cmd": "list-backups" })).await
     }
 
+    /// Delete a backup file from the controller.
+    ///
+    /// `POST /api/s/{site}/cmd/backup` with
+    /// `{"cmd": "delete-backup", "filename": "..."}`
+    pub async fn delete_backup(&self, filename: &str) -> Result<(), Error> {
+        let url = self.site_url("cmd/backup");
+        debug!(filename, "deleting backup");
+        let _: Vec<serde_json::Value> = self
+            .post(
+                url,
+                &json!({
+                    "cmd": "delete-backup",
+                    "filename": filename,
+                }),
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Download a backup file from the controller.
+    ///
+    /// `GET /dl/autobackup/{filename}`
+    pub async fn download_backup(&self, filename: &str) -> Result<Vec<u8>, Error> {
+        let prefix = self
+            .platform()
+            .legacy_prefix()
+            .unwrap_or("")
+            .trim_end_matches('/');
+        let base = self.base_url().as_str().trim_end_matches('/');
+        let encoded: String = url::form_urlencoded::byte_serialize(filename.as_bytes()).collect();
+        let url = format!("{base}{prefix}/dl/autobackup/{encoded}");
+        debug!(filename, url, "downloading backup");
+        let resp = self
+            .http()
+            .get(url)
+            .send()
+            .await
+            .map_err(Error::Transport)?;
+        if !resp.status().is_success() {
+            return Err(Error::LegacyApi {
+                message: format!("backup download failed: HTTP {}", resp.status()),
+            });
+        }
+        let bytes = resp.bytes().await.map_err(Error::Transport)?;
+        Ok(bytes.to_vec())
+    }
+
     /// List controller admins.
     ///
     /// `GET /api/stat/admin` — controller-level (not site-scoped).
@@ -59,6 +106,26 @@ impl LegacyClient {
         let url = self.site_url("cmd/backup");
         debug!("creating backup");
         let _: Vec<serde_json::Value> = self.post(url, &json!({ "cmd": "backup" })).await?;
+        Ok(())
+    }
+
+    /// Reboot the controller.
+    ///
+    /// `POST /api/system/reboot`
+    pub async fn reboot_controller(&self) -> Result<(), Error> {
+        let url = self.api_url("system/reboot");
+        debug!("rebooting controller");
+        let _: Vec<serde_json::Value> = self.post(url, &json!({})).await?;
+        Ok(())
+    }
+
+    /// Power off the controller.
+    ///
+    /// `POST /api/system/poweroff`
+    pub async fn poweroff_controller(&self) -> Result<(), Error> {
+        let url = self.api_url("system/poweroff");
+        debug!("powering off controller");
+        let _: Vec<serde_json::Value> = self.post(url, &json!({})).await?;
         Ok(())
     }
 }

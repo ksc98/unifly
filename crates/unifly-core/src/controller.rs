@@ -61,7 +61,7 @@ struct ControllerInner {
     store: Arc<DataStore>,
     connection_state: watch::Sender<ConnectionState>,
     event_tx: broadcast::Sender<Arc<Event>>,
-    command_tx: mpsc::Sender<CommandEnvelope>,
+    command_tx: Mutex<mpsc::Sender<CommandEnvelope>>,
     command_rx: Mutex<Option<mpsc::Receiver<CommandEnvelope>>>,
     cancel: CancellationToken,
     /// Child token for the current connection — cancelled on disconnect,
@@ -95,7 +95,7 @@ impl Controller {
                 store,
                 connection_state,
                 event_tx,
-                command_tx,
+                command_tx: Mutex::new(command_tx),
                 command_rx: Mutex::new(Some(command_rx)),
                 cancel,
                 cancel_child: Mutex::new(cancel_child),
@@ -412,6 +412,15 @@ impl Controller {
         *self.inner.legacy_client.lock().await = None;
         *self.inner.integration_client.lock().await = None;
         *self.inner.site_id.lock().await = None;
+
+        // Recreate command channel so reconnects can spawn a fresh receiver.
+        // The previous receiver is consumed by the command processor task.
+        {
+            let (tx, rx) = mpsc::channel(COMMAND_CHANNEL_SIZE);
+            *self.inner.command_tx.lock().await = tx;
+            *self.inner.command_rx.lock().await = Some(rx);
+        }
+
         let _ = self
             .inner
             .connection_state
@@ -748,8 +757,9 @@ impl Controller {
 
         let (tx, rx) = tokio::sync::oneshot::channel();
 
-        self.inner
-            .command_tx
+        let command_tx = self.inner.command_tx.lock().await.clone();
+
+        command_tx
             .send(CommandEnvelope {
                 command: cmd,
                 response_tx: tx,
@@ -1613,8 +1623,16 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             Ok(CommandResult::Ok)
         }
 
-        Command::ProvisionDevice { .. } => Err(unsupported("ProvisionDevice")),
-        Command::SpeedtestDevice => Err(unsupported("SpeedtestDevice")),
+        Command::ProvisionDevice { mac } => {
+            let legacy = require_legacy(&legacy_guard)?;
+            legacy.provision_device(mac.as_str()).await?;
+            Ok(CommandResult::Ok)
+        }
+        Command::SpeedtestDevice => {
+            let legacy = require_legacy(&legacy_guard)?;
+            legacy.speedtest().await?;
+            Ok(CommandResult::Ok)
+        }
 
         Command::PowerCyclePort {
             device_id,
@@ -1710,7 +1728,12 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             Ok(CommandResult::Ok)
         }
 
-        Command::UnauthorizeGuest { .. } => Err(unsupported("UnauthorizeGuest")),
+        Command::UnauthorizeGuest { client_id } => {
+            let legacy = require_legacy(&legacy_guard)?;
+            let mac = client_mac(store, &client_id)?;
+            legacy.unauthorize_guest(mac.as_str()).await?;
+            Ok(CommandResult::Ok)
+        }
 
         // ── Alarm operations ─────────────────────────────────────
         Command::ArchiveAlarm { id } => {
@@ -1719,7 +1742,11 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             Ok(CommandResult::Ok)
         }
 
-        Command::ArchiveAllAlarms => Err(unsupported("ArchiveAllAlarms")),
+        Command::ArchiveAllAlarms => {
+            let legacy = require_legacy(&legacy_guard)?;
+            legacy.archive_all_alarms().await?;
+            Ok(CommandResult::Ok)
+        }
 
         // ── Backup operations ────────────────────────────────────
         Command::CreateBackup => {
@@ -1728,7 +1755,11 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             Ok(CommandResult::Ok)
         }
 
-        Command::DeleteBackup { .. } => Err(unsupported("DeleteBackup")),
+        Command::DeleteBackup { filename } => {
+            let legacy = require_legacy(&legacy_guard)?;
+            legacy.delete_backup(&filename).await?;
+            Ok(CommandResult::Ok)
+        }
 
         // ── Network CRUD (Integration API) ───────────────────────
         Command::CreateNetwork(req) => {
@@ -1808,15 +1839,67 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             Ok(CommandResult::Ok)
         }
 
-        Command::UpdateWifiBroadcast { id, update: _ } => {
+        Command::UpdateWifiBroadcast { id, update } => {
             let (ic, sid) =
                 require_integration(&integration_guard, site_id, "UpdateWifiBroadcast")?;
-            let _uuid = require_uuid(&id)?;
-            // WiFi updates are complex — for now return the existing broadcast
-            let _ = (ic, sid);
-            Err(unsupported(
-                "UpdateWifiBroadcast (partial update not yet implemented)",
-            ))
+            let uuid = require_uuid(&id)?;
+            let existing = ic.get_wifi_broadcast(&sid, &uuid).await?;
+
+            let mut body = serde_json::Map::new();
+            for (k, v) in existing.extra {
+                body.insert(k, v);
+            }
+            body.insert(
+                "securityConfiguration".into(),
+                existing.security_configuration.clone(),
+            );
+            if let Some(network) = existing.network.clone() {
+                body.insert("network".into(), network);
+            }
+            if let Some(filter) = existing.broadcasting_device_filter.clone() {
+                body.insert("broadcastingDeviceFilter".into(), filter);
+            }
+
+            if let Some(ssid) = update.ssid.clone() {
+                body.insert("ssid".into(), serde_json::Value::String(ssid));
+            }
+            if let Some(hidden) = update.hide_ssid {
+                body.insert("hideSsid".into(), serde_json::Value::Bool(hidden));
+            }
+
+            let mut security_cfg = existing
+                .security_configuration
+                .as_object()
+                .cloned()
+                .unwrap_or_default();
+            if let Some(mode) = update.security_mode {
+                let mode = match mode {
+                    crate::model::WifiSecurityMode::Open => "OPEN",
+                    crate::model::WifiSecurityMode::Wpa2Personal => "WPA2_PERSONAL",
+                    crate::model::WifiSecurityMode::Wpa3Personal => "WPA3_PERSONAL",
+                    crate::model::WifiSecurityMode::Wpa2Wpa3Personal => "WPA2_WPA3_PERSONAL",
+                    crate::model::WifiSecurityMode::Wpa2Enterprise => "WPA2_ENTERPRISE",
+                    crate::model::WifiSecurityMode::Wpa3Enterprise => "WPA3_ENTERPRISE",
+                    crate::model::WifiSecurityMode::Wpa2Wpa3Enterprise => "WPA2_WPA3_ENTERPRISE",
+                };
+                security_cfg.insert("mode".into(), serde_json::Value::String(mode.into()));
+            }
+            if let Some(passphrase) = update.passphrase.clone() {
+                security_cfg.insert("passphrase".into(), serde_json::Value::String(passphrase));
+            }
+            body.insert(
+                "securityConfiguration".into(),
+                serde_json::Value::Object(security_cfg),
+            );
+
+            let payload = unifly_api::integration_types::WifiBroadcastCreateUpdate {
+                name: update.name.unwrap_or(existing.name),
+                broadcast_type: existing.broadcast_type,
+                enabled: update.enabled.unwrap_or(existing.enabled),
+                body,
+            };
+            ic.update_wifi_broadcast(&sid, &uuid, &payload).await?;
+            Ok(CommandResult::Ok)
         }
 
         Command::DeleteWifiBroadcast { id, force: _ } => {
@@ -1853,13 +1936,88 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
             Ok(CommandResult::Ok)
         }
 
-        Command::UpdateFirewallPolicy { id, update: _ } => {
-            let (_ic, _sid) =
+        Command::UpdateFirewallPolicy { id, update } => {
+            let (ic, sid) =
                 require_integration(&integration_guard, site_id, "UpdateFirewallPolicy")?;
-            let _uuid = require_uuid(&id)?;
-            Err(unsupported(
-                "UpdateFirewallPolicy (partial update not yet implemented)",
-            ))
+            let uuid = require_uuid(&id)?;
+            let existing = ic.get_firewall_policy(&sid, &uuid).await?;
+
+            let mut source = existing
+                .extra
+                .get("source")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            if let Some(addr) = update.source_address.clone() {
+                if let Some(obj) = source.as_object_mut() {
+                    obj.insert("address".into(), serde_json::Value::String(addr));
+                }
+            }
+
+            let mut destination = existing
+                .extra
+                .get("destination")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            if let Some(addr) = update.destination_address.clone() {
+                if let Some(obj) = destination.as_object_mut() {
+                    obj.insert("address".into(), serde_json::Value::String(addr));
+                }
+            }
+            if let Some(port) = update.destination_port.clone() {
+                if let Some(obj) = destination.as_object_mut() {
+                    obj.insert("port".into(), serde_json::Value::String(port));
+                }
+            }
+
+            let action = if let Some(action) = update.action {
+                let action_type = match action {
+                    FirewallAction::Allow => "ALLOW",
+                    FirewallAction::Block => "DROP",
+                    FirewallAction::Reject => "REJECT",
+                };
+                serde_json::json!({ "type": action_type })
+            } else {
+                existing.action
+            };
+
+            let ip_protocol_scope = if let Some(protocol) = update.protocol.clone() {
+                serde_json::json!({ "protocol": protocol })
+            } else {
+                existing
+                    .ip_protocol_scope
+                    .unwrap_or_else(|| serde_json::json!("ALL"))
+            };
+
+            let connection_state_filter = existing
+                .extra
+                .get("connectionStateFilter")
+                .and_then(serde_json::Value::as_array)
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(ToOwned::to_owned))
+                        .collect::<Vec<_>>()
+                });
+
+            let payload = unifly_api::integration_types::FirewallPolicyCreateUpdate {
+                name: update.name.unwrap_or(existing.name),
+                description: update.description.or(existing.description),
+                enabled: update.enabled.unwrap_or(existing.enabled),
+                action,
+                source,
+                destination,
+                ip_protocol_scope,
+                logging_enabled: existing.logging_enabled,
+                ipsec_filter: existing
+                    .extra
+                    .get("ipsecFilter")
+                    .and_then(serde_json::Value::as_str)
+                    .map(ToOwned::to_owned),
+                schedule: existing.extra.get("schedule").cloned(),
+                connection_state_filter,
+            };
+
+            ic.update_firewall_policy(&sid, &uuid, &payload).await?;
+            Ok(CommandResult::Ok)
         }
 
         Command::DeleteFirewallPolicy { id } => {
@@ -2010,21 +2168,68 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
                 crate::model::DnsPolicyType::SrvRecord => "SRV",
                 crate::model::DnsPolicyType::ForwardDomain => "FORWARD_DOMAIN",
             };
+            let mut fields = serde_json::Map::new();
+            if let Some(domains) = req.domains {
+                if let Some(first) = domains.first() {
+                    fields.insert("domain".into(), serde_json::Value::String(first.clone()));
+                }
+                fields.insert(
+                    "domains".into(),
+                    serde_json::Value::Array(
+                        domains.into_iter().map(serde_json::Value::String).collect(),
+                    ),
+                );
+            }
+            if let Some(upstream) = req.upstream {
+                fields.insert("upstream".into(), serde_json::Value::String(upstream));
+            }
+            fields.insert("name".into(), serde_json::Value::String(req.name));
             let body = unifly_api::integration_types::DnsPolicyCreateUpdate {
                 policy_type: policy_type_str.into(),
                 enabled: req.enabled,
-                fields: serde_json::Map::new(),
+                fields,
             };
             ic.create_dns_policy(&sid, &body).await?;
             Ok(CommandResult::Ok)
         }
 
-        Command::UpdateDnsPolicy { id, update: _ } => {
-            let (_ic, _sid) = require_integration(&integration_guard, site_id, "UpdateDnsPolicy")?;
-            let _uuid = require_uuid(&id)?;
-            Err(unsupported(
-                "UpdateDnsPolicy (partial update not yet implemented)",
-            ))
+        Command::UpdateDnsPolicy { id, update } => {
+            let (ic, sid) = require_integration(&integration_guard, site_id, "UpdateDnsPolicy")?;
+            let uuid = require_uuid(&id)?;
+            let existing = ic.get_dns_policy(&sid, &uuid).await?;
+            let mut fields: serde_json::Map<String, serde_json::Value> =
+                existing.extra.into_iter().collect();
+
+            if let Some(domains) = update.domains {
+                if let Some(first) = domains.first() {
+                    fields.insert("domain".into(), serde_json::Value::String(first.clone()));
+                }
+                fields.insert(
+                    "domains".into(),
+                    serde_json::Value::Array(
+                        domains.into_iter().map(serde_json::Value::String).collect(),
+                    ),
+                );
+            } else if let Some(domain) = existing.domain {
+                fields
+                    .entry("domain")
+                    .or_insert_with(|| serde_json::Value::String(domain));
+            }
+
+            if let Some(name) = update.name {
+                fields.insert("name".into(), serde_json::Value::String(name));
+            }
+            if let Some(upstream) = update.upstream {
+                fields.insert("upstream".into(), serde_json::Value::String(upstream));
+            }
+
+            let body = unifly_api::integration_types::DnsPolicyCreateUpdate {
+                policy_type: existing.policy_type,
+                enabled: update.enabled.unwrap_or(existing.enabled),
+                fields,
+            };
+            ic.update_dns_policy(&sid, &uuid, &body).await?;
+            Ok(CommandResult::Ok)
         }
 
         Command::DeleteDnsPolicy { id } => {
@@ -2133,14 +2338,43 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
         }
 
         // ── System administration ────────────────────────────────
-        Command::CreateSite { .. }
-        | Command::DeleteSite { .. }
-        | Command::InviteAdmin { .. }
-        | Command::RevokeAdmin { .. }
-        | Command::UpdateAdmin { .. } => Err(unsupported("system administration")),
+        Command::CreateSite { name, description } => {
+            let legacy = require_legacy(&legacy_guard)?;
+            legacy.create_site(&name, &description).await?;
+            Ok(CommandResult::Ok)
+        }
+        Command::DeleteSite { name } => {
+            let legacy = require_legacy(&legacy_guard)?;
+            legacy.delete_site(&name).await?;
+            Ok(CommandResult::Ok)
+        }
+        Command::InviteAdmin { name, email, role } => {
+            let legacy = require_legacy(&legacy_guard)?;
+            legacy.invite_admin(&name, &email, &role).await?;
+            Ok(CommandResult::Ok)
+        }
+        Command::RevokeAdmin { id } => {
+            let legacy = require_legacy(&legacy_guard)?;
+            legacy.revoke_admin(&id.to_string()).await?;
+            Ok(CommandResult::Ok)
+        }
+        Command::UpdateAdmin { id, role } => {
+            let legacy = require_legacy(&legacy_guard)?;
+            legacy
+                .update_admin(&id.to_string(), role.as_deref())
+                .await?;
+            Ok(CommandResult::Ok)
+        }
 
-        Command::RebootController | Command::PoweroffController => {
-            Err(unsupported("controller power management"))
+        Command::RebootController => {
+            let legacy = require_legacy(&legacy_guard)?;
+            legacy.reboot_controller().await?;
+            Ok(CommandResult::Ok)
+        }
+        Command::PoweroffController => {
+            let legacy = require_legacy(&legacy_guard)?;
+            legacy.poweroff_controller().await?;
+            Ok(CommandResult::Ok)
         }
     }
 }

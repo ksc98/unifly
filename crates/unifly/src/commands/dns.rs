@@ -77,8 +77,11 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        DnsCommand::List(_list) => {
-            let snap = controller.dns_policies_snapshot();
+        DnsCommand::List(list) => {
+            let all = controller.dns_policies_snapshot();
+            let snap = util::apply_list_args(all.iter().cloned(), &list, |d, filter| {
+                util::matches_json_filter(d, filter)
+            });
             let out = output::render_list(
                 &global.output,
                 &snap,

@@ -147,8 +147,11 @@ async fn handle_policies(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match cmd {
-        FirewallPoliciesCommand::List(_list) => {
-            let snap = controller.firewall_policies_snapshot();
+        FirewallPoliciesCommand::List(list) => {
+            let all = controller.firewall_policies_snapshot();
+            let snap = util::apply_list_args(all.iter().cloned(), &list, |p, filter| {
+                util::matches_json_filter(p, filter)
+            });
             let out = output::render_list(
                 &global.output,
                 &snap,
@@ -329,8 +332,11 @@ async fn handle_zones(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match cmd {
-        FirewallZonesCommand::List(_list) => {
-            let snap = controller.firewall_zones_snapshot();
+        FirewallZonesCommand::List(list) => {
+            let all = controller.firewall_zones_snapshot();
+            let snap = util::apply_list_args(all.iter().cloned(), &list, |z, filter| {
+                util::matches_json_filter(z, filter)
+            });
             let out = output::render_list(
                 &global.output,
                 &snap,

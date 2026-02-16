@@ -101,8 +101,11 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        WifiCommand::List(_list) => {
-            let snap = controller.wifi_broadcasts_snapshot();
+        WifiCommand::List(list) => {
+            let all = controller.wifi_broadcasts_snapshot();
+            let snap = util::apply_list_args(all.iter().cloned(), &list, |w, filter| {
+                util::matches_json_filter(w, filter)
+            });
             let out = output::render_list(
                 &global.output,
                 &snap,

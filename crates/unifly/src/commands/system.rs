@@ -197,18 +197,12 @@ async fn handle_backup(
                     created: v
                         .get("create_time")
                         .or_else(|| v.get("createdAt"))
-                        .map(|t| {
-                            t.as_str()
-                                .map_or_else(|| t.to_string(), ToOwned::to_owned)
-                        })
+                        .map(|t| t.as_str().map_or_else(|| t.to_string(), ToOwned::to_owned))
                         .unwrap_or_default(),
                     size: v
                         .get("size")
                         .or_else(|| v.get("file_size"))
-                        .map(|s| {
-                            s.as_str()
-                                .map_or_else(|| s.to_string(), ToOwned::to_owned)
-                        })
+                        .map(|s| s.as_str().map_or_else(|| s.to_string(), ToOwned::to_owned))
                         .unwrap_or_default(),
                 },
                 |v| {
@@ -223,9 +217,9 @@ async fn handle_backup(
             Ok(())
         }
 
-        BackupCommand::Download { filename, output } => {
+        BackupCommand::Download { filename, path } => {
             let bytes = controller.download_backup(&filename).await?;
-            let mut target = output.unwrap_or_else(|| PathBuf::from(&filename));
+            let mut target = path.unwrap_or_else(|| PathBuf::from(&filename));
             if target.is_dir() {
                 target = target.join(&filename);
             }

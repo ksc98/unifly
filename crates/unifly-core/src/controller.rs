@@ -5,6 +5,7 @@
 // and reactive data streaming through the DataStore.
 
 use std::collections::HashMap;
+use std::net::Ipv4Addr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -19,8 +20,8 @@ use crate::error::CoreError;
 use crate::model::{
     AclRule, Admin, Alarm, Client, Country, Device, DnsPolicy, DpiApplication, DpiCategory,
     EntityId, Event, FirewallAction, FirewallPolicy, FirewallZone, HealthSummary, MacAddress,
-    Network, RadiusProfile, Site, SysInfo, SystemInfo, TrafficMatchingList, Voucher, VpnServer,
-    VpnTunnel, WanInterface, WifiBroadcast,
+    Network, NetworkManagement, RadiusProfile, Site, SysInfo, SystemInfo, TrafficMatchingList,
+    Voucher, VpnServer, VpnTunnel, WanInterface, WifiBroadcast,
 };
 use crate::store::DataStore;
 use crate::stream::EntityStream;
@@ -1847,13 +1848,89 @@ async fn route_command(controller: &Controller, cmd: Command) -> Result<CommandR
         // ── Network CRUD (Integration API) ───────────────────────
         Command::CreateNetwork(req) => {
             let (ic, sid) = require_integration(&integration_guard, site_id, "CreateNetwork")?;
+            let crate::command::CreateNetworkRequest {
+                name,
+                vlan_id,
+                subnet,
+                management,
+                purpose: _,
+                dhcp_enabled,
+                enabled,
+                dhcp_range_start,
+                dhcp_range_stop,
+                dhcp_lease_time,
+                firewall_zone_id,
+                isolation_enabled,
+                internet_access_enabled,
+            } = req;
+
+            let management = management.unwrap_or_else(|| {
+                if subnet.is_some() || dhcp_enabled {
+                    NetworkManagement::Gateway
+                } else {
+                    NetworkManagement::Unmanaged
+                }
+            });
+            let mut extra = HashMap::new();
+
+            if let Some(zone) = firewall_zone_id {
+                extra.insert("zoneId".into(), serde_json::Value::String(zone));
+            }
+
+            if matches!(management, NetworkManagement::Gateway) {
+                extra.insert(
+                    "isolationEnabled".into(),
+                    serde_json::Value::Bool(isolation_enabled),
+                );
+                extra.insert(
+                    "internetAccessEnabled".into(),
+                    serde_json::Value::Bool(internet_access_enabled),
+                );
+
+                if let Some(cidr) = subnet {
+                    let (host_ip, prefix_len) = parse_ipv4_cidr(&cidr)?;
+                    let mut dhcp_cfg = serde_json::Map::new();
+                    dhcp_cfg.insert(
+                        "mode".into(),
+                        serde_json::Value::String(
+                            if dhcp_enabled { "SERVER" } else { "NONE" }.into(),
+                        ),
+                    );
+                    if let Some(lease) = dhcp_lease_time {
+                        dhcp_cfg.insert(
+                            "leaseTimeSeconds".into(),
+                            serde_json::Value::Number(serde_json::Number::from(u64::from(lease))),
+                        );
+                    }
+
+                    if let (Some(start), Some(stop)) = (dhcp_range_start, dhcp_range_stop) {
+                        dhcp_cfg.insert(
+                            "ipAddressRange".into(),
+                            serde_json::json!({
+                                "start": start,
+                                "end": stop
+                            }),
+                        );
+                    }
+
+                    extra.insert(
+                        "ipv4Configuration".into(),
+                        serde_json::json!({
+                            "hostIpAddress": host_ip.to_string(),
+                            "prefixLength": u64::from(prefix_len),
+                            "dhcpConfiguration": dhcp_cfg
+                        }),
+                    );
+                }
+            }
+
             let body = unifly_api::integration_types::NetworkCreateUpdate {
-                name: req.name,
-                enabled: req.enabled,
+                name,
+                enabled,
                 management: "USER_DEFINED".into(),
-                vlan_id: req.vlan_id.map_or(1, i32::from),
+                vlan_id: vlan_id.map_or(1, i32::from),
                 dhcp_guarding: None,
-                extra: HashMap::new(),
+                extra,
             };
             ic.create_network(&sid, &body).await?;
             Ok(CommandResult::Ok)
@@ -2670,6 +2747,30 @@ async fn setup_legacy_client(
     Ok(client)
 }
 
+fn parse_ipv4_cidr(cidr: &str) -> Result<(Ipv4Addr, u8), CoreError> {
+    let (host, prefix) = cidr
+        .split_once('/')
+        .ok_or_else(|| CoreError::ValidationFailed {
+            message: format!("invalid ipv4 host/prefix value '{cidr}'"),
+        })?;
+    let host_ip = host
+        .parse::<Ipv4Addr>()
+        .map_err(|_| CoreError::ValidationFailed {
+            message: format!("invalid IPv4 host address '{host}'"),
+        })?;
+    let prefix_len = prefix
+        .parse::<u8>()
+        .map_err(|_| CoreError::ValidationFailed {
+            message: format!("invalid IPv4 prefix length '{prefix}'"),
+        })?;
+    if prefix_len > 32 {
+        return Err(CoreError::ValidationFailed {
+            message: format!("IPv4 prefix length must be <= 32, got {prefix_len}"),
+        });
+    }
+    Ok((host_ip, prefix_len))
+}
+
 /// Extract a `Uuid` from an `EntityId`, or return an error.
 fn require_uuid(id: &EntityId) -> Result<uuid::Uuid, CoreError> {
     id.as_uuid().copied().ok_or_else(|| CoreError::Unsupported {
@@ -2719,4 +2820,26 @@ fn client_mac(store: &DataStore, id: &EntityId) -> Result<MacAddress, CoreError>
         .ok_or_else(|| CoreError::ClientNotFound {
             identifier: id.to_string(),
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_ipv4_cidr;
+
+    #[test]
+    fn parse_ipv4_cidr_accepts_valid_input() {
+        let (host, prefix) = parse_ipv4_cidr("192.168.10.1/24").expect("valid CIDR");
+        assert_eq!(host.to_string(), "192.168.10.1");
+        assert_eq!(prefix, 24);
+    }
+
+    #[test]
+    fn parse_ipv4_cidr_rejects_invalid_prefix() {
+        assert!(parse_ipv4_cidr("192.168.10.1/40").is_err());
+    }
+
+    #[test]
+    fn parse_ipv4_cidr_rejects_missing_prefix() {
+        assert!(parse_ipv4_cidr("192.168.10.1").is_err());
+    }
 }

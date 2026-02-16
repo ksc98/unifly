@@ -85,8 +85,11 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        ClientsCommand::List(_list) => {
-            let snap = controller.clients_snapshot();
+        ClientsCommand::List(list) => {
+            let all = controller.clients_snapshot();
+            let snap = util::apply_list_args(all.iter().cloned(), &list, |c, filter| {
+                util::matches_json_filter(c, filter)
+            });
             let out = output::render_list(
                 &global.output,
                 &snap,

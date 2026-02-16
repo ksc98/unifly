@@ -1371,9 +1371,9 @@ pub enum BackupCommand {
         /// Backup filename
         filename: String,
 
-        /// Output path (default: current directory)
-        #[arg(long, short = 'o')]
-        output: Option<PathBuf>,
+        /// Destination path (default: current directory)
+        #[arg(long = "path")]
+        path: Option<PathBuf>,
     },
 
     /// Delete a backup

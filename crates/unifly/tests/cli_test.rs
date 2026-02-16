@@ -178,6 +178,174 @@ fn test_global_flags_parsing() {
         );
 }
 
+#[test]
+fn test_network_refs_command_parses() {
+    unifly_cmd()
+        .args(["networks", "refs", "00000000-0000-0000-0000-000000000000"])
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("config")
+                .or(predicate::str::contains("Configuration"))
+                .or(predicate::str::contains("controller"))
+                .or(predicate::str::contains("profile")),
+        );
+}
+
+#[test]
+fn test_devices_pending_list_flags_parse() {
+    unifly_cmd()
+        .args([
+            "devices", "pending", "--limit", "1", "--offset", "1", "--filter", "pending",
+        ])
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("config")
+                .or(predicate::str::contains("Configuration"))
+                .or(predicate::str::contains("controller"))
+                .or(predicate::str::contains("profile")),
+        );
+}
+
+#[test]
+fn test_devices_tags_all_flag_parse() {
+    unifly_cmd()
+        .args(["devices", "tags", "--all"])
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("config")
+                .or(predicate::str::contains("Configuration"))
+                .or(predicate::str::contains("controller"))
+                .or(predicate::str::contains("profile")),
+        );
+}
+
+#[test]
+fn test_system_backup_list_command_parses() {
+    unifly_cmd()
+        .args(["system", "backup", "list"])
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("config")
+                .or(predicate::str::contains("Configuration"))
+                .or(predicate::str::contains("controller"))
+                .or(predicate::str::contains("profile")),
+        );
+}
+
+#[test]
+fn test_system_backup_download_command_parses() {
+    unifly_cmd()
+        .args([
+            "system",
+            "backup",
+            "download",
+            "backup.unf",
+            "--path",
+            "/tmp/unifly-test-backup.unf",
+        ])
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("config")
+                .or(predicate::str::contains("Configuration"))
+                .or(predicate::str::contains("controller"))
+                .or(predicate::str::contains("profile")),
+        );
+}
+
+#[test]
+fn test_acl_create_requires_zone_flags() {
+    let output = unifly_cmd()
+        .args(["acl", "create", "--name", "test", "--action", "allow"])
+        .output()
+        .unwrap();
+    assert!(
+        !output.status.success(),
+        "Expected failure when source/dest zone flags are missing"
+    );
+    let text = combined_output(&output);
+    assert!(
+        text.contains("--source-zone") || text.contains("--dest-zone"),
+        "Expected error about missing zone flags:\n{text}"
+    );
+}
+
+#[test]
+fn test_acl_create_command_parses_with_required_flags() {
+    unifly_cmd()
+        .args([
+            "acl",
+            "create",
+            "--name",
+            "test",
+            "--action",
+            "allow",
+            "--rule-type",
+            "ipv4",
+            "--source-zone",
+            "00000000-0000-0000-0000-000000000001",
+            "--dest-zone",
+            "00000000-0000-0000-0000-000000000002",
+        ])
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("config")
+                .or(predicate::str::contains("Configuration"))
+                .or(predicate::str::contains("controller"))
+                .or(predicate::str::contains("profile")),
+        );
+}
+
+#[test]
+fn test_firewall_policy_create_requires_zone_flags() {
+    let output = unifly_cmd()
+        .args([
+            "firewall", "policies", "create", "--name", "test", "--action", "allow",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        !output.status.success(),
+        "Expected failure when source/dest zone flags are missing"
+    );
+    let text = combined_output(&output);
+    assert!(
+        text.contains("--source-zone") || text.contains("--dest-zone"),
+        "Expected error about missing zone flags:\n{text}"
+    );
+}
+
+#[test]
+fn test_firewall_policy_create_command_parses_with_required_flags() {
+    unifly_cmd()
+        .args([
+            "firewall",
+            "policies",
+            "create",
+            "--name",
+            "test",
+            "--action",
+            "allow",
+            "--source-zone",
+            "00000000-0000-0000-0000-000000000001",
+            "--dest-zone",
+            "00000000-0000-0000-0000-000000000002",
+        ])
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("config")
+                .or(predicate::str::contains("Configuration"))
+                .or(predicate::str::contains("controller"))
+                .or(predicate::str::contains("profile")),
+        );
+}
+
 // ── Subcommand help discovery ───────────────────────────────────────
 
 #[test]

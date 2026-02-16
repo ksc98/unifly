@@ -8,7 +8,9 @@ use unifly_core::{
     UpdateNetworkRequest,
 };
 
-use crate::cli::{GlobalOpts, NetworksArgs, NetworksCommand};
+use crate::cli::{
+    GlobalOpts, NetworkManagement as CliNetworkManagement, NetworksArgs, NetworksCommand,
+};
 use crate::error::CliError;
 use crate::output;
 
@@ -82,6 +84,14 @@ fn detail(n: &Arc<Network>) -> String {
     lines.join("\n")
 }
 
+fn map_network_management(value: &CliNetworkManagement) -> unifly_core::model::NetworkManagement {
+    match value {
+        CliNetworkManagement::Gateway => unifly_core::model::NetworkManagement::Gateway,
+        CliNetworkManagement::Switch => unifly_core::model::NetworkManagement::Switch,
+        CliNetworkManagement::Unmanaged => unifly_core::model::NetworkManagement::Unmanaged,
+    }
+}
+
 // ── Handler ─────────────────────────────────────────────────────────
 
 #[allow(clippy::too_many_lines)]
@@ -91,8 +101,11 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        NetworksCommand::List(_list) => {
-            let snap = controller.networks_snapshot();
+        NetworksCommand::List(list) => {
+            let all = controller.networks_snapshot();
+            let snap = util::apply_list_args(all.iter().cloned(), &list, |n, filter| {
+                util::matches_json_filter(n, filter)
+            });
             let out = output::render_list(
                 &global.output,
                 &snap,
@@ -126,7 +139,7 @@ pub async fn handle(
         NetworksCommand::Create {
             from_file,
             name,
-            management: _, // Integration API uses different type system
+            management,
             vlan,
             enabled,
             ipv4_host,
@@ -145,6 +158,7 @@ pub async fn handle(
                     name: name.unwrap_or_default(),
                     vlan_id: vlan,
                     subnet: ipv4_host,
+                    management: management.as_ref().map(map_network_management),
                     purpose: None,
                     dhcp_enabled: dhcp,
                     enabled,

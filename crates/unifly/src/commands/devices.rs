@@ -147,8 +147,11 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        DevicesCommand::List(_list) => {
-            let snap = controller.devices_snapshot();
+        DevicesCommand::List(list) => {
+            let all = controller.devices_snapshot();
+            let snap = util::apply_list_args(all.iter().cloned(), &list, |d, filter| {
+                util::matches_json_filter(d, filter)
+            });
             let out = output::render_list(
                 &global.output,
                 &snap,
@@ -265,8 +268,12 @@ pub async fn handle(
             Ok(())
         }
 
-        DevicesCommand::Pending(_list) => {
-            let pending = controller.list_pending_devices().await?;
+        DevicesCommand::Pending(list) => {
+            let pending = util::apply_list_args(
+                controller.list_pending_devices().await?,
+                &list,
+                util::matches_json_filter,
+            );
             let out = output::render_list(
                 &global.output,
                 &pending,
@@ -344,8 +351,11 @@ pub async fn handle(
             Ok(())
         }
 
-        DevicesCommand::Tags(_list) => {
-            let tags = controller.list_device_tags().await?;
+        DevicesCommand::Tags(list) => {
+            let tags =
+                util::apply_list_args(controller.list_device_tags().await?, &list, |v, filter| {
+                    util::matches_json_filter(v, filter)
+                });
             let out = output::render_list(
                 &global.output,
                 &tags,

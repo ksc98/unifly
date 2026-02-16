@@ -4,6 +4,7 @@ use std::path::Path;
 
 use unifly_core::{Controller, EntityId, MacAddress};
 
+use crate::cli::ListArgs;
 use crate::error::CliError;
 
 /// Resolve a device identifier (UUID or MAC) to an EntityId via snapshot lookup.
@@ -73,4 +74,41 @@ pub fn read_json_file(path: &Path) -> Result<serde_json::Value, CliError> {
         field: "from-file".into(),
         reason: format!("invalid JSON: {e}"),
     })
+}
+
+/// Apply list flags (`--limit`, `--offset`, `--all`, `--filter`) to an iterator.
+pub fn apply_list_args<T>(
+    items: impl IntoIterator<Item = T>,
+    list: &ListArgs,
+    matches_filter: impl Fn(&T, &str) -> bool,
+) -> Vec<T> {
+    let offset = usize::try_from(list.offset).unwrap_or(usize::MAX);
+    let limit = usize::try_from(list.limit).unwrap_or(usize::MAX);
+    let filter = list
+        .filter
+        .as_deref()
+        .map(str::trim)
+        .filter(|f| !f.is_empty());
+
+    let filtered = items.into_iter().filter(|item| match filter {
+        Some(expr) => matches_filter(item, expr),
+        None => true,
+    });
+
+    if list.all {
+        filtered.skip(offset).collect()
+    } else {
+        filtered.skip(offset).take(limit).collect()
+    }
+}
+
+/// Fallback filter matcher for list items: case-insensitive JSON text contains.
+pub fn matches_json_filter<T: serde::Serialize>(item: &T, filter: &str) -> bool {
+    let needle = filter.trim().to_ascii_lowercase();
+    if needle.is_empty() {
+        return true;
+    }
+    serde_json::to_string(item)
+        .map(|haystack| haystack.to_ascii_lowercase().contains(&needle))
+        .unwrap_or(false)
 }

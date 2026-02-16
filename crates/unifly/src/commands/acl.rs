@@ -65,8 +65,11 @@ pub async fn handle(
     global: &GlobalOpts,
 ) -> Result<(), CliError> {
     match args.command {
-        AclCommand::List(_list) => {
-            let snap = controller.acl_rules_snapshot();
+        AclCommand::List(list) => {
+            let all = controller.acl_rules_snapshot();
+            let snap = util::apply_list_args(all.iter().cloned(), &list, |r, filter| {
+                util::matches_json_filter(r, filter)
+            });
             let out = output::render_list(
                 &global.output,
                 &snap,

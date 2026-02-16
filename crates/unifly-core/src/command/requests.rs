@@ -5,7 +5,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{DnsPolicyType, EntityId, FirewallAction, NetworkPurpose, WifiSecurityMode};
+use crate::model::{
+    DnsPolicyType, EntityId, FirewallAction, NetworkManagement, NetworkPurpose, WifiSecurityMode,
+};
 
 // ── Network ────────────────────────────────────────────────────────
 
@@ -17,6 +19,8 @@ pub struct CreateNetworkRequest {
     pub vlan_id: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub subnet: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub management: Option<NetworkManagement>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub purpose: Option<NetworkPurpose>,
     pub dhcp_enabled: bool,

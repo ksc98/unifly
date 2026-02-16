@@ -243,12 +243,30 @@ impl Controller {
                     }
                 }
             }
-            AuthCredentials::Cloud { .. } => {
-                let _ = self.inner.connection_state.send(ConnectionState::Failed);
-                return Err(CoreError::Unsupported {
-                    operation: "cloud authentication".into(),
-                    required: "Cloud Connector client (not yet implemented)".into(),
-                });
+            AuthCredentials::Cloud { api_key, host_id } => {
+                let integration = IntegrationClient::from_api_key(
+                    config.url.as_str(),
+                    api_key,
+                    &transport,
+                    unifly_api::ControllerPlatform::Cloud,
+                )?;
+
+                let site_id = if let Ok(uuid) = uuid::Uuid::parse_str(&config.site) {
+                    uuid
+                } else if let Ok(uuid) = uuid::Uuid::parse_str(host_id) {
+                    uuid
+                } else {
+                    resolve_site_id(&integration, &config.site).await?
+                };
+                debug!(site_id = %site_id, "resolved cloud Integration API site UUID");
+
+                *self.inner.integration_client.lock().await = Some(integration);
+                *self.inner.site_id.lock().await = Some(site_id);
+
+                let msg =
+                    "Cloud auth mode active: Legacy API and WebSocket features are unavailable"
+                        .to_string();
+                self.inner.warnings.lock().await.push(msg);
             }
         }
 

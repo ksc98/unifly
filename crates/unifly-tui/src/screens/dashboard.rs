@@ -3,9 +3,9 @@
 //! Layout:
 //! ┌─ WAN Traffic Chart (Braille line graph) ─────────────────────────────┐
 //! ├──────────────────────────────────────────────────────────────────────┤
-//! │ ┌─ Gateway ──────────┐ ┌─ System Health ──────────────────────────┐ │
-//! │ │ WAN IP, IPv6, ISP   │ │ Subsystems, CPU/MEM bars, counts       │ │
-//! │ └────────────────────┘ └─────────────────────────────────────────┘ │
+//! │ ┌─ Gateway ────────┐ ┌─ Connectivity ────┐ ┌─ Capacity ─────────┐ │
+//! │ │ WAN/IP/IPv6/ISP   │ │ WAN/WLAN/LAN/VPN  │ │ CPU/MEM/Load/Count │ │
+//! │ └───────────────────┘ └───────────────────┘ └───────────────────┘ │
 //! │ ┌─ Networks + IPv6 ──┐ ┌─ Top Clients (traffic bars) ───────────┐ │
 //! │ └────────────────────┘ └─────────────────────────────────────────┘ │
 //! ├─ Recent Events (compact) ────────────────────────────────────────────┤
@@ -88,6 +88,24 @@ fn parse_ipv6_from_value(value: &serde_json::Value) -> Option<String> {
         }
         _ => None,
     }
+}
+
+fn truncate_text(value: &str, max_chars: usize) -> String {
+    if max_chars == 0 {
+        return String::new();
+    }
+    if value.chars().count() <= max_chars {
+        return value.to_owned();
+    }
+    if max_chars == 1 {
+        return "…".into();
+    }
+    let mut out = String::new();
+    for ch in value.chars().take(max_chars.saturating_sub(1)) {
+        out.push(ch);
+    }
+    out.push('…');
+    out
 }
 
 /// Dashboard screen state.
@@ -281,6 +299,7 @@ impl DashboardScreen {
 
         let inner = block.inner(area);
         frame.render_widget(block, area);
+        let w = usize::from(inner.width);
 
         let gateway = self
             .devices
@@ -298,10 +317,14 @@ impl DashboardScreen {
         let dns = wan_health
             .and_then(|h| h.extra.get("nameservers").and_then(|v| v.as_array()))
             .map(|ns| {
-                ns.iter()
-                    .filter_map(|v| v.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
+                let servers: Vec<_> = ns.iter().filter_map(|v| v.as_str()).collect();
+                let shown = servers.iter().take(2).copied().collect::<Vec<_>>();
+                let hidden = servers.len().saturating_sub(shown.len());
+                if hidden > 0 {
+                    format!("{}, +{hidden}", shown.join(", "))
+                } else {
+                    shown.join(", ")
+                }
             });
         let gw_ip = wan_health
             .and_then(|h| h.extra.get("gateways").and_then(|v| v.as_array()))
@@ -353,10 +376,11 @@ impl DashboardScreen {
         if let Some(gw) = gateway {
             let model = gw.model.as_deref().unwrap_or("Gateway");
             let fw = gw_version.or(gw.firmware_version.as_deref()).unwrap_or("─");
+            let header = truncate_text(&format!("{model} ({fw})"), w.saturating_sub(4));
             lines.push(Line::from(vec![
                 Span::styled(" ◈ ", Style::default().fg(theme::ELECTRIC_PURPLE)),
                 Span::styled(
-                    format!("{model} ({fw})"),
+                    header,
                     Style::default()
                         .fg(theme::NEON_CYAN)
                         .add_modifier(Modifier::BOLD),
@@ -372,12 +396,13 @@ impl DashboardScreen {
 
         // Key-value rows
         let kv = |label: &str, value: &str, color: ratatui::style::Color| -> Line<'static> {
+            let shown = truncate_text(value, w.saturating_sub(7));
             Line::from(vec![
                 Span::styled(
                     format!(" {label:<5}"),
                     Style::default().fg(theme::DIM_WHITE),
                 ),
-                Span::styled(value.to_string(), Style::default().fg(color)),
+                Span::styled(shown, Style::default().fg(color)),
             ])
         };
 
@@ -396,19 +421,10 @@ impl DashboardScreen {
             lines.push(kv("GW", gw, theme::DIM_WHITE));
         }
         if let Some(ref d) = dns {
-            // Truncate to fit panel width
-            let truncated: String = d
-                .chars()
-                .take(usize::from(inner.width.saturating_sub(7)))
-                .collect();
-            lines.push(kv("DNS", &truncated, theme::DIM_WHITE));
+            lines.push(kv("DNS", d, theme::DIM_WHITE));
         }
         if let Some(isp) = isp_name {
-            let truncated: String = isp
-                .chars()
-                .take(usize::from(inner.width.saturating_sub(7)))
-                .collect();
-            lines.push(kv("ISP", &truncated, theme::DIM_WHITE));
+            lines.push(kv("ISP", isp, theme::DIM_WHITE));
         }
 
         // Latency + Uptime on one line
@@ -424,12 +440,11 @@ impl DashboardScreen {
         frame.render_widget(Paragraph::new(lines), inner);
     }
 
-    /// System Health — subsystem dots, CPU/MEM bars with inline stats,
-    /// per-subsystem device/client counts and throughput.
-    #[allow(clippy::too_many_lines, clippy::cast_possible_truncation)]
+    /// Connectivity card — subsystem state and per-subsystem activity.
+    #[allow(clippy::too_many_lines)]
     fn render_system_health(&self, frame: &mut Frame, area: Rect) {
         let block = Block::default()
-            .title(Span::styled(" System Health ", theme::title_style()))
+            .title(Span::styled(" Connectivity ", theme::title_style()))
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(theme::border_default());
@@ -437,20 +452,15 @@ impl DashboardScreen {
         let inner = block.inner(area);
         frame.render_widget(block, area);
 
-        let gateway = self
-            .devices
-            .iter()
-            .find(|d| d.device_type == DeviceType::Gateway);
         let w = usize::from(inner.width);
-
+        let content_w = w.saturating_sub(8);
         let mut lines = Vec::new();
 
-        // ── Row 1: All 5 subsystem status dots on one line ──────
         let subsystems = ["wan", "www", "wlan", "lan", "vpn"];
-        let mut dot_spans = vec![Span::raw(" ")];
-        for (i, &sub) in subsystems.iter().enumerate() {
+        let mut primary = vec![Span::raw(" ")];
+        for (i, &sub) in subsystems.iter().take(3).enumerate() {
             if i > 0 {
-                dot_spans.push(Span::styled("  ", Style::default()));
+                primary.push(Span::raw("  "));
             }
             let h = self.health.iter().find(|h| h.subsystem == sub);
             let (dot_color, status_text) = match h.map(|h| h.status.as_str()) {
@@ -459,155 +469,74 @@ impl DashboardScreen {
                 Some("error") => (theme::ERROR_RED, "err"),
                 _ => (theme::BORDER_GRAY, "─"),
             };
-            dot_spans.push(Span::styled(
+            primary.push(Span::styled(
                 sub.to_uppercase(),
                 Style::default().fg(theme::DIM_WHITE),
             ));
-            dot_spans.push(Span::styled(" ●", Style::default().fg(dot_color)));
-            dot_spans.push(Span::styled(
+            primary.push(Span::styled(" ●", Style::default().fg(dot_color)));
+            primary.push(Span::styled(
                 format!(" {status_text}"),
                 Style::default().fg(dot_color),
             ));
         }
-        lines.push(Line::from(dot_spans));
-        lines.push(Line::from(""));
+        lines.push(Line::from(primary));
 
-        // ── Row 3: CPU bar + Load averages (right-aligned) ──────
-        let bar_width = inner.width.saturating_sub(14).min(24);
-        let bar_left_chars = 5 + usize::from(bar_width) + 7; // " CPU " + bar + " XX.X%"
-
-        let pct_bar_color = |pct: f64| -> ratatui::style::Color {
-            if pct > 80.0 {
-                theme::ERROR_RED
-            } else if pct > 50.0 {
-                theme::ELECTRIC_YELLOW
-            } else {
-                theme::NEON_CYAN
+        let mut secondary = vec![Span::raw(" ")];
+        for (i, &sub) in subsystems.iter().skip(3).enumerate() {
+            if i > 0 {
+                secondary.push(Span::raw("  "));
             }
+            let h = self.health.iter().find(|h| h.subsystem == sub);
+            let (dot_color, status_text) = match h.map(|h| h.status.as_str()) {
+                Some("ok") => (theme::SUCCESS_GREEN, "ok"),
+                Some("warn" | "warning") => (theme::ELECTRIC_YELLOW, "warn"),
+                Some("error") => (theme::ERROR_RED, "err"),
+                _ => (theme::BORDER_GRAY, "─"),
+            };
+            secondary.push(Span::styled(
+                sub.to_uppercase(),
+                Style::default().fg(theme::DIM_WHITE),
+            ));
+            secondary.push(Span::styled(" ●", Style::default().fg(dot_color)));
+            secondary.push(Span::styled(
+                format!(" {status_text}"),
+                Style::default().fg(dot_color),
+            ));
+        }
+        lines.push(Line::from(secondary));
+        lines.push(Line::from(" "));
+
+        let mut push_kv = |label: &str, value: String, value_color: ratatui::style::Color| {
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!(" {label:<5}"),
+                    Style::default().fg(theme::DIM_WHITE),
+                ),
+                Span::styled(
+                    truncate_text(&value, content_w),
+                    Style::default().fg(value_color),
+                ),
+            ]));
         };
 
-        if let Some(cpu) = gateway.and_then(|g| g.stats.cpu_utilization_pct) {
-            let (filled, empty) = bytes_fmt::fmt_pct_bar(cpu, bar_width);
-            let mut spans = vec![
-                Span::styled(" CPU ", Style::default().fg(theme::DIM_WHITE)),
-                Span::styled(filled, Style::default().fg(pct_bar_color(cpu))),
-                Span::styled(empty, Style::default().fg(theme::BORDER_GRAY)),
-                Span::styled(
-                    format!(" {cpu:>5.1}%"),
-                    Style::default().fg(theme::DIM_WHITE),
-                ),
-            ];
-
-            // Inline load averages on the right
-            if let Some(gw) = gateway {
-                if let (Some(l1), Some(l5), Some(l15)) = (
-                    gw.stats.load_average_1m,
-                    gw.stats.load_average_5m,
-                    gw.stats.load_average_15m,
-                ) {
-                    // "Load X.XX │ X.XX │ X.XX" = ~27 chars
-                    let right_len = 27;
-                    let padding = w.saturating_sub(bar_left_chars + right_len);
-                    if padding >= 2 {
-                        spans.push(Span::raw(" ".repeat(padding)));
-                        spans.push(Span::styled("Load ", Style::default().fg(theme::DIM_WHITE)));
-                        spans.push(Span::styled(
-                            format!("{l1:.2}"),
-                            Style::default().fg(theme::NEON_CYAN),
-                        ));
-                        spans.push(Span::styled(" │ ", Style::default().fg(theme::BORDER_GRAY)));
-                        spans.push(Span::styled(
-                            format!("{l5:.2}"),
-                            Style::default().fg(theme::NEON_CYAN),
-                        ));
-                        spans.push(Span::styled(" │ ", Style::default().fg(theme::BORDER_GRAY)));
-                        spans.push(Span::styled(
-                            format!("{l15:.2}"),
-                            Style::default().fg(theme::NEON_CYAN),
-                        ));
-                    }
-                }
+        if let Some(wan) = self.health.iter().find(|h| h.subsystem == "wan") {
+            if let (Some(tx), Some(rx)) = (wan.tx_bytes_r, wan.rx_bytes_r) {
+                push_kv(
+                    "WAN",
+                    format!(
+                        "↑ {}  ↓ {}",
+                        bytes_fmt::fmt_rate(tx),
+                        bytes_fmt::fmt_rate(rx)
+                    ),
+                    theme::NEON_CYAN,
+                );
             }
-            lines.push(Line::from(spans));
         }
 
-        // ── Row 4: MEM bar + Device/Client counts (right-aligned)
-        if let Some(mem) = gateway.and_then(|g| g.stats.memory_utilization_pct) {
-            let (filled, empty) = bytes_fmt::fmt_pct_bar(mem, bar_width);
-
-            let total_devices = self.devices.len();
-            let online = self
-                .devices
-                .iter()
-                .filter(|d| d.state == unifly_core::DeviceState::Online)
-                .count();
-            let offline = total_devices - online;
-            let total_clients = self.clients.len();
-            let wireless = self
-                .clients
-                .iter()
-                .filter(|c| c.client_type == unifly_core::ClientType::Wireless)
-                .count();
-            let wired = self
-                .clients
-                .iter()
-                .filter(|c| c.client_type == unifly_core::ClientType::Wired)
-                .count();
-
-            let count_text = format!(
-                "{total_devices} Dev ({online}▲ {offline}▼) · {total_clients} Cli ({wireless}W {wired}E)"
-            );
-            let right_len = count_text.chars().count();
-            let padding = w.saturating_sub(bar_left_chars + right_len);
-
-            let mut spans = vec![
-                Span::styled(" MEM ", Style::default().fg(theme::DIM_WHITE)),
-                Span::styled(filled, Style::default().fg(pct_bar_color(mem))),
-                Span::styled(empty, Style::default().fg(theme::BORDER_GRAY)),
-                Span::styled(
-                    format!(" {mem:>5.1}%"),
-                    Style::default().fg(theme::DIM_WHITE),
-                ),
-            ];
-
-            if padding >= 2 {
-                spans.push(Span::raw(" ".repeat(padding)));
-                spans.push(Span::styled(
-                    format!("{total_devices}"),
-                    Style::default()
-                        .fg(theme::NEON_CYAN)
-                        .add_modifier(Modifier::BOLD),
-                ));
-                spans.push(Span::styled(" Dev ", Style::default().fg(theme::DIM_WHITE)));
-                spans.push(Span::styled(
-                    format!("({online}▲ {offline}▼)"),
-                    Style::default().fg(theme::DIM_WHITE),
-                ));
-                spans.push(Span::styled(" · ", Style::default().fg(theme::BORDER_GRAY)));
-                spans.push(Span::styled(
-                    format!("{total_clients}"),
-                    Style::default()
-                        .fg(theme::NEON_CYAN)
-                        .add_modifier(Modifier::BOLD),
-                ));
-                spans.push(Span::styled(" Cli ", Style::default().fg(theme::DIM_WHITE)));
-                spans.push(Span::styled(
-                    format!("({wireless}W {wired}E)"),
-                    Style::default().fg(theme::DIM_WHITE),
-                ));
-            }
-            lines.push(Line::from(spans));
-        }
-
-        lines.push(Line::from(""));
-
-        // ── Rows 6+: Per-subsystem detail (WLAN, LAN) ──────────
-        for &(sub_name, dev_label) in &[("wlan", "APs"), ("lan", "SW")] {
+        for &(sub_name, dev_label) in &[("wlan", "AP"), ("lan", "SW")] {
             if let Some(h) = self.health.iter().find(|h| h.subsystem == sub_name) {
                 let label = sub_name.to_uppercase();
                 let dev_count = h.num_adopted.unwrap_or(0);
-                // Always count from our client list — health num_sta can be 0
-                // even when clients are connected (Legacy API quirk).
                 let cli_count: usize = if sub_name == "wlan" {
                     self.clients
                         .iter()
@@ -620,49 +549,137 @@ impl DashboardScreen {
                         .count()
                 };
 
-                let mut spans = vec![
-                    Span::styled(
-                        format!(" {label:<5}"),
-                        Style::default().fg(theme::DIM_WHITE),
-                    ),
-                    Span::styled(
-                        format!("{dev_count:>2}"),
-                        Style::default()
-                            .fg(theme::NEON_CYAN)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(
-                        format!(" {dev_label:<4}"),
-                        Style::default().fg(theme::DIM_WHITE),
-                    ),
-                    Span::styled(" · ", Style::default().fg(theme::BORDER_GRAY)),
-                    Span::styled(
-                        format!("{cli_count:>3}"),
-                        Style::default()
-                            .fg(theme::NEON_CYAN)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(" clients", Style::default().fg(theme::DIM_WHITE)),
-                ];
-
-                // Throughput if available
-                if let (Some(tx), Some(rx)) = (h.tx_bytes_r, h.rx_bytes_r) {
+                let detail = if let (Some(tx), Some(rx)) = (h.tx_bytes_r, h.rx_bytes_r) {
                     if tx > 0 || rx > 0 {
-                        spans.push(Span::styled("   ", Style::default()));
-                        spans.push(Span::styled(
-                            format!("↑ {}", bytes_fmt::fmt_rate(tx)),
-                            Style::default().fg(theme::NEON_CYAN),
-                        ));
-                        spans.push(Span::styled("  ", Style::default()));
-                        spans.push(Span::styled(
-                            format!("↓ {}", bytes_fmt::fmt_rate(rx)),
-                            Style::default().fg(theme::CORAL),
-                        ));
+                        format!(
+                            "{dev_count} {dev_label} · {cli_count} clients · ↑ {} ↓ {}",
+                            bytes_fmt::fmt_rate(tx),
+                            bytes_fmt::fmt_rate(rx)
+                        )
+                    } else {
+                        format!("{dev_count} {dev_label} · {cli_count} clients")
                     }
-                }
-                lines.push(Line::from(spans));
+                } else {
+                    format!("{dev_count} {dev_label} · {cli_count} clients")
+                };
+                push_kv(&label, detail, theme::NEON_CYAN);
             }
         }
+
+        frame.render_widget(Paragraph::new(lines), inner);
+    }
+
+    /// Capacity card — CPU/MEM bars, load averages, and fleet counts.
+    #[allow(clippy::cast_possible_truncation)]
+    fn render_capacity(&self, frame: &mut Frame, area: Rect) {
+        let block = Block::default()
+            .title(Span::styled(" Capacity ", theme::title_style()))
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(theme::border_default());
+
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+
+        let gateway = self
+            .devices
+            .iter()
+            .find(|d| d.device_type == DeviceType::Gateway);
+        let w = usize::from(inner.width);
+        let content_w = w.saturating_sub(7);
+        let bar_width = u16::try_from(content_w.saturating_sub(9).clamp(6, 18)).unwrap_or(6);
+
+        let pct_bar_color = |pct: f64| -> ratatui::style::Color {
+            if pct > 80.0 {
+                theme::ERROR_RED
+            } else if pct > 50.0 {
+                theme::ELECTRIC_YELLOW
+            } else {
+                theme::NEON_CYAN
+            }
+        };
+
+        let mut lines = Vec::new();
+        let mut push_bar = |label: &str, pct: Option<f64>| {
+            let line = if let Some(pct) = pct {
+                let (filled, empty) = bytes_fmt::fmt_pct_bar(pct, bar_width);
+                Line::from(vec![
+                    Span::styled(
+                        format!(" {label:<4}"),
+                        Style::default().fg(theme::DIM_WHITE),
+                    ),
+                    Span::styled(filled, Style::default().fg(pct_bar_color(pct))),
+                    Span::styled(empty, Style::default().fg(theme::BORDER_GRAY)),
+                    Span::styled(
+                        format!(" {pct:>5.1}%"),
+                        Style::default().fg(theme::DIM_WHITE),
+                    ),
+                ])
+            } else {
+                Line::from(vec![
+                    Span::styled(
+                        format!(" {label:<4}"),
+                        Style::default().fg(theme::DIM_WHITE),
+                    ),
+                    Span::styled("─", Style::default().fg(theme::BORDER_GRAY)),
+                ])
+            };
+            lines.push(line);
+        };
+
+        push_bar("CPU", gateway.and_then(|g| g.stats.cpu_utilization_pct));
+        push_bar("MEM", gateway.and_then(|g| g.stats.memory_utilization_pct));
+        lines.push(Line::from(" "));
+
+        if let Some(gw) = gateway {
+            if let (Some(l1), Some(l5), Some(l15)) = (
+                gw.stats.load_average_1m,
+                gw.stats.load_average_5m,
+                gw.stats.load_average_15m,
+            ) {
+                let load = truncate_text(&format!("{l1:.2} / {l5:.2} / {l15:.2}"), content_w);
+                lines.push(Line::from(vec![
+                    Span::styled(" Load ", Style::default().fg(theme::DIM_WHITE)),
+                    Span::styled(load, Style::default().fg(theme::NEON_CYAN)),
+                ]));
+            }
+        }
+
+        let total_devices = self.devices.len();
+        let online = self
+            .devices
+            .iter()
+            .filter(|d| d.state == unifly_core::DeviceState::Online)
+            .count();
+        let total_clients = self.clients.len();
+        let wireless = self
+            .clients
+            .iter()
+            .filter(|c| c.client_type == unifly_core::ClientType::Wireless)
+            .count();
+        let wired = self
+            .clients
+            .iter()
+            .filter(|c| c.client_type == unifly_core::ClientType::Wired)
+            .count();
+
+        let dev_summary = truncate_text(
+            &format!("{total_devices} total · {online} online"),
+            content_w,
+        );
+        let cli_summary = truncate_text(
+            &format!("{total_clients} total · {wireless} wifi · {wired} wired"),
+            content_w,
+        );
+
+        lines.push(Line::from(vec![
+            Span::styled(" Dev  ", Style::default().fg(theme::DIM_WHITE)),
+            Span::styled(dev_summary, Style::default().fg(theme::NEON_CYAN)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled(" Cli  ", Style::default().fg(theme::DIM_WHITE)),
+            Span::styled(cli_summary, Style::default().fg(theme::NEON_CYAN)),
+        ]));
 
         frame.render_widget(Paragraph::new(lines), inner);
     }
@@ -1212,7 +1229,7 @@ impl Component for DashboardScreen {
         // 4-row dense layout
         let rows = Layout::vertical([
             Constraint::Length(9),  // Row 1: WAN Traffic Chart
-            Constraint::Length(11), // Row 2: Gateway | System Health
+            Constraint::Length(11), // Row 2: Gateway | Connectivity | Capacity
             Constraint::Min(8),     // Row 3: Networks | Top Clients
             Constraint::Length(4),  // Row 4: Recent Events
         ])
@@ -1221,13 +1238,15 @@ impl Component for DashboardScreen {
         self.render_traffic_chart(frame, rows[0]);
 
         let mid_row = Layout::horizontal([
-            Constraint::Length(30), // Gateway panel
-            Constraint::Min(30),    // System Health panel
+            Constraint::Percentage(30), // Gateway panel
+            Constraint::Percentage(35), // Connectivity panel
+            Constraint::Percentage(35), // Capacity panel
         ])
         .split(rows[1]);
 
         self.render_gateway(frame, mid_row[0]);
         self.render_system_health(frame, mid_row[1]);
+        self.render_capacity(frame, mid_row[2]);
 
         let bottom_row = Layout::horizontal([
             Constraint::Percentage(33), // Networks

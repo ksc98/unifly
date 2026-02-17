@@ -1238,9 +1238,9 @@ impl Component for DashboardScreen {
         self.render_traffic_chart(frame, rows[0]);
 
         let mid_row = Layout::horizontal([
-            Constraint::Percentage(30), // Gateway panel
-            Constraint::Percentage(35), // Connectivity panel
-            Constraint::Percentage(35), // Capacity panel
+            Constraint::Percentage(33), // Gateway panel
+            Constraint::Percentage(33), // Connectivity panel
+            Constraint::Percentage(34), // Capacity panel
         ])
         .split(rows[1]);
 

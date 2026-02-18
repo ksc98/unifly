@@ -805,6 +805,8 @@ impl App {
         let end = Some(now_ms);
 
         tokio::spawn(async move {
+            // Bandwidth + clients from Legacy API (time-windowed).
+            // DPI: try Integration API first (has names), fall back to Legacy (numeric IDs).
             let (gw_res, site_res, dpi_apps_res, dpi_cats_res) = tokio::join!(
                 controller.get_gateway_stats(interval, start, end, None),
                 controller.get_site_stats(interval, start, end, None),
@@ -824,19 +826,19 @@ impl App {
                 for entry in &gw {
                     let ts = entry
                         .get("time")
-                        .and_then(serde_json::value::Value::as_f64)
+                        .and_then(serde_json::Value::as_f64)
                         .unwrap_or(0.0);
                     if let Some(tx_bytes) = entry
                         .get("wan-tx_bytes")
                         .or_else(|| entry.get("tx_bytes"))
-                        .and_then(serde_json::value::Value::as_f64)
+                        .and_then(serde_json::Value::as_f64)
                     {
                         data.bandwidth_tx.push((ts, tx_bytes));
                     }
                     if let Some(rx_bytes) = entry
                         .get("wan-rx_bytes")
                         .or_else(|| entry.get("rx_bytes"))
-                        .and_then(serde_json::value::Value::as_f64)
+                        .and_then(serde_json::Value::as_f64)
                     {
                         data.bandwidth_rx.push((ts, rx_bytes));
                     }
@@ -848,40 +850,55 @@ impl App {
                 for entry in &site {
                     let ts = entry
                         .get("time")
-                        .and_then(serde_json::value::Value::as_f64)
+                        .and_then(serde_json::Value::as_f64)
                         .unwrap_or(0.0);
                     if let Some(count) = entry
                         .get("num_sta")
                         .or_else(|| entry.get("wlan-num_sta"))
-                        .and_then(serde_json::value::Value::as_f64)
+                        .and_then(serde_json::Value::as_f64)
                     {
                         data.client_counts.push((ts, count));
                     }
                 }
             }
 
-            // DPI applications — Integration API returns named entries with bytes
+            // DPI applications — prefer Integration API (has names), fall back to Legacy
             if let Ok(apps) = dpi_apps_res {
-                let mut app_list: Vec<(String, u64)> = apps
-                    .into_iter()
-                    .map(|a| (a.name, a.tx_bytes + a.rx_bytes))
-                    .filter(|(_, bytes)| *bytes > 0)
-                    .collect();
-                app_list.sort_by(|a, b| b.1.cmp(&a.1));
-                app_list.truncate(10);
-                data.dpi_apps = app_list;
+                if !apps.is_empty() {
+                    let mut app_list: Vec<(String, u64)> = apps
+                        .into_iter()
+                        .map(|a| (a.name, a.tx_bytes + a.rx_bytes))
+                        .filter(|(_, bytes)| *bytes > 0)
+                        .collect();
+                    app_list.sort_by(|a, b| b.1.cmp(&a.1));
+                    app_list.truncate(10);
+                    data.dpi_apps = app_list;
+                }
+            }
+            // Legacy fallback: only fire if Integration API yielded nothing
+            if data.dpi_apps.is_empty() {
+                if let Ok(raw) = controller.get_dpi_stats("by_app", None).await {
+                    data.dpi_apps = parse_legacy_dpi_apps(&raw);
+                }
             }
 
-            // DPI categories — Integration API returns named entries with bytes
+            // DPI categories — prefer Integration API, fall back to Legacy
             if let Ok(cats) = dpi_cats_res {
-                let mut cat_list: Vec<(String, u64)> = cats
-                    .into_iter()
-                    .map(|c| (c.name, c.tx_bytes + c.rx_bytes))
-                    .filter(|(_, bytes)| *bytes > 0)
-                    .collect();
-                cat_list.sort_by(|a, b| b.1.cmp(&a.1));
-                cat_list.truncate(8);
-                data.dpi_categories = cat_list;
+                if !cats.is_empty() {
+                    let mut cat_list: Vec<(String, u64)> = cats
+                        .into_iter()
+                        .map(|c| (c.name, c.tx_bytes + c.rx_bytes))
+                        .filter(|(_, bytes)| *bytes > 0)
+                        .collect();
+                    cat_list.sort_by(|a, b| b.1.cmp(&a.1));
+                    data.dpi_categories = cat_list;
+                }
+            }
+            // Legacy fallback: only fire if Integration API yielded nothing
+            if data.dpi_categories.is_empty() {
+                if let Ok(raw) = controller.get_dpi_stats("by_cat", None).await {
+                    data.dpi_categories = parse_legacy_dpi_categories(&raw);
+                }
             }
 
             let _ = tx.send(Action::StatsUpdated(data));
@@ -1185,4 +1202,82 @@ impl App {
         ]);
         frame.render_widget(Paragraph::new(line), inner);
     }
+}
+
+// ── Legacy DPI Parsing ──────────────────────────────────────────────────
+
+/// Well-known UniFi DPI category IDs → human-readable names.
+fn dpi_category_name(id: u64) -> &'static str {
+    match id {
+        0 => "Instant Messaging",
+        1 => "P2P",
+        2 => "File Transfer",
+        3 => "Streaming Media",
+        4 => "Mail & Collab",
+        5 => "VoIP",
+        6 => "Database",
+        7 => "Games",
+        8 => "Network Mgmt",
+        9 => "Remote Access",
+        10 => "Proxies & VPN",
+        11 => "Stock Market",
+        13 => "Web",
+        14 => "Security Update",
+        18 => "Web IM",
+        20 => "Business",
+        23 => "Network Proto",
+        24 => "Social Network",
+        255 => "Unknown",
+        _ => "Other",
+    }
+}
+
+/// Parse Legacy `stat/sitedpi` `by_app` response into `(name, total_bytes)` tuples.
+///
+/// The response is `[{"by_app": [{"app": 65541, "cat": 13, "rx_bytes": N, "tx_bytes": N}]}]`.
+/// App names aren't available from Legacy API, so we show "Category/AppID".
+fn parse_legacy_dpi_apps(raw: &[serde_json::Value]) -> Vec<(String, u64)> {
+    let mut apps: Vec<(String, u64)> = Vec::new();
+    for entry in raw {
+        if let Some(by_app) = entry.get("by_app").and_then(|v| v.as_array()) {
+            for item in by_app {
+                let cat = item.get("cat").and_then(serde_json::Value::as_u64).unwrap_or(255);
+                let app_id = item.get("app").and_then(serde_json::Value::as_u64).unwrap_or(0);
+                let tx = item.get("tx_bytes").and_then(serde_json::Value::as_u64).unwrap_or(0);
+                let rx = item.get("rx_bytes").and_then(serde_json::Value::as_u64).unwrap_or(0);
+                let total = tx + rx;
+                if total > 0 {
+                    let cat_name = dpi_category_name(cat);
+                    // Extract sub-app ID from compound: app = (cat << 16) + sub_id
+                    let sub_id = app_id & 0xFFFF;
+                    apps.push((format!("{cat_name} #{sub_id}"), total));
+                }
+            }
+        }
+    }
+    apps.sort_by(|a, b| b.1.cmp(&a.1));
+    apps.truncate(10);
+    apps
+}
+
+/// Parse Legacy `stat/sitedpi` `by_cat` response into `(name, total_bytes)` tuples.
+///
+/// The response is `[{"by_cat": [{"cat": 3, "rx_bytes": N, "tx_bytes": N}]}]`.
+fn parse_legacy_dpi_categories(raw: &[serde_json::Value]) -> Vec<(String, u64)> {
+    let mut cats: Vec<(String, u64)> = Vec::new();
+    for entry in raw {
+        if let Some(by_cat) = entry.get("by_cat").and_then(|v| v.as_array()) {
+            for item in by_cat {
+                let cat_id = item.get("cat").and_then(serde_json::Value::as_u64).unwrap_or(255);
+                let tx = item.get("tx_bytes").and_then(serde_json::Value::as_u64).unwrap_or(0);
+                let rx = item.get("rx_bytes").and_then(serde_json::Value::as_u64).unwrap_or(0);
+                let total = tx + rx;
+                if total > 0 {
+                    cats.push((dpi_category_name(cat_id).to_owned(), total));
+                }
+            }
+        }
+    }
+    cats.sort_by(|a, b| b.1.cmp(&a.1));
+    cats
 }

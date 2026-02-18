@@ -131,16 +131,17 @@ impl StatsScreen {
             return;
         }
 
-        // Determine bounds from ALL visible data
+        // Determine bounds from ALL visible data — use f64::MAX/0.0 fallbacks
+        // so an empty series doesn't anchor the axis at zero (epoch timestamps).
         let x_min = self
             .bandwidth_tx
             .first()
-            .map_or(0.0, |&(x, _)| x)
+            .map_or(f64::MAX, |&(x, _)| x)
             .min(self.bandwidth_rx.first().map_or(f64::MAX, |&(x, _)| x));
         let x_max = self
             .bandwidth_tx
             .last()
-            .map_or(1.0, |&(x, _)| x)
+            .map_or(0.0, |&(x, _)| x)
             .max(self.bandwidth_rx.last().map_or(0.0, |&(x, _)| x));
 
         let y_max_raw = self

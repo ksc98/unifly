@@ -114,49 +114,57 @@ pub enum ColorMode {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Manage adopted and pending devices
-    #[command(alias = "dev", alias = "d")]
-    Devices(DevicesArgs),
+    /// Manage ACL rules
+    Acl(AclArgs),
+
+    /// Administrator management
+    Admin(AdminArgs),
+
+    /// Manage alarms
+    Alarms(AlarmsArgs),
 
     /// Manage connected clients
     #[command(alias = "cl")]
     Clients(ClientsArgs),
 
-    /// Manage networks and VLANs
-    #[command(alias = "net", alias = "n")]
-    Networks(NetworksArgs),
+    /// Generate shell completions
+    Completions(CompletionsArgs),
 
-    /// Manage WiFi broadcasts (SSIDs)
-    #[command(alias = "w")]
-    Wifi(WifiArgs),
+    /// Manage CLI configuration and profiles
+    Config(ConfigArgs),
+
+    /// List available country codes
+    Countries,
+
+    /// Manage adopted and pending devices
+    #[command(alias = "dev", alias = "d")]
+    Devices(DevicesArgs),
+
+    /// Manage DNS policies (local DNS records)
+    Dns(DnsArgs),
+
+    /// DPI reference data
+    Dpi(DpiArgs),
+
+    /// View and stream events
+    Events(EventsArgs),
 
     /// Manage firewall policies and zones
     #[command(alias = "fw")]
     Firewall(FirewallArgs),
 
-    /// Manage ACL rules
-    Acl(AclArgs),
-
-    /// Manage DNS policies (local DNS records)
-    Dns(DnsArgs),
-
-    /// Manage traffic matching lists
-    TrafficLists(TrafficListsArgs),
-
     /// Manage hotspot vouchers
     Hotspot(HotspotArgs),
 
-    /// View VPN servers and tunnels
-    Vpn(VpnArgs),
+    /// Manage networks and VLANs
+    #[command(alias = "net", alias = "n")]
+    Networks(NetworksArgs),
+
+    /// View RADIUS profiles
+    Radius(RadiusArgs),
 
     /// Manage sites
     Sites(SitesArgs),
-
-    /// View and stream events
-    Events(EventsArgs),
-
-    /// Manage alarms
-    Alarms(AlarmsArgs),
 
     /// Query statistics and reports
     Stats(StatsArgs),
@@ -165,26 +173,18 @@ pub enum Command {
     #[command(alias = "sys")]
     System(SystemArgs),
 
-    /// Administrator management
-    Admin(AdminArgs),
+    /// Manage traffic matching lists
+    TrafficLists(TrafficListsArgs),
 
-    /// DPI reference data
-    Dpi(DpiArgs),
-
-    /// View RADIUS profiles
-    Radius(RadiusArgs),
+    /// View VPN servers and tunnels
+    Vpn(VpnArgs),
 
     /// View WAN interfaces
     Wans(WansArgs),
 
-    /// List available country codes
-    Countries,
-
-    /// Manage CLI configuration and profiles
-    Config(ConfigArgs),
-
-    /// Generate shell completions
-    Completions(CompletionsArgs),
+    /// Manage WiFi broadcasts (SSIDs)
+    #[command(alias = "w")]
+    Wifi(WifiArgs),
 }
 
 // ── Shared List Arguments ────────────────────────────────────────────

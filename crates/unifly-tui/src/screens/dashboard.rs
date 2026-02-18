@@ -196,9 +196,47 @@ impl DashboardScreen {
         }
     }
 
+    /// Linearly interpolate data points to create dense fill data for area charts.
+    /// `target_density` is the approximate number of output points to generate.
+    fn interpolate_fill(data: &[(f64, f64)], target_density: usize) -> Vec<(f64, f64)> {
+        if data.len() < 2 {
+            return data.to_vec();
+        }
+        let x_min = data.first().map_or(0.0, |&(x, _)| x);
+        let x_max = data.last().map_or(1.0, |&(x, _)| x);
+        let x_range = (x_max - x_min).max(1.0);
+        let step = x_range / target_density as f64;
+
+        let mut result = Vec::with_capacity(target_density + 1);
+        let mut data_idx = 0;
+
+        let mut x = x_min;
+        while x <= x_max + step * 0.5 {
+            // Advance data_idx to bracket x
+            while data_idx + 1 < data.len() && data[data_idx + 1].0 < x {
+                data_idx += 1;
+            }
+            let y = if data_idx + 1 < data.len() {
+                let (x0, y0) = data[data_idx];
+                let (x1, y1) = data[data_idx + 1];
+                let dx = x1 - x0;
+                if dx.abs() < f64::EPSILON {
+                    y0
+                } else {
+                    y0 + (y1 - y0) * ((x - x0) / dx)
+                }
+            } else {
+                data[data.len() - 1].1
+            };
+            result.push((x, y));
+            x += step;
+        }
+        result
+    }
+
     // ── Render Methods ──────────────────────────────────────────────────
 
-    /// Hero panel: WAN traffic chart with Braille markers.
+    /// Hero panel: WAN traffic chart with area fill and Braille line overlay.
     #[allow(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
@@ -250,27 +288,49 @@ impl DashboardScreen {
         let x_min = self.bandwidth_tx.first().map_or(0.0, |&(x, _)| x);
         let x_max = self.sample_counter;
 
+        // Scale Y to the max of ALL visible data so nothing clips.
         let y_max_raw = self
             .bandwidth_tx
             .iter()
             .chain(self.bandwidth_rx.iter())
             .map(|&(_, v)| v)
             .fold(0.0_f64, f64::max);
-        // Round up to a nice ceiling so the chart doesn't clip
-        let y_max = if y_max_raw < 1.0 {
-            1000.0
+        let y_max = if y_max_raw < 1000.0 {
+            10_000.0
         } else {
             y_max_raw * 1.2
         };
 
-        let tx_dataset = Dataset::default()
+        // ── Area fills (HalfBlock bars — rendered first, behind lines) ──
+        // Two separate fills: RX (rose) first, then TX (teal) on top.
+        // Where RX > TX the rose peeks above the teal; where TX > RX it's all teal.
+        // 3× chart width eliminates float→pixel rounding gaps between bars.
+        let fill_density = (usize::from(area.width.saturating_sub(8)) * 3).max(120);
+        let rx_fill_data = Self::interpolate_fill(&self.bandwidth_rx, fill_density);
+        let tx_fill_data = Self::interpolate_fill(&self.bandwidth_tx, fill_density);
+
+        let rx_fill = Dataset::default()
+            .marker(Marker::HalfBlock)
+            .graph_type(GraphType::Bar)
+            .style(Style::default().fg(theme::RX_FILL))
+            .data(&rx_fill_data);
+
+        let tx_fill = Dataset::default()
+            .marker(Marker::HalfBlock)
+            .graph_type(GraphType::Bar)
+            .style(Style::default().fg(theme::TX_FILL))
+            .data(&tx_fill_data);
+
+        // ── Line edge datasets (Braille — rendered on top for crisp edges) ──
+
+        let tx_line = Dataset::default()
             .name("TX")
             .marker(Marker::Braille)
             .graph_type(GraphType::Line)
             .style(Style::default().fg(theme::NEON_CYAN))
             .data(&self.bandwidth_tx);
 
-        let rx_dataset = Dataset::default()
+        let rx_line = Dataset::default()
             .name("RX")
             .marker(Marker::Braille)
             .graph_type(GraphType::Line)
@@ -289,7 +349,8 @@ impl DashboardScreen {
             ),
         ];
 
-        let chart = Chart::new(vec![tx_dataset, rx_dataset])
+        // RX fill → TX fill → TX line → RX line (later datasets render on top)
+        let chart = Chart::new(vec![rx_fill, tx_fill, tx_line, rx_line])
             .block(block)
             .x_axis(
                 Axis::default()

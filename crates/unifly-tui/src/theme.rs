@@ -19,6 +19,11 @@ pub const BG_HIGHLIGHT: Color = Color::Rgb(40, 42, 54); // #282a36
 pub const BG_DARK: Color = Color::Rgb(30, 31, 41); // #1e1f29
 pub const LIGHT_BLUE: Color = Color::Rgb(139, 233, 253); // #8be9fd
 
+// ── Chart Fill Colors (dimmed versions for area fills) ───────────────
+
+pub const TX_FILL: Color = Color::Rgb(20, 55, 62); // dark cyan — egress area fill
+pub const RX_FILL: Color = Color::Rgb(65, 28, 48); // dark rose — ingress area fill
+
 /// Chart series colors for multi-line graphs.
 pub const CHART_SERIES: &[Color] = &[
     NEON_CYAN,

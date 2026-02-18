@@ -86,8 +86,10 @@ pub struct StatsData {
     pub bandwidth_rx: Vec<(f64, f64)>,
     /// Client count over time: `(epoch_secs, count)`
     pub client_counts: Vec<(f64, f64)>,
-    /// Top DPI applications: `(name, percentage)`
-    pub dpi_apps: Vec<(String, f64)>,
+    /// Top DPI applications: `(name, total_bytes)`
+    pub dpi_apps: Vec<(String, u64)>,
+    /// Top DPI categories: `(name, total_bytes)`
+    pub dpi_categories: Vec<(String, u64)>,
 }
 
 /// Sort field for table columns.

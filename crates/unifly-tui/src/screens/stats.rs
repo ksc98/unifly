@@ -21,8 +21,10 @@ pub struct StatsScreen {
     bandwidth_rx: Vec<(f64, f64)>,
     /// Client count history
     client_counts: Vec<(f64, f64)>,
-    /// DPI top apps: (name, percentage)
-    dpi_apps: Vec<(String, f64)>,
+    /// DPI top apps: (name, total_bytes)
+    dpi_apps: Vec<(String, u64)>,
+    /// DPI top categories: (name, total_bytes)
+    dpi_categories: Vec<(String, u64)>,
 }
 
 impl StatsScreen {
@@ -34,6 +36,7 @@ impl StatsScreen {
             bandwidth_rx: Vec::new(),
             client_counts: Vec::new(),
             dpi_apps: Vec::new(),
+            dpi_categories: Vec::new(),
         }
     }
 
@@ -179,9 +182,19 @@ impl StatsScreen {
 
         let max_bar_width = f64::from(inner.width.saturating_sub(22));
         let colors = theme::CHART_SERIES;
+        let total_bytes: u64 = self.dpi_apps.iter().map(|(_, b)| *b).sum();
 
         let mut lines = Vec::new();
-        for (i, (name, pct)) in self.dpi_apps.iter().enumerate().take(5) {
+        for (i, (name, bytes)) in self.dpi_apps.iter().enumerate().take(5) {
+            #[allow(
+                clippy::cast_precision_loss,
+                clippy::as_conversions
+            )]
+            let pct = if total_bytes > 0 {
+                *bytes as f64 / total_bytes as f64 * 100.0
+            } else {
+                0.0
+            };
             #[allow(
                 clippy::cast_possible_truncation,
                 clippy::cast_sign_loss,
@@ -229,6 +242,7 @@ impl Component for StatsScreen {
                 self.period = StatsPeriod::ThirtyDays;
                 Ok(Some(Action::RequestStats(StatsPeriod::ThirtyDays)))
             }
+            KeyCode::Char('r') => Ok(Some(Action::RequestStats(self.period))),
             _ => Ok(None),
         }
     }
@@ -243,6 +257,7 @@ impl Component for StatsScreen {
                 self.bandwidth_rx.clone_from(&data.bandwidth_rx);
                 self.client_counts.clone_from(&data.client_counts);
                 self.dpi_apps.clone_from(&data.dpi_apps);
+                self.dpi_categories.clone_from(&data.dpi_categories);
             }
             _ => {}
         }

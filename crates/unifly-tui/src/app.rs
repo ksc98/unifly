@@ -72,6 +72,10 @@ pub struct App {
     /// Generation counter for stats requests — prevents stale responses from
     /// overwriting fresh data when the user rapidly switches periods.
     stats_generation: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// Timestamp of the last stats fetch — drives auto-refresh.
+    last_stats_fetch: Option<std::time::Instant>,
+    /// Currently selected stats period — preserved for auto-refresh.
+    stats_period: crate::action::StatsPeriod,
 }
 
 impl App {
@@ -111,6 +115,8 @@ impl App {
             pending_confirm: None,
             notification: None,
             stats_generation: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            last_stats_fetch: None,
+            stats_period: crate::action::StatsPeriod::default(),
         }
     }
 
@@ -397,6 +403,16 @@ impl App {
                         let _ = screen.update(action);
                     }
                 }
+                // Auto-refresh stats every 60s while Stats screen is active
+                if self.active_screen == ScreenId::Stats {
+                    if let Some(last) = self.last_stats_fetch {
+                        if last.elapsed() > std::time::Duration::from_secs(60) {
+                            let _ = self
+                                .action_tx
+                                .send(Action::RequestStats(self.stats_period));
+                        }
+                    }
+                }
             }
 
             // Data updates go to ALL screens so they stay in sync
@@ -517,6 +533,8 @@ impl App {
 
             // Stats fetch
             Action::RequestStats(period) => {
+                self.stats_period = *period;
+                self.last_stats_fetch = Some(std::time::Instant::now());
                 self.fetch_stats(*period);
             }
 
@@ -787,10 +805,11 @@ impl App {
         let end = Some(now_ms);
 
         tokio::spawn(async move {
-            let (gw_res, site_res, dpi_res) = tokio::join!(
+            let (gw_res, site_res, dpi_apps_res, dpi_cats_res) = tokio::join!(
                 controller.get_gateway_stats(interval, start, end, None),
                 controller.get_site_stats(interval, start, end, None),
-                controller.get_dpi_stats("by_app", None),
+                controller.list_dpi_applications(),
+                controller.list_dpi_categories(),
             );
 
             // If a newer request was issued while we were fetching, discard.
@@ -841,39 +860,28 @@ impl App {
                 }
             }
 
-            // Parse DPI stats → top apps by percentage
-            if let Ok(dpi) = dpi_res {
-                let total_bytes: f64 = dpi
-                    .iter()
-                    .map(|e| {
-                        e.get("tx_bytes")
-                            .and_then(serde_json::value::Value::as_f64)
-                            .unwrap_or(0.0)
-                            + e.get("rx_bytes")
-                                .and_then(serde_json::value::Value::as_f64)
-                                .unwrap_or(0.0)
-                    })
-                    .sum();
+            // DPI applications — Integration API returns named entries with bytes
+            if let Ok(apps) = dpi_apps_res {
+                let mut app_list: Vec<(String, u64)> = apps
+                    .into_iter()
+                    .map(|a| (a.name, a.tx_bytes + a.rx_bytes))
+                    .filter(|(_, bytes)| *bytes > 0)
+                    .collect();
+                app_list.sort_by(|a, b| b.1.cmp(&a.1));
+                app_list.truncate(10);
+                data.dpi_apps = app_list;
+            }
 
-                if total_bytes > 0.0 {
-                    let mut apps: Vec<(String, f64)> = dpi
-                        .iter()
-                        .filter_map(|e| {
-                            let name = e.get("name").and_then(|v| v.as_str())?;
-                            let bytes = e
-                                .get("tx_bytes")
-                                .and_then(serde_json::value::Value::as_f64)
-                                .unwrap_or(0.0)
-                                + e.get("rx_bytes")
-                                    .and_then(serde_json::value::Value::as_f64)
-                                    .unwrap_or(0.0);
-                            Some((name.to_owned(), (bytes / total_bytes) * 100.0))
-                        })
-                        .collect();
-                    apps.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-                    apps.truncate(10);
-                    data.dpi_apps = apps;
-                }
+            // DPI categories — Integration API returns named entries with bytes
+            if let Ok(cats) = dpi_cats_res {
+                let mut cat_list: Vec<(String, u64)> = cats
+                    .into_iter()
+                    .map(|c| (c.name, c.tx_bytes + c.rx_bytes))
+                    .filter(|(_, bytes)| *bytes > 0)
+                    .collect();
+                cat_list.sort_by(|a, b| b.1.cmp(&a.1));
+                cat_list.truncate(8);
+                data.dpi_categories = cat_list;
             }
 
             let _ = tx.send(Action::StatsUpdated(data));

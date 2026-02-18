@@ -104,17 +104,20 @@ fn setup_tracing(cli: &Cli) -> WorkerGuard {
 }
 
 /// Build a [`Controller`] from CLI args, if a URL was provided.
+///
+/// When `--api-key` is given on the CLI, also checks the config file for
+/// Legacy credentials (username/password). If the default profile uses
+/// `auth_mode = "hybrid"`, the controller is upgraded to Hybrid auth so
+/// both Integration and Legacy APIs work from startup.
 fn build_controller(cli: &Cli) -> Option<Controller> {
     let url_str = cli.url.as_deref()?;
     let url = url_str.parse().expect("invalid controller URL");
 
-    let auth = match &cli.api_key {
-        Some(key) => AuthCredentials::ApiKey(SecretString::from(key.clone())),
-        None => {
-            // No credentials — can't connect
-            return None;
-        }
-    };
+    let api_key = SecretString::from(cli.api_key.as_ref()?.clone());
+
+    // Try upgrading to Hybrid if the config profile has Legacy credentials.
+    let auth = try_hybrid_from_config(&api_key)
+        .unwrap_or(AuthCredentials::ApiKey(api_key));
 
     let config = ControllerConfig {
         url,
@@ -128,6 +131,27 @@ fn build_controller(cli: &Cli) -> Option<Controller> {
     };
 
     Some(Controller::new(config))
+}
+
+/// Attempt to build `Hybrid` credentials by merging a CLI API key with
+/// Legacy credentials from the config file's default profile.
+fn try_hybrid_from_config(api_key: &SecretString) -> Option<AuthCredentials> {
+    let cfg = unifly_config::load_config().ok()?;
+    let name = cfg.default_profile.as_deref().unwrap_or("default");
+    let profile = cfg.profiles.get(name)?;
+
+    if profile.auth_mode != "hybrid" {
+        return None;
+    }
+
+    let (username, password) =
+        unifly_config::resolve_legacy_credentials(profile, name).ok()?;
+
+    Some(AuthCredentials::Hybrid {
+        api_key: api_key.clone(),
+        username,
+        password,
+    })
 }
 
 /// Try loading a controller from the shared config file (default profile).

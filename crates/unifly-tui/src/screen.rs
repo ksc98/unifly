@@ -90,6 +90,22 @@ impl ScreenId {
             Self::Settings => "Settings",
         }
     }
+
+    /// Compact label for narrow terminals (< 100 cols).
+    pub fn label_short(self) -> &'static str {
+        match self {
+            Self::Dashboard => "Dash",
+            Self::Devices => "Dev",
+            Self::Clients => "Cli",
+            Self::Networks => "Net",
+            Self::Firewall => "FW",
+            Self::Topology => "Topo",
+            Self::Events => "Evt",
+            Self::Stats => "Stat",
+            Self::Setup => "Setup",
+            Self::Settings => "Set",
+        }
+    }
 }
 
 impl fmt::Display for ScreenId {

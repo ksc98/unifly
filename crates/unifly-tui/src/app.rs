@@ -10,7 +10,7 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::Style,
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph, Tabs},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph, Tabs},
 };
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -407,9 +407,7 @@ impl App {
                 if self.active_screen == ScreenId::Stats {
                     if let Some(last) = self.last_stats_fetch {
                         if last.elapsed() > std::time::Duration::from_secs(60) {
-                            let _ = self
-                                .action_tx
-                                .send(Action::RequestStats(self.stats_period));
+                            let _ = self.action_tx.send(Action::RequestStats(self.stats_period));
                         }
                     }
                 }
@@ -962,6 +960,7 @@ impl App {
 
     /// Render the bottom tab bar showing all 8 screens.
     fn render_tab_bar(&self, frame: &mut Frame, area: Rect) {
+        let compact = area.width < 100;
         let titles: Vec<Line> = ScreenId::ALL
             .iter()
             .map(|&id| {
@@ -970,10 +969,12 @@ impl App {
                 } else {
                     theme::tab_inactive()
                 };
-                Line::from(Span::styled(
-                    format!(" {} {} ", id.number(), id.label()),
-                    style,
-                ))
+                let label = if compact {
+                    id.label_short()
+                } else {
+                    id.label()
+                };
+                Line::from(Span::styled(format!(" {} {} ", id.number(), label), style))
             })
             .collect();
 
@@ -1025,9 +1026,16 @@ impl App {
         frame.render_widget(Paragraph::new(line), area);
     }
 
-    /// Render the help overlay centered on screen.
+    /// Render the help overlay centered on screen with dimmed background.
     #[allow(clippy::unused_self)]
     fn render_help_overlay(&self, frame: &mut Frame, area: Rect) {
+        // Dim the entire screen behind the overlay
+        frame.render_widget(Clear, area);
+        frame.render_widget(
+            Block::default().style(Style::default().bg(theme::BG_DARK)),
+            area,
+        );
+
         let help_width = 60u16.min(area.width.saturating_sub(4));
         let help_height = 22u16.min(area.height.saturating_sub(4));
 
@@ -1035,12 +1043,6 @@ impl App {
         let y = (area.height.saturating_sub(help_height)) / 2;
 
         let help_area = Rect::new(area.x + x, area.y + y, help_width, help_height);
-
-        // Clear the background
-        frame.render_widget(
-            Block::default().style(Style::default().bg(theme::BG_DARK)),
-            help_area,
-        );
 
         let block = Block::default()
             .title(" Keyboard Shortcuts ")
@@ -1058,33 +1060,37 @@ impl App {
                 "  Navigation",
                 Style::default().fg(theme::NEON_CYAN),
             )]),
-            Line::from(Span::styled("  ─────────", theme::key_hint())),
+            Line::from(Span::styled("  ─────────────", theme::key_hint())),
             Line::from(vec![
-                Span::styled("  1-8       ", theme::key_hint_key()),
+                Span::styled("  1-8         ", theme::key_hint_key()),
                 Span::styled("Jump to screen", theme::key_hint()),
             ]),
             Line::from(vec![
-                Span::styled("  Tab       ", theme::key_hint_key()),
+                Span::styled("  Tab         ", theme::key_hint_key()),
                 Span::styled("Next screen", theme::key_hint()),
             ]),
             Line::from(vec![
-                Span::styled("  j/k ↑/↓   ", theme::key_hint_key()),
+                Span::styled("  Shift+Tab   ", theme::key_hint_key()),
+                Span::styled("Previous screen", theme::key_hint()),
+            ]),
+            Line::from(vec![
+                Span::styled("  j/k ↑/↓     ", theme::key_hint_key()),
                 Span::styled("Move up/down", theme::key_hint()),
             ]),
             Line::from(vec![
-                Span::styled("  Enter     ", theme::key_hint_key()),
+                Span::styled("  Enter       ", theme::key_hint_key()),
                 Span::styled("Select / expand", theme::key_hint()),
             ]),
             Line::from(vec![
-                Span::styled("  Esc       ", theme::key_hint_key()),
+                Span::styled("  Esc         ", theme::key_hint_key()),
                 Span::styled("Back / close", theme::key_hint()),
             ]),
             Line::from(vec![
-                Span::styled("  g/G       ", theme::key_hint_key()),
+                Span::styled("  g/G         ", theme::key_hint_key()),
                 Span::styled("Top / bottom", theme::key_hint()),
             ]),
             Line::from(vec![
-                Span::styled("  Ctrl+d/u  ", theme::key_hint_key()),
+                Span::styled("  Ctrl+d/u    ", theme::key_hint_key()),
                 Span::styled("Page down / up", theme::key_hint()),
             ]),
             Line::from(""),
@@ -1092,22 +1098,22 @@ impl App {
                 "  Global",
                 Style::default().fg(theme::NEON_CYAN),
             )]),
-            Line::from(Span::styled("  ──────", theme::key_hint())),
+            Line::from(Span::styled("  ──────────────", theme::key_hint())),
             Line::from(vec![
-                Span::styled("  /         ", theme::key_hint_key()),
-                Span::styled("Search              ", theme::key_hint()),
+                Span::styled("  /           ", theme::key_hint_key()),
+                Span::styled("Search            ", theme::key_hint()),
                 Span::styled("?  ", theme::key_hint_key()),
                 Span::styled("This help", theme::key_hint()),
             ]),
             Line::from(vec![
-                Span::styled("  s         ", theme::key_hint_key()),
-                Span::styled("Sort column          ", theme::key_hint()),
+                Span::styled("  s           ", theme::key_hint_key()),
+                Span::styled("Sort column        ", theme::key_hint()),
                 Span::styled("f  ", theme::key_hint_key()),
                 Span::styled("Filter", theme::key_hint()),
             ]),
             Line::from(vec![
-                Span::styled("  ,         ", theme::key_hint_key()),
-                Span::styled("Settings            ", theme::key_hint()),
+                Span::styled("  ,           ", theme::key_hint_key()),
+                Span::styled("Settings           ", theme::key_hint()),
                 Span::styled("q  ", theme::key_hint_key()),
                 Span::styled("Quit", theme::key_hint()),
             ]),
@@ -1122,20 +1128,22 @@ impl App {
         frame.render_widget(paragraph, inner);
     }
 
-    /// Render a centered confirmation dialog.
+    /// Render a centered confirmation dialog with dimmed background.
     #[allow(clippy::unused_self)]
     fn render_confirm_dialog(&self, frame: &mut Frame, area: Rect, confirm: &ConfirmAction) {
+        // Dim the entire screen behind the dialog
+        frame.render_widget(Clear, area);
+        frame.render_widget(
+            Block::default().style(Style::default().bg(theme::BG_DARK)),
+            area,
+        );
+
         let width = 50u16.min(area.width.saturating_sub(4));
         let height = 5u16;
 
         let x = (area.width.saturating_sub(width)) / 2;
         let y = (area.height.saturating_sub(height)) / 2;
         let dialog_area = Rect::new(area.x + x, area.y + y, width, height);
-
-        frame.render_widget(
-            Block::default().style(Style::default().bg(theme::BG_DARK)),
-            dialog_area,
-        );
 
         let block = Block::default()
             .title(" Confirm ")
@@ -1241,10 +1249,22 @@ fn parse_legacy_dpi_apps(raw: &[serde_json::Value]) -> Vec<(String, u64)> {
     for entry in raw {
         if let Some(by_app) = entry.get("by_app").and_then(|v| v.as_array()) {
             for item in by_app {
-                let cat = item.get("cat").and_then(serde_json::Value::as_u64).unwrap_or(255);
-                let app_id = item.get("app").and_then(serde_json::Value::as_u64).unwrap_or(0);
-                let tx = item.get("tx_bytes").and_then(serde_json::Value::as_u64).unwrap_or(0);
-                let rx = item.get("rx_bytes").and_then(serde_json::Value::as_u64).unwrap_or(0);
+                let cat = item
+                    .get("cat")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(255);
+                let app_id = item
+                    .get("app")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0);
+                let tx = item
+                    .get("tx_bytes")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0);
+                let rx = item
+                    .get("rx_bytes")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0);
                 let total = tx + rx;
                 if total > 0 {
                     let cat_name = dpi_category_name(cat);
@@ -1268,9 +1288,18 @@ fn parse_legacy_dpi_categories(raw: &[serde_json::Value]) -> Vec<(String, u64)> 
     for entry in raw {
         if let Some(by_cat) = entry.get("by_cat").and_then(|v| v.as_array()) {
             for item in by_cat {
-                let cat_id = item.get("cat").and_then(serde_json::Value::as_u64).unwrap_or(255);
-                let tx = item.get("tx_bytes").and_then(serde_json::Value::as_u64).unwrap_or(0);
-                let rx = item.get("rx_bytes").and_then(serde_json::Value::as_u64).unwrap_or(0);
+                let cat_id = item
+                    .get("cat")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(255);
+                let tx = item
+                    .get("tx_bytes")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0);
+                let rx = item
+                    .get("rx_bytes")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0);
                 let total = tx + rx;
                 if total > 0 {
                     cats.push((dpi_category_name(cat_id).to_owned(), total));

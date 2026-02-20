@@ -273,7 +273,7 @@ impl NetworksScreen {
             network
                 .ipv6_mode
                 .as_ref()
-                .map_or_else(|| "Enabled".into(), |m| format!("{m:?}"))
+                .map_or_else(|| "Enabled".into(), ToString::to_string)
         } else {
             "Disabled".into()
         };
@@ -658,7 +658,7 @@ impl Component for NetworksScreen {
                 let ipv6 = if net.ipv6_enabled {
                     net.ipv6_mode
                         .as_ref()
-                        .map_or_else(|| "On".into(), |m| format!("{m:?}"))
+                        .map_or_else(|| "On".into(), ToString::to_string)
                 } else {
                     "Off".into()
                 };

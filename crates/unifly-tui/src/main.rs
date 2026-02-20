@@ -48,8 +48,12 @@ struct Cli {
     site: String,
 
     /// API key for the Integration API
-    #[arg(short = 'k', long, env = "UNIFI_API_KEY")]
+    #[arg(short = 'a', long, env = "UNIFI_API_KEY")]
     api_key: Option<String>,
+
+    /// Accept self-signed TLS certificates
+    #[arg(short = 'k', long, env = "UNIFI_INSECURE")]
+    insecure: bool,
 
     /// Log file path (defaults to /tmp/unifly-tui.log)
     #[arg(long, default_value = "/tmp/unifly-tui.log")]
@@ -116,14 +120,19 @@ fn build_controller(cli: &Cli) -> Option<Controller> {
     let api_key = SecretString::from(cli.api_key.as_ref()?.clone());
 
     // Try upgrading to Hybrid if the config profile has Legacy credentials.
-    let auth = try_hybrid_from_config(&api_key)
-        .unwrap_or(AuthCredentials::ApiKey(api_key));
+    let auth = try_hybrid_from_config(&api_key).unwrap_or(AuthCredentials::ApiKey(api_key));
+
+    let tls = if cli.insecure {
+        TlsVerification::DangerAcceptInvalid
+    } else {
+        TlsVerification::SystemDefaults
+    };
 
     let config = ControllerConfig {
         url,
         auth,
         site: cli.site.clone(),
-        tls: TlsVerification::DangerAcceptInvalid,
+        tls,
         timeout: std::time::Duration::from_secs(30),
         refresh_interval_secs: 10,
         websocket_enabled: true,
@@ -144,8 +153,7 @@ fn try_hybrid_from_config(api_key: &SecretString) -> Option<AuthCredentials> {
         return None;
     }
 
-    let (username, password) =
-        unifly_config::resolve_legacy_credentials(profile, name).ok()?;
+    let (username, password) = unifly_config::resolve_legacy_credentials(profile, name).ok()?;
 
     Some(AuthCredentials::Hybrid {
         api_key: api_key.clone(),

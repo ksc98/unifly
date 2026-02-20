@@ -349,8 +349,7 @@ impl StatsScreen {
 
         if self.dpi_categories.is_empty() {
             frame.render_widget(
-                Paragraph::new("  No category data")
-                    .style(Style::default().fg(theme::BORDER_GRAY)),
+                Paragraph::new("  No category data").style(Style::default().fg(theme::BORDER_GRAY)),
                 inner,
             );
             return;
@@ -466,18 +465,12 @@ impl Component for StatsScreen {
         self.render_bandwidth_chart(frame, layout[1]);
 
         // Bottom row: left (40%) | right (60%)
-        let bottom = Layout::horizontal([
-            Constraint::Percentage(40),
-            Constraint::Percentage(60),
-        ])
-        .split(layout[2]);
+        let bottom = Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)])
+            .split(layout[2]);
 
         // Left column: clients (50%) | categories (50%)
-        let left_col = Layout::vertical([
-            Constraint::Percentage(50),
-            Constraint::Percentage(50),
-        ])
-        .split(bottom[0]);
+        let left_col = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(bottom[0]);
 
         self.render_client_chart(frame, left_col[0]);
         self.render_categories(frame, left_col[1]);

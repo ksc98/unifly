@@ -45,15 +45,16 @@ The Integration API handles CRUD. The Legacy API fills the gaps with events, sta
 
 | Capability | What You Get |
 | --- | --- |
-| 🔮 **Dual API Engine** | Integration API (REST, API key) + Legacy API (session, cookie/CSRF) — automatic negotiation |
-| ⚡ **Real-Time TUI** | btop-inspired dashboard with Braille traffic charts, CPU/MEM bars, live client counts |
-| 🦋 **20+ Resource Types** | Devices, clients, networks, WiFi, firewall policies, zones, ACLs, DNS, VPN, hotspot vouchers, DPI... |
+| 🔮 **Dual API Engine** | Integration API (REST, API key) + Legacy API (session, cookie/CSRF) — automatic negotiation with Hybrid mode |
+| ⚡ **Real-Time TUI** | 8-screen dashboard with area-fill traffic charts, CPU/MEM gauges, live client counts, zoomable topology |
+| 🦋 **22 Resource Types** | Devices, clients, networks, WiFi, firewall policies, zones, ACLs, DNS, VPN, hotspot vouchers, DPI, RADIUS... |
 | 💎 **Flexible Output** | Table, JSON, compact JSON, YAML, and plain text — pipe-friendly for scripting |
 | 🔒 **Secure Credentials** | OS keyring storage for API keys and passwords — nothing in plaintext |
 | 🌐 **Multi-Profile** | Named profiles for multiple controllers — switch with a single flag |
 | 🧠 **Smart Config** | Interactive wizard, environment variables, TOML config, CLI overrides — pick your style |
-| 📡 **WebSocket Events** | Live event streaming with severity filtering and real-time push |
-| 📊 **Historical Stats** | Gateway bandwidth, client counts, site stats — 1h to 30d time windows |
+| 📡 **WebSocket Events** | Live event streaming with 10K rolling buffer, severity filtering, pause/scroll-back |
+| 📊 **Historical Stats** | WAN bandwidth area fills, client counts, DPI app/category breakdown — 1h to 30d windows |
+| 🎨 **SilkCircuit Theme** | Neon-on-dark color palette with semantic highlighting, ANSI fallback, responsive layouts |
 
 ---
 
@@ -162,28 +163,28 @@ Best of both worlds — API key for Integration API CRUD, username/password for 
 
 | Command | Alias | Description |
 | --- | --- | --- |
-| `devices` | `d` | Manage adopted and pending devices |
-| `clients` | `cl` | Manage connected clients |
-| `networks` | `n` | Manage networks and VLANs |
-| `wifi` | `w` | Manage WiFi broadcasts (SSIDs) |
-| `firewall` | `fw` | Manage firewall policies and zones |
 | `acl` | | Manage ACL rules |
-| `dns` | | Manage DNS policies (local records) |
-| `traffic-lists` | | Manage traffic matching lists |
-| `hotspot` | | Manage hotspot vouchers |
-| `vpn` | | View VPN servers and tunnels |
-| `sites` | | Manage sites |
-| `events` | | View and stream events |
+| `admin` | | Administrator management |
 | `alarms` | | Manage alarms |
+| `clients` | `cl` | Manage connected clients |
+| `completions` | | Generate shell completions |
+| `config` | | Manage CLI configuration |
+| `countries` | | List available country codes |
+| `devices` | `d` | Manage adopted and pending devices |
+| `dns` | | Manage DNS policies (local records) |
+| `dpi` | | DPI reference data |
+| `events` | | View and stream events |
+| `firewall` | `fw` | Manage firewall policies and zones |
+| `hotspot` | | Manage hotspot vouchers |
+| `networks` | `n` | Manage networks and VLANs |
+| `radius` | | View RADIUS profiles |
+| `sites` | | Manage sites |
 | `stats` | | Query statistics and reports |
 | `system` | `sys` | System operations and info |
-| `admin` | | Administrator management |
-| `dpi` | | DPI reference data |
-| `radius` | | View RADIUS profiles |
+| `traffic-lists` | | Manage traffic matching lists |
+| `vpn` | | View VPN servers and tunnels |
 | `wans` | | View WAN interfaces |
-| `countries` | | List available country codes |
-| `config` | | Manage CLI configuration |
-| `completions` | | Generate shell completions |
+| `wifi` | `w` | Manage WiFi broadcasts (SSIDs) |
 
 Most commands support `list`, `get`, `create`, `update`, and `delete` subcommands. Run `unifly <command> --help` for details.
 
@@ -219,11 +220,12 @@ unifly completions fish > ~/.config/fish/completions/unifly.fish
 
 ## 🖥️ TUI
 
-The `unifly-tui` binary is a real-time terminal dashboard for monitoring your UniFi network.
+The `unifly-tui` binary is a real-time terminal dashboard for monitoring and managing your UniFi network. Eight screens cover everything from live bandwidth charts to firewall policy management.
 
 ```bash
 unifly-tui                   # Launch with default profile
 unifly-tui -p office         # Use a specific profile
+unifly-tui -k                # Accept self-signed TLS certs
 unifly-tui -v                # Verbose logging
 ```
 
@@ -233,51 +235,102 @@ Navigate with number keys `1`–`8` or `Tab`/`Shift+Tab`:
 
 | Key | Screen | Description |
 | --- | --- | --- |
-| `1` | **Dashboard** | btop-style overview — WAN traffic chart, gateway info, system health, networks with IPv6, top clients, recent events |
-| `2` | **Devices** | Adopted devices with model, firmware, IP, uptime, CPU/MEM, client counts |
-| `3` | **Clients** | Connected clients — hostname, IP, MAC, VLAN, signal strength, traffic |
-| `4` | **Networks** | VLAN topology — subnets, DHCP ranges, IPv6 config, IGMP settings |
-| `5` | **Firewall** | Policies and zones with rule counts and traffic direction |
-| `6` | **Topology** | Network topology tree view |
-| `7` | **Events** | Live event stream with severity indicators |
-| `8` | **Stats** | Historical charts — WAN bandwidth, client counts, DPI breakdown |
+| `1` | **Dashboard** | btop-style overview — area-fill WAN traffic chart, gateway info, connectivity health, CPU/MEM bars, networks with IPv6, WiFi AP experience, top clients, recent events |
+| `2` | **Devices** | Adopted devices with model, IP, CPU/MEM, TX/RX, uptime — 5-tab detail panel (Overview, Performance, Radios, Clients, Ports) |
+| `3` | **Clients** | Connected clients — hostname, IP, MAC, VLAN, signal bars, traffic — filterable by type (All/Wireless/Wired/VPN/Guest) |
+| `4` | **Networks** | VLAN topology — subnets, DHCP, IPv6, gateway type — inline edit overlay for live config changes |
+| `5` | **Firewall** | Policies, zones, and ACL rules across three sub-tabs — visual rule reordering |
+| `6` | **Topology** | Zoomable network topology tree — gateway → switches → APs, color-coded by type and state |
+| `7` | **Events** | Live event stream with 10K rolling buffer — pause, scroll back, severity color-coding |
+| `8` | **Stats** | Historical charts — WAN bandwidth area fills, client counts, DPI app/category breakdown (1h/24h/7d/30d) |
 
 ### Dashboard
 
-The dashboard packs seven live panels into a single view:
+The dashboard packs eight live panels into a dense, information-rich overview:
 
 <p align="center">
   <img src="docs/images/dashboard.png" alt="unifly-tui dashboard" width="900">
 </p>
 
-- **WAN Traffic** — Braille line chart with live TX/RX rates and peak tracking
-- **Gateway** — WAN IP, DNS, latency, uptime, ISP name, IPv6 when available
-- **System Health** — Subsystem status dots, CPU/MEM utilization bars, load averages
-- **Networks** — VLANs sorted by ID with IPv6 prefix delegation and mode
+- **WAN Traffic** — Area-fill chart with Braille line overlay, live TX/RX rates, peak tracking
+- **Gateway** — Model, firmware, WAN IP, IPv6, DNS, ISP, latency, uptime
+- **Connectivity** — Subsystem status dots (WAN/WWW/WLAN/LAN/VPN), aggregate traffic bars
+- **Capacity** — Color-coded CPU/MEM gauges, load averages, device/client fleet summary
+- **Networks** — VLANs sorted by ID with IPv6 prefix delegation and SLAAC mode
+- **WiFi / APs** — Client count, WiFi experience %, channel info per access point
 - **Top Clients** — Proportional traffic bars with fractional block characters
-- **Recent Events** — Compact two-per-line event display
+- **Recent Events** — Two-column compact event display, color-coded by severity
 
-### Devices & Firewall
+### Devices & Clients
 
 <p align="center">
   <img src="docs/images/devices.png" alt="unifly-tui devices" width="900">
 </p>
 
 <p align="center">
+  <img src="docs/images/clients.png" alt="unifly-tui clients" width="900">
+</p>
+
+### Networks & Firewall
+
+<p align="center">
+  <img src="docs/images/networks.png" alt="unifly-tui networks" width="900">
+</p>
+
+<p align="center">
   <img src="docs/images/firewall.png" alt="unifly-tui firewall" width="900">
 </p>
 
+### Stats
+
+Historical statistics with selectable time windows and dual-API data sourcing:
+
+<p align="center">
+  <img src="docs/images/stats.png" alt="unifly-tui stats" width="900">
+</p>
+
+- **WAN Bandwidth** — TX/RX area fills with Braille line overlay, auto-scaling axes
+- **Client Count** — Braille line chart tracking connected clients over time
+- **Top Applications** — DPI application breakdown with proportional bars (Integration API names, Legacy fallback)
+- **Traffic by Category** — Percentage bars for streaming, gaming, social, etc.
+
 ### Key Bindings
+
+#### Global
 
 | Key | Action |
 | --- | --- |
-| `1`–`8` | Switch screens |
+| `1`–`8` | Jump to screen |
 | `Tab` / `Shift+Tab` | Next / previous screen |
-| `j` / `k` | Scroll down / up |
-| `Enter` | Open detail view |
+| `j` / `k` / `↑` / `↓` | Navigate up / down |
+| `g` / `G` | Jump to top / bottom |
+| `Ctrl+d` / `Ctrl+u` | Page down / up |
+| `Enter` | Select / expand detail |
 | `Esc` | Close detail / go back |
-| `/` | Search / filter |
+| `/` | Search |
+| `?` | Help overlay |
+| `,` | Settings |
 | `q` | Quit |
+
+#### Screen-Specific
+
+| Screen | Key | Action |
+| --- | --- | --- |
+| **Devices** | `R` | Restart device |
+| **Devices** | `L` | Locate (flash LED) |
+| **Devices** (detail) | `h` / `l` | Previous / next detail tab |
+| **Clients** | `Tab` | Cycle filter (All → Wireless → Wired → VPN → Guest) |
+| **Clients** | `b` / `B` | Block / unblock client |
+| **Clients** | `x` | Kick client |
+| **Networks** | `e` | Edit selected network |
+| **Firewall** | `h` / `l` | Cycle sub-tabs (Policies / Zones / ACL Rules) |
+| **Firewall** | `K` / `J` | Reorder policy up / down |
+| **Topology** | `←` `→` `↑` `↓` | Pan canvas |
+| **Topology** | `+` / `-` | Zoom in / out |
+| **Topology** | `f` | Fit to view |
+| **Events** | `Space` | Pause / resume live stream |
+| **Stats** | `h` `d` `w` `m` | Period: 1h / 24h / 7d / 30d |
+| **Stats** | `r` | Refresh |
 
 ---
 
@@ -305,7 +358,7 @@ Five crates, clean dependency chain:
 | **unifly-core** | Controller lifecycle, DataStore (`DashMap` + `tokio::watch`), entity models, reactive streams |
 | **unifly-config** | Profile management, keyring integration, TOML config, environment variable overlay |
 | **unifly** | CLI binary — clap-based command routing, output formatting, shell completions |
-| **unifly-tui** | TUI binary — ratatui screens, Braille charts, SilkCircuit theme, real-time data bridge |
+| **unifly-tui** | TUI binary — 8-screen ratatui dashboard, area-fill charts, SilkCircuit theme, real-time data bridge |
 
 ### Data Flow
 

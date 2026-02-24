@@ -10,8 +10,8 @@ use chrono::Utc;
 use super::DataStore;
 use super::collection::EntityCollection;
 use crate::model::{
-    AclRule, Client, Device, DnsPolicy, EntityId, Event, FirewallPolicy, FirewallZone, Network,
-    Site, TrafficMatchingList, Voucher, WifiBroadcast,
+    AclRule, Device, DnsPolicy, EntityId, Event, FirewallPolicy, FirewallZone, Network, Site,
+    TrafficMatchingList, Voucher, WifiBroadcast,
 };
 
 /// Upsert all incoming entities, then prune any existing keys not in the
@@ -31,13 +31,12 @@ fn upsert_and_prune<T: Clone + Send + Sync + 'static>(
     }
 }
 
-/// All collections fetched during a single Integration API refresh cycle.
+/// All collections fetched during a single refresh cycle.
 ///
-/// Bundles the 12 entity vectors that `apply_integration_snapshot` needs,
-/// keeping the function signature manageable.
+/// Client data is NOT included — it is managed exclusively by
+/// `client_poll_task` (Legacy API, 2s interval).
 pub(crate) struct RefreshSnapshot {
     pub devices: Vec<Device>,
-    pub clients: Vec<Client>,
     pub networks: Vec<Network>,
     pub wifi: Vec<WifiBroadcast>,
     pub policies: Vec<FirewallPolicy>,
@@ -58,29 +57,29 @@ impl DataStore {
     /// brief "empty" state that a clear-then-insert approach would cause.
     #[allow(clippy::too_many_lines)]
     pub(crate) fn apply_integration_snapshot(&self, snap: RefreshSnapshot) {
+        // For devices, preserve existing stats across refreshes.
+        // The Integration API snapshot doesn't include real-time stats
+        // (CPU, mem, bandwidth) — those come from poll tasks via the
+        // stats channel. Replacing devices wholesale would wipe them.
         upsert_and_prune(
             &self.devices,
             snap.devices
                 .into_iter()
-                .map(|d| {
+                .map(|mut d| {
                     let key = d.mac.as_str().to_owned();
+                    if let Some(existing) = self.devices.get_by_key(&key) {
+                        d.stats = existing.stats.clone();
+                        if d.client_count.is_none() {
+                            d.client_count = existing.client_count;
+                        }
+                    }
                     let id = d.id.clone();
                     (key, id, d)
                 })
                 .collect(),
         );
 
-        upsert_and_prune(
-            &self.clients,
-            snap.clients
-                .into_iter()
-                .map(|c| {
-                    let key = c.mac.as_str().to_owned();
-                    let id = c.id.clone();
-                    (key, id, c)
-                })
-                .collect(),
-        );
+        // Client data is NOT touched here — managed by client_poll_task.
 
         upsert_and_prune(
             &self.networks,
@@ -210,82 +209,4 @@ impl DataStore {
         let _ = self.last_full_refresh.send(Some(Utc::now()));
     }
 
-    /// Apply legacy-only data as a supplement to existing Integration data.
-    ///
-    /// For devices and clients, only inserts entities whose MAC is not
-    /// already present (Integration data wins on conflict). Events are
-    /// not stored in the DataStore — the caller should broadcast them
-    /// through a separate event channel.
-    #[allow(dead_code)]
-    pub(crate) fn apply_legacy_snapshot(
-        &self,
-        devices: Vec<Device>,
-        clients: Vec<Client>,
-        _events: Vec<Event>,
-    ) {
-        for device in devices {
-            let key = device.mac.as_str().to_owned();
-            if let Some(existing) = self.devices.get_by_key(&key) {
-                // Merge Legacy-only fields into existing Integration device
-                let mut merged = (*existing).clone();
-                let mut changed = false;
-                if merged.client_count.is_none() && device.client_count.is_some() {
-                    merged.client_count = device.client_count;
-                    changed = true;
-                }
-                if changed {
-                    let id = merged.id.clone();
-                    self.devices.upsert(key, id, merged);
-                }
-            } else {
-                let id = device.id.clone();
-                self.devices.upsert(key, id, device);
-            }
-        }
-
-        for client in clients {
-            let key = client.mac.as_str().to_owned();
-            if let Some(existing) = self.clients.get_by_key(&key) {
-                // Merge Legacy-only fields into existing Integration client
-                let mut merged = (*existing).clone();
-                let mut changed = false;
-                if merged.wireless.is_none() && client.wireless.is_some() {
-                    merged.wireless = client.wireless;
-                    changed = true;
-                }
-                if merged.uplink_device_mac.is_none() && client.uplink_device_mac.is_some() {
-                    merged.uplink_device_mac = client.uplink_device_mac;
-                    changed = true;
-                }
-                if merged.hostname.is_none() && client.hostname.is_some() {
-                    merged.hostname = client.hostname;
-                    changed = true;
-                }
-                if merged.vlan.is_none() && client.vlan.is_some() {
-                    merged.vlan = client.vlan;
-                    changed = true;
-                }
-                // Merge traffic bytes — Legacy has accurate totals
-                if client.tx_bytes.is_some() {
-                    merged.tx_bytes = client.tx_bytes;
-                    changed = true;
-                }
-                if client.rx_bytes.is_some() {
-                    merged.rx_bytes = client.rx_bytes;
-                    changed = true;
-                }
-                if client.bandwidth.is_some() {
-                    merged.bandwidth = client.bandwidth;
-                    changed = true;
-                }
-                if changed {
-                    let id = merged.id.clone();
-                    self.clients.upsert(key, id, merged);
-                }
-            } else {
-                let id = client.id.clone();
-                self.clients.upsert(key, id, client);
-            }
-        }
-    }
 }

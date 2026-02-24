@@ -209,6 +209,8 @@ pub enum Action {
     WifiBroadcastsUpdated(Arc<Vec<Arc<WifiBroadcast>>>),
     EventReceived(Arc<Event>),
     HealthUpdated(Arc<Vec<unifly_core::HealthSummary>>),
+    MonthlyWanUsage(u64, u64),
+    ClientDailyUsageUpdated(Arc<std::collections::HashMap<String, (u64, u64)>>),
     SiteUpdated(Arc<Site>),
 
     // ── Connection Status ─────────────────────────────────────────

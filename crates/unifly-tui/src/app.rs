@@ -8,7 +8,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
-    style::Style,
+    style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Clear, Paragraph, Tabs},
 };
@@ -69,6 +69,8 @@ pub struct App {
     pending_confirm: Option<ConfirmAction>,
     /// Active notification toast with display timestamp.
     notification: Option<(Notification, Instant)>,
+    /// When true, data updates are not forwarded to screens.
+    paused: bool,
     /// Generation counter for stats requests — prevents stale responses from
     /// overwriting fresh data when the user rapidly switches periods.
     stats_generation: std::sync::Arc<std::sync::atomic::AtomicU64>,
@@ -114,6 +116,7 @@ impl App {
             data_cancel: CancellationToken::new(),
             pending_confirm: None,
             notification: None,
+            paused: false,
             stats_generation: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             last_stats_fetch: None,
             stats_period: crate::action::StatsPeriod::default(),
@@ -187,11 +190,10 @@ impl App {
             // 3. Drain and process all queued actions
             while let Ok(action) = self.action_rx.try_recv() {
                 self.process_action(&action)?;
-
-                if let Action::Render = action {
-                    tui.draw(|frame| self.render(frame))?;
-                }
             }
+
+            // 4. Render on every event cycle
+            tui.draw(|frame| self.render(frame))?;
         }
 
         // Cancel the data bridge and clean up
@@ -277,6 +279,12 @@ impl App {
 
             // Settings
             (KeyModifiers::NONE, KeyCode::Char(',')) => return Ok(Some(Action::OpenSettings)),
+
+            // Pause/resume data updates
+            (KeyModifiers::NONE, KeyCode::Char('s')) => {
+                self.paused = !self.paused;
+                return Ok(None);
+            }
 
             // Screen navigation via number keys
             (KeyModifiers::NONE, KeyCode::Char(c @ '1'..='8')) => {
@@ -425,10 +433,14 @@ impl App {
             | Action::HealthUpdated(_)
             | Action::SiteUpdated(_)
             | Action::StatsUpdated(_)
+            | Action::MonthlyWanUsage(_, _)
+            | Action::ClientDailyUsageUpdated(_)
             | Action::NetworkEditResult(_) => {
-                for screen in self.screens.values_mut() {
-                    if let Some(follow_up) = screen.update(action)? {
-                        self.action_tx.send(follow_up)?;
+                if !self.paused {
+                    for screen in self.screens.values_mut() {
+                        if let Some(follow_up) = screen.update(action)? {
+                            self.action_tx.send(follow_up)?;
+                        }
                     }
                 }
             }
@@ -1003,25 +1015,38 @@ impl App {
             return;
         }
 
-        let connection_indicator = match &self.connection_status {
-            ConnectionStatus::Connected => {
-                Span::styled("● connected", Style::default().fg(theme::SUCCESS_GREEN))
-            }
-            ConnectionStatus::Disconnected => {
-                Span::styled("○ disconnected", Style::default().fg(theme::ERROR_RED))
-            }
-            ConnectionStatus::Reconnecting => Span::styled(
-                "◐ reconnecting",
-                Style::default().fg(theme::ELECTRIC_YELLOW),
-            ),
-            ConnectionStatus::Connecting => {
-                Span::styled("◐ connecting", Style::default().fg(theme::ELECTRIC_YELLOW))
+        let connection_indicator = if self.paused {
+            Span::styled("⏸ paused", Style::default().fg(Color::Rgb(255, 165, 0)))
+        } else {
+            match &self.connection_status {
+                ConnectionStatus::Connected => {
+                    Span::styled("● connected", Style::default().fg(theme::SUCCESS_GREEN))
+                }
+                ConnectionStatus::Disconnected => {
+                    Span::styled("○ disconnected", Style::default().fg(theme::ERROR_RED))
+                }
+                ConnectionStatus::Reconnecting => Span::styled(
+                    "◐ reconnecting",
+                    Style::default().fg(theme::ELECTRIC_YELLOW),
+                ),
+                ConnectionStatus::Connecting => {
+                    Span::styled("◐ connecting", Style::default().fg(theme::ELECTRIC_YELLOW))
+                }
             }
         };
 
-        let hints = Span::styled(" │ ? help  / search  , settings  q quit", theme::key_hint());
+        let hints = Span::styled(
+            " │ ? help  / search  s pause  , settings  q quit",
+            theme::key_hint(),
+        );
 
-        let line = Line::from(vec![Span::raw(" "), connection_indicator, hints]);
+        let now = chrono::Local::now().format("%H:%M:%S").to_string();
+        let timestamp = Span::styled(
+            format!(" │ {now}"),
+            Style::default().fg(theme::BORDER_GRAY),
+        );
+
+        let line = Line::from(vec![Span::raw(" "), connection_indicator, hints, timestamp]);
 
         frame.render_widget(Paragraph::new(line), area);
     }

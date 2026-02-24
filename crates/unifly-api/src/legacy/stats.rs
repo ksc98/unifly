@@ -100,6 +100,25 @@ impl LegacyClient {
         self.post(url, &body).await
     }
 
+    /// Fetch per-client daily usage for the last 24h.
+    ///
+    /// `POST /api/s/{site}/stat/report/daily.user`
+    /// Returns entries with `user` (MAC), `tx_bytes`, `rx_bytes`, `time`.
+    pub async fn get_client_daily_usage(
+        &self,
+        start_ms: i64,
+    ) -> Result<Vec<serde_json::Value>, Error> {
+        let url = self.site_url("stat/report/daily.user");
+        debug!("fetching client daily usage");
+
+        let body = json!({
+            "attrs": ["tx_bytes", "rx_bytes", "time"],
+            "start": start_ms,
+        });
+
+        self.post(url, &body).await
+    }
+
     /// Fetch gateway historical statistics.
     ///
     /// `POST /api/s/{site}/stat/report/{interval}.gw`

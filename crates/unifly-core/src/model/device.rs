@@ -105,6 +105,54 @@ pub struct DeviceStats {
     pub next_heartbeat: Option<DateTime<Utc>>,
 }
 
+impl DeviceStats {
+    /// Merge another `DeviceStats` into self, only overwriting fields that
+    /// are `Some` in `other`. Fields that are `None` in `other` are preserved.
+    pub fn merge(&mut self, other: &DeviceStats) {
+        if other.uptime_secs.is_some() {
+            self.uptime_secs = other.uptime_secs;
+        }
+        if other.cpu_utilization_pct.is_some() {
+            self.cpu_utilization_pct = other.cpu_utilization_pct;
+        }
+        if other.memory_utilization_pct.is_some() {
+            self.memory_utilization_pct = other.memory_utilization_pct;
+        }
+        if other.load_average_1m.is_some() {
+            self.load_average_1m = other.load_average_1m;
+        }
+        if other.load_average_5m.is_some() {
+            self.load_average_5m = other.load_average_5m;
+        }
+        if other.load_average_15m.is_some() {
+            self.load_average_15m = other.load_average_15m;
+        }
+        if other.uplink_bandwidth.is_some() {
+            self.uplink_bandwidth = other.uplink_bandwidth;
+        }
+        if other.last_heartbeat.is_some() {
+            self.last_heartbeat = other.last_heartbeat;
+        }
+        if other.next_heartbeat.is_some() {
+            self.next_heartbeat = other.next_heartbeat;
+        }
+    }
+}
+
+/// A partial stats update sent through the stats channel.
+/// All fields are `Option` — only `Some` values are applied.
+#[derive(Debug, Clone)]
+pub struct DeviceStatsUpdate {
+    pub mac: MacAddress,
+    pub stats: DeviceStats,
+    /// Optional client count update.
+    pub client_count: Option<u32>,
+    /// Optional WAN IPv6 address.
+    pub wan_ipv6: Option<String>,
+    /// Optional uplink device MAC.
+    pub uplink_device_mac: Option<MacAddress>,
+}
+
 /// The canonical Device type. Merges data from Integration + Legacy APIs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(clippy::struct_excessive_bools)]

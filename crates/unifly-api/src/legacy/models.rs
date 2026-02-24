@@ -124,10 +124,28 @@ pub struct LegacyClientEntry {
     pub tx_bytes: Option<i64>,
     #[serde(default)]
     pub rx_bytes: Option<i64>,
+    /// Wired TX bytes (session total) — JSON key `wired-tx_bytes`.
+    #[serde(default, rename = "wired-tx_bytes")]
+    pub wired_tx_bytes: Option<i64>,
+    /// Wired RX bytes (session total) — JSON key `wired-rx_bytes`.
+    #[serde(default, rename = "wired-rx_bytes")]
+    pub wired_rx_bytes: Option<i64>,
     #[serde(default)]
     pub tx_rate: Option<i64>,
     #[serde(default)]
     pub rx_rate: Option<i64>,
+    /// Live TX throughput (bytes/sec) — JSON key `tx_bytes-r` (wireless clients).
+    #[serde(default, rename = "tx_bytes-r")]
+    pub tx_bytes_r: Option<f64>,
+    /// Live RX throughput (bytes/sec) — JSON key `rx_bytes-r` (wireless clients).
+    #[serde(default, rename = "rx_bytes-r")]
+    pub rx_bytes_r: Option<f64>,
+    /// Live TX throughput (bytes/sec) — JSON key `wired-tx_bytes-r` (wired clients).
+    #[serde(default, rename = "wired-tx_bytes-r")]
+    pub wired_tx_bytes_r: Option<f64>,
+    /// Live RX throughput (bytes/sec) — JSON key `wired-rx_bytes-r` (wired clients).
+    #[serde(default, rename = "wired-rx_bytes-r")]
+    pub wired_rx_bytes_r: Option<f64>,
     #[serde(default)]
     pub uptime: Option<i64>,
     #[serde(default)]

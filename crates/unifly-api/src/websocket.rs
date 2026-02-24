@@ -30,7 +30,49 @@ use std::time::Duration;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
+use tokio_tungstenite::Connector;
 use tokio_tungstenite::tungstenite::{self, ClientRequestBuilder};
+
+/// Certificate verifier that accepts any certificate (for self-signed controllers).
+#[derive(Debug)]
+struct AcceptAnyCert;
+
+impl rustls::client::danger::ServerCertVerifier for AcceptAnyCert {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &rustls_pki_types::CertificateDer<'_>,
+        _intermediates: &[rustls_pki_types::CertificateDer<'_>],
+        _server_name: &rustls_pki_types::ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: rustls_pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &rustls_pki_types::CertificateDer<'_>,
+        _dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &rustls_pki_types::CertificateDer<'_>,
+        _dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        rustls::crypto::ring::default_provider()
+            .signature_verification_algorithms
+            .supported_schemes()
+    }
+}
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
@@ -118,12 +160,13 @@ impl WebSocketHandle {
         reconnect: ReconnectConfig,
         cancel: CancellationToken,
         cookie: Option<String>,
+        insecure: bool,
     ) -> Result<Self, Error> {
         let (event_tx, event_rx) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
 
         let task_cancel = cancel.clone();
         tokio::spawn(async move {
-            ws_loop(ws_url, event_tx, reconnect, task_cancel, cookie).await;
+            ws_loop(ws_url, event_tx, reconnect, task_cancel, cookie, insecure).await;
         });
 
         Ok(Self { event_rx, cancel })
@@ -152,6 +195,7 @@ async fn ws_loop(
     reconnect: ReconnectConfig,
     cancel: CancellationToken,
     cookie: Option<String>,
+    insecure: bool,
 ) {
     let mut attempt: u32 = 0;
 
@@ -159,7 +203,7 @@ async fn ws_loop(
         tokio::select! {
             biased;
             () = cancel.cancelled() => break,
-            result = connect_and_read(&ws_url, &event_tx, &cancel, cookie.as_deref()) => {
+            result = connect_and_read(&ws_url, &event_tx, &cancel, cookie.as_deref(), insecure) => {
                 match result {
                     // Clean disconnect (server close frame or stream ended).
                     // Reset attempt counter and reconnect immediately.
@@ -220,6 +264,7 @@ async fn connect_and_read(
     event_tx: &broadcast::Sender<Arc<UnifiEvent>>,
     cancel: &CancellationToken,
     cookie: Option<&str>,
+    insecure: bool,
 ) -> Result<(), Error> {
     tracing::info!(url = %url, "Connecting to WebSocket");
 
@@ -233,9 +278,20 @@ async fn connect_and_read(
         request = request.with_header("Cookie", cookie_val);
     }
 
-    let (ws_stream, _response) = tokio_tungstenite::connect_async(request)
-        .await
-        .map_err(|e| Error::WebSocketConnect(e.to_string()))?;
+    let connector = if insecure {
+        let config = rustls::ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(std::sync::Arc::new(AcceptAnyCert))
+            .with_no_client_auth();
+        Some(Connector::Rustls(std::sync::Arc::new(config)))
+    } else {
+        None
+    };
+
+    let (ws_stream, _response) =
+        tokio_tungstenite::connect_async_tls_with_config(request, None, false, connector)
+            .await
+            .map_err(|e| Error::WebSocketConnect(e.to_string()))?;
 
     tracing::info!("WebSocket connected");
 

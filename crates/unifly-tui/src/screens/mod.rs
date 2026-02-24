@@ -2,9 +2,12 @@
 
 pub mod clients;
 pub mod dashboard;
+#[allow(dead_code)]
 pub mod devices;
 pub mod events;
+#[allow(dead_code)]
 pub mod firewall;
+#[allow(dead_code)]
 pub mod networks;
 pub mod onboarding;
 pub mod settings;
@@ -14,23 +17,15 @@ pub mod topology;
 use crate::component::Component;
 use crate::screen::ScreenId;
 
-/// Create all eight screen components, returning them as boxed trait objects.
+/// Create screen components for the active tab bar.
 pub fn create_screens() -> Vec<(ScreenId, Box<dyn Component>)> {
     vec![
         (
             ScreenId::Dashboard,
             Box::new(dashboard::DashboardScreen::new()),
         ),
-        (ScreenId::Devices, Box::new(devices::DevicesScreen::new())),
+        // Devices, Networks, Firewall removed from tab bar (code preserved)
         (ScreenId::Clients, Box::new(clients::ClientsScreen::new())),
-        (
-            ScreenId::Networks,
-            Box::new(networks::NetworksScreen::new()),
-        ),
-        (
-            ScreenId::Firewall,
-            Box::new(firewall::FirewallScreen::new()),
-        ),
         (
             ScreenId::Topology,
             Box::new(topology::TopologyScreen::new()),

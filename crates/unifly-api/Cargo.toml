@@ -30,6 +30,8 @@ uuid              = { workspace = true }
 secrecy           = { workspace = true }
 futures-util      = { workspace = true }
 async-stream      = { workspace = true }
+rustls             = { version = "0.23", default-features = false }
+rustls-pki-types   = "1"
 
 [dev-dependencies]
 wiremock    = { workspace = true }

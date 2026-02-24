@@ -72,6 +72,13 @@ pub struct Client {
     pub rx_bytes: Option<u64>,
     pub bandwidth: Option<Bandwidth>,
 
+    // Vendor / OUI (legacy API)
+    pub oui: Option<String>,
+    /// Human-readable network name (e.g. "Default", "IoT").
+    pub network_name: Option<String>,
+    /// Switch port index (wired clients only).
+    pub sw_port: Option<u16>,
+
     // Fingerprint (legacy API)
     pub os_name: Option<String>,
     pub device_class: Option<String>,

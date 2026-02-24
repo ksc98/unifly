@@ -34,6 +34,22 @@ pub fn fmt_uptime(secs: u64) -> String {
     }
 }
 
+/// Full uptime format: "97d 15h 12m 26s"
+pub fn fmt_uptime_full(secs: u64) -> String {
+    let days = secs / 86400;
+    let hours = (secs % 86400) / 3600;
+    let minutes = (secs % 3600) / 60;
+    let seconds = secs % 60;
+
+    if days > 0 {
+        format!("{days}d {hours}h {minutes}m {seconds}s")
+    } else if hours > 0 {
+        format!("{hours}h {minutes}m {seconds}s")
+    } else {
+        format!("{minutes}m {seconds}s")
+    }
+}
+
 /// Format a rate in bytes/sec as "245 Mbps".
 #[allow(clippy::cast_precision_loss, clippy::as_conversions)]
 pub fn fmt_rate(bytes_per_sec: u64) -> String {

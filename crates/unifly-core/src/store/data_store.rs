@@ -3,6 +3,7 @@
 // Thread-safe, lock-free storage for all UniFi domain entities.
 // Mutations are broadcast to subscribers via `watch` channels.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
@@ -34,6 +35,10 @@ pub struct DataStore {
     pub(crate) events: EntityCollection<Event>,
     pub(crate) traffic_matching_lists: EntityCollection<TrafficMatchingList>,
     pub(crate) site_health: watch::Sender<Arc<Vec<HealthSummary>>>,
+    /// Monthly WAN usage: (tx_bytes, rx_bytes) for the current month.
+    pub(crate) monthly_wan_bytes: watch::Sender<(u64, u64)>,
+    /// Per-client 24h usage: MAC -> (tx_bytes, rx_bytes).
+    pub(crate) client_daily_usage: watch::Sender<Arc<HashMap<String, (u64, u64)>>>,
     pub(crate) last_full_refresh: watch::Sender<Option<DateTime<Utc>>>,
     pub(crate) last_ws_event: watch::Sender<Option<DateTime<Utc>>>,
 }
@@ -41,6 +46,8 @@ pub struct DataStore {
 impl DataStore {
     pub fn new() -> Self {
         let (site_health, _) = watch::channel(Arc::new(Vec::new()));
+        let (monthly_wan_bytes, _) = watch::channel((0u64, 0u64));
+        let (client_daily_usage, _) = watch::channel(Arc::new(HashMap::new()));
         let (last_full_refresh, _) = watch::channel(None);
         let (last_ws_event, _) = watch::channel(None);
 
@@ -58,6 +65,8 @@ impl DataStore {
             events: EntityCollection::new(),
             traffic_matching_lists: EntityCollection::new(),
             site_health,
+            monthly_wan_bytes,
+            client_daily_usage,
             last_full_refresh,
             last_ws_event,
         }
@@ -207,6 +216,14 @@ impl DataStore {
 
     pub fn subscribe_site_health(&self) -> watch::Receiver<Arc<Vec<HealthSummary>>> {
         self.site_health.subscribe()
+    }
+
+    pub fn subscribe_monthly_wan_bytes(&self) -> watch::Receiver<(u64, u64)> {
+        self.monthly_wan_bytes.subscribe()
+    }
+
+    pub fn subscribe_client_daily_usage(&self) -> watch::Receiver<Arc<HashMap<String, (u64, u64)>>> {
+        self.client_daily_usage.subscribe()
     }
 
     // ── Metadata ─────────────────────────────────────────────────────

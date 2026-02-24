@@ -21,8 +21,8 @@ pub const LIGHT_BLUE: Color = Color::Rgb(139, 233, 253); // #8be9fd
 
 // ── Chart Fill Colors (dimmed versions for area fills) ───────────────
 
-pub const TX_FILL: Color = Color::Rgb(20, 55, 62); // dark cyan — egress area fill
-pub const RX_FILL: Color = Color::Rgb(65, 28, 48); // dark rose — ingress area fill
+pub const TX_FILL: Color = Color::Rgb(45, 20, 55); // dark purple — upload area fill
+pub const RX_FILL: Color = Color::Rgb(20, 40, 65); // dark blue — download area fill
 
 /// Chart series colors for multi-line graphs.
 pub const CHART_SERIES: &[Color] = &[
@@ -75,7 +75,7 @@ pub fn table_selected() -> Style {
 pub fn tab_active() -> Style {
     Style::default()
         .fg(ELECTRIC_PURPLE)
-        .add_modifier(Modifier::UNDERLINED)
+        .add_modifier(Modifier::BOLD)
 }
 
 /// Inactive tab in the tab bar.

@@ -190,7 +190,12 @@ impl From<LegacyDevice> for Device {
             ports: Vec::new(),
             radios: Vec::new(),
             uplink_device_id: None,
-            uplink_device_mac: None,
+            uplink_device_mac: d
+                .extra
+                .get("uplink")
+                .and_then(|u| u.get("uplink_mac"))
+                .and_then(|v| v.as_str())
+                .map(MacAddress::new),
             has_switching: device_type == DeviceType::Switch || device_type == DeviceType::Gateway,
             has_access_point: device_type == DeviceType::AccessPoint,
             stats: device_stats,
@@ -273,9 +278,23 @@ impl From<LegacyClientEntry> for Client {
             wireless,
             guest_auth,
             is_guest,
-            tx_bytes: c.tx_bytes.and_then(|b| b.try_into().ok()),
-            rx_bytes: c.rx_bytes.and_then(|b| b.try_into().ok()),
-            bandwidth: None,
+            tx_bytes: c.tx_bytes.or(c.wired_tx_bytes).and_then(|b| b.try_into().ok()),
+            rx_bytes: c.rx_bytes.or(c.wired_rx_bytes).and_then(|b| b.try_into().ok()),
+            bandwidth: {
+                let tx = c.tx_bytes_r.or(c.wired_tx_bytes_r);
+                let rx = c.rx_bytes_r.or(c.wired_rx_bytes_r);
+                if tx.is_some() || rx.is_some() {
+                    Some(crate::model::Bandwidth {
+                        tx_bytes_per_sec: tx.unwrap_or(0.0) as u64,
+                        rx_bytes_per_sec: rx.unwrap_or(0.0) as u64,
+                    })
+                } else {
+                    None
+                }
+            },
+            oui: c.oui,
+            network_name: c.network,
+            sw_port: c.sw_port.and_then(|p| p.try_into().ok()),
             os_name: None,
             device_class: None,
             blocked: c.blocked.unwrap_or(false),
@@ -641,6 +660,9 @@ impl From<integration_types::ClientResponse> for Client {
             tx_bytes: None,
             rx_bytes: None,
             bandwidth: None,
+            oui: None,
+            network_name: None,
+            sw_port: None,
             os_name: None,
             device_class: None,
             blocked: false,

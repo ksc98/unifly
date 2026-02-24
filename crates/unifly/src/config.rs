@@ -97,6 +97,9 @@ pub fn resolve_profile(
         refresh_interval_secs: 0,
         websocket_enabled: false,
         polling_interval_secs: 30,
+        bandwidth_poll_interval: std::time::Duration::ZERO,
+        client_poll_interval: std::time::Duration::ZERO,
+        device_stats_poll_interval: std::time::Duration::ZERO,
     })
 }
 

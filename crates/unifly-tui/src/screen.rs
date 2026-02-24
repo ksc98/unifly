@@ -2,18 +2,21 @@
 
 use std::fmt;
 
-/// Identifies each primary TUI screen, navigable by number keys 1-8.
+/// Identifies each primary TUI screen, navigable by number keys.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ScreenId {
     #[default]
     Dashboard, // 1
-    Devices,  // 2
-    Clients,  // 3
-    Networks, // 4
-    Firewall, // 5
-    Topology, // 6
-    Events,   // 7
-    Stats,    // 8
+    #[allow(dead_code)]
+    Devices, // (removed from tab bar)
+    Clients, // 2
+    #[allow(dead_code)]
+    Networks, // (removed from tab bar)
+    #[allow(dead_code)]
+    Firewall, // (removed from tab bar)
+    Topology, // 3
+    Events,   // 4
+    Stats,    // 5
     /// Onboarding wizard — not in the tab bar, not navigable by number keys.
     Setup,
     /// Settings editor — not in the tab bar, opened with `,`.
@@ -22,43 +25,35 @@ pub enum ScreenId {
 
 impl ScreenId {
     /// All screens in tab-bar order.
-    pub const ALL: [ScreenId; 8] = [
+    pub const ALL: [ScreenId; 5] = [
         Self::Dashboard,
-        Self::Devices,
         Self::Clients,
-        Self::Networks,
-        Self::Firewall,
         Self::Topology,
         Self::Events,
         Self::Stats,
     ];
 
-    /// Numeric key (1-8) for this screen. Setup has no number key.
+    /// Numeric key (1-5) for this screen. Setup has no number key.
     pub fn number(self) -> u8 {
         match self {
             Self::Dashboard => 1,
-            Self::Devices => 2,
-            Self::Clients => 3,
-            Self::Networks => 4,
-            Self::Firewall => 5,
-            Self::Topology => 6,
-            Self::Events => 7,
-            Self::Stats => 8,
-            Self::Setup | Self::Settings => 0,
+            Self::Clients => 2,
+            Self::Topology => 3,
+            Self::Events => 4,
+            Self::Stats => 5,
+            Self::Devices | Self::Networks | Self::Firewall
+            | Self::Setup | Self::Settings => 0,
         }
     }
 
-    /// Screen from a numeric key (1-8). Returns None for out-of-range.
+    /// Screen from a numeric key (1-5). Returns None for out-of-range.
     pub fn from_number(n: u8) -> Option<Self> {
         match n {
             1 => Some(Self::Dashboard),
-            2 => Some(Self::Devices),
-            3 => Some(Self::Clients),
-            4 => Some(Self::Networks),
-            5 => Some(Self::Firewall),
-            6 => Some(Self::Topology),
-            7 => Some(Self::Events),
-            8 => Some(Self::Stats),
+            2 => Some(Self::Clients),
+            3 => Some(Self::Topology),
+            4 => Some(Self::Events),
+            5 => Some(Self::Stats),
             _ => None,
         }
     }

@@ -52,10 +52,17 @@ pub async fn spawn_data_bridge(
     let mut events = controller.events();
     let mut conn_state = controller.connection_state();
     let mut site_health = controller.site_health();
+    let mut monthly_wan = controller.monthly_wan_bytes();
+    let mut daily_usage = controller.client_daily_usage();
 
     // Push initial snapshots so screens have data immediately
     let _ = action_tx.send(Action::DevicesUpdated(devices.current().clone()));
-    let _ = action_tx.send(Action::ClientsUpdated(clients.current().clone()));
+    // Only send initial clients if non-empty (client_poll_task populates async;
+    // sending empty snapshot would briefly blank the screen on reconnect).
+    let initial_clients = clients.current().clone();
+    if !initial_clients.is_empty() {
+        let _ = action_tx.send(Action::ClientsUpdated(initial_clients));
+    }
     let _ = action_tx.send(Action::NetworksUpdated(networks.current().clone()));
     let _ = action_tx.send(Action::FirewallPoliciesUpdated(
         fw_policies.current().clone(),
@@ -70,6 +77,12 @@ pub async fn spawn_data_bridge(
         let _ = action_tx.send(Action::HealthUpdated(health_snap));
     }
 
+    // Push initial events snapshot so Recent Events populates immediately
+    let events_snap = controller.events_snapshot();
+    for event in events_snap.iter() {
+        let _ = action_tx.send(Action::EventReceived(event.clone()));
+    }
+
     // Stream loop — forward every change until cancelled
     loop {
         tokio::select! {
@@ -78,9 +91,11 @@ pub async fn spawn_data_bridge(
             () = cancel.cancelled() => break,
 
             Some(d) = devices.changed() => {
+                tracing::debug!("Dispatching DevicesUpdated");
                 let _ = action_tx.send(Action::DevicesUpdated(d));
             }
             Some(c) = clients.changed() => {
+                tracing::debug!("Dispatching ClientsUpdated");
                 let _ = action_tx.send(Action::ClientsUpdated(c));
             }
             Some(n) = networks.changed() => {
@@ -102,8 +117,17 @@ pub async fn spawn_data_bridge(
                 let _ = action_tx.send(Action::EventReceived(event));
             }
             Ok(()) = site_health.changed() => {
+                tracing::debug!("Dispatching SiteHealthUpdated");
                 let h = site_health.borrow_and_update().clone();
                 let _ = action_tx.send(Action::HealthUpdated(h));
+            }
+            Ok(()) = monthly_wan.changed() => {
+                let (tx, rx) = *monthly_wan.borrow_and_update();
+                let _ = action_tx.send(Action::MonthlyWanUsage(tx, rx));
+            }
+            Ok(()) = daily_usage.changed() => {
+                let usage = daily_usage.borrow_and_update().clone();
+                let _ = action_tx.send(Action::ClientDailyUsageUpdated(usage));
             }
             Ok(()) = conn_state.changed() => {
                 let state = conn_state.borrow_and_update().clone();

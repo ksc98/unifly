@@ -32,6 +32,7 @@ struct ErrorResponse {
 ///
 /// Uses API-key authentication and communicates via JSON REST endpoints
 /// under `/integration/v1/`.
+#[derive(Clone)]
 pub struct IntegrationClient {
     http: reqwest::Client,
     base_url: Url,

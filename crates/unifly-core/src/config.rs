@@ -83,6 +83,13 @@ pub struct ControllerConfig {
     pub websocket_enabled: bool,
     /// Polling interval when WebSocket is unavailable (seconds).
     pub polling_interval_secs: u64,
+    /// How often to poll `stat/health` for live bandwidth rates. Zero = disabled.
+    pub bandwidth_poll_interval: std::time::Duration,
+    /// How often to poll `stat/sta` for per-client live bandwidth. Zero = disabled.
+    pub client_poll_interval: std::time::Duration,
+    /// How often to poll per-device statistics (CPU, memory, etc.) via the
+    /// Integration API. Zero = disabled (relies on WebSocket only).
+    pub device_stats_poll_interval: std::time::Duration,
 }
 
 impl Default for ControllerConfig {
@@ -101,6 +108,9 @@ impl Default for ControllerConfig {
             refresh_interval_secs: 300,
             websocket_enabled: true,
             polling_interval_secs: 10,
+            bandwidth_poll_interval: std::time::Duration::from_millis(500),
+            client_poll_interval: std::time::Duration::from_secs(2),
+            device_stats_poll_interval: std::time::Duration::from_secs(5),
         }
     }
 }

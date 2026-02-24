@@ -68,6 +68,26 @@ impl<T: Clone + Send + Sync + 'static> EntityCollection<T> {
         is_new
     }
 
+    /// Insert or update without notifying. Call `flush()` after a batch.
+    pub(crate) fn upsert_silent(&self, key: String, id: EntityId, entity: T) -> bool {
+        if let Some(old_id) = self.key_to_id.get(&key) {
+            if *old_id != id {
+                self.id_to_key.remove(&*old_id);
+            }
+        }
+        let is_new = !self.by_key.contains_key(&key);
+        self.by_key.insert(key.clone(), Arc::new(entity));
+        self.id_to_key.insert(id.clone(), key.clone());
+        self.key_to_id.insert(key, id);
+        is_new
+    }
+
+    /// Rebuild snapshot and notify subscribers. Call after `upsert_silent` batch.
+    pub(crate) fn flush(&self) {
+        self.rebuild_snapshot();
+        self.bump_version();
+    }
+
     /// Remove an entity by key. Returns the removed entity if it existed.
     pub(crate) fn remove(&self, key: &str) -> Option<Arc<T>> {
         let removed = self.by_key.remove(key).map(|(_, v)| v);

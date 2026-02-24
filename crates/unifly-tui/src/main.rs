@@ -137,6 +137,9 @@ fn build_controller(cli: &Cli) -> Option<Controller> {
         refresh_interval_secs: 10,
         websocket_enabled: true,
         polling_interval_secs: 10,
+        bandwidth_poll_interval: std::time::Duration::from_millis(500),
+        client_poll_interval: std::time::Duration::from_secs(2),
+        device_stats_poll_interval: std::time::Duration::from_secs(2),
     };
 
     Some(Controller::new(config))

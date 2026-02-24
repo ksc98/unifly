@@ -36,6 +36,7 @@ struct UnifiOsErrorInner {
 /// URL construction, and platform-aware path prefixing. All methods return
 /// unwrapped `data` payloads -- the envelope is stripped before the caller
 /// sees it.
+#[derive(Clone)]
 pub struct LegacyClient {
     http: reqwest::Client,
     base_url: Url,
@@ -44,7 +45,7 @@ pub struct LegacyClient {
     /// CSRF token for UniFi OS. Required on all POST/PUT/DELETE requests
     /// through the `/proxy/network/` path. Captured from login response
     /// headers and rotated via `X-Updated-CSRF-Token`.
-    csrf_token: RwLock<Option<String>>,
+    csrf_token: Arc<RwLock<Option<String>>>,
     /// Cookie jar reference for extracting session cookies (e.g. for WebSocket auth).
     cookie_jar: Option<Arc<Jar>>,
 }
@@ -74,7 +75,7 @@ impl LegacyClient {
             base_url,
             site,
             platform,
-            csrf_token: RwLock::new(None),
+            csrf_token: Arc::new(RwLock::new(None)),
             cookie_jar,
         })
     }
@@ -94,7 +95,7 @@ impl LegacyClient {
             base_url,
             site,
             platform,
-            csrf_token: RwLock::new(None),
+            csrf_token: Arc::new(RwLock::new(None)),
             cookie_jar: None,
         }
     }

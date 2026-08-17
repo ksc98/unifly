@@ -1,0 +1,710 @@
+//! Devices screen — sortable table with detail expansion (spec §2.2).
+
+use std::sync::Arc;
+
+use color_eyre::eyre::Result;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::Frame;
+use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::style::{Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, Table, TableState};
+use tokio::sync::mpsc::UnboundedSender;
+
+use unifly_core::{Device, DeviceState};
+
+use crate::action::{Action, DeviceDetailTab};
+use crate::component::Component;
+use crate::theme;
+use crate::widgets::{bytes_fmt, status_indicator, sub_tabs};
+
+pub struct DevicesScreen {
+    focused: bool,
+    action_tx: Option<UnboundedSender<Action>>,
+    devices: Arc<Vec<Arc<Device>>>,
+    table_state: TableState,
+    detail_open: bool,
+    detail_tab: DeviceDetailTab,
+    search_query: String,
+}
+
+impl DevicesScreen {
+    pub fn new() -> Self {
+        Self {
+            focused: false,
+            action_tx: None,
+            devices: Arc::new(Vec::new()),
+            table_state: TableState::default(),
+            detail_open: false,
+            detail_tab: DeviceDetailTab::default(),
+            search_query: String::new(),
+        }
+    }
+
+    fn filtered_devices(&self) -> Vec<&Arc<Device>> {
+        if self.search_query.is_empty() {
+            self.devices.iter().collect()
+        } else {
+            let q = self.search_query.to_lowercase();
+            self.devices
+                .iter()
+                .filter(|d| {
+                    d.name.as_deref().unwrap_or("").to_lowercase().contains(&q)
+                        || d.model.as_deref().unwrap_or("").to_lowercase().contains(&q)
+                        || d.ip
+                            .map(|ip| ip.to_string())
+                            .unwrap_or_default()
+                            .contains(&q)
+                        || d.mac.to_string().contains(&q)
+                })
+                .collect()
+        }
+    }
+
+    fn selected_index(&self) -> usize {
+        self.table_state.selected().unwrap_or(0)
+    }
+
+    fn selected_device(&self) -> Option<&Arc<Device>> {
+        let filtered = self.filtered_devices();
+        filtered.get(self.selected_index()).copied()
+    }
+
+    fn select(&mut self, idx: usize) {
+        let len = self.filtered_devices().len();
+        let clamped = if len == 0 { 0 } else { idx.min(len - 1) };
+        self.table_state.select(Some(clamped));
+    }
+
+    #[allow(clippy::cast_sign_loss, clippy::as_conversions)]
+    fn move_selection(&mut self, delta: isize) {
+        let len = self.filtered_devices().len();
+        if len == 0 {
+            return;
+        }
+        #[allow(clippy::cast_possible_wrap)]
+        let current = self.selected_index() as isize;
+        #[allow(clippy::cast_possible_wrap)]
+        let next = (current + delta).clamp(0, len as isize - 1);
+        self.select(next as usize);
+    }
+
+    /// Render the device detail panel below the table.
+    fn render_detail(&self, frame: &mut Frame, area: Rect, device: &Device) {
+        let name = device.name.as_deref().unwrap_or("Unknown");
+        let model = device.model.as_deref().unwrap_or("─");
+        let ip = device.ip.map_or_else(|| "─".into(), |ip| ip.to_string());
+        let mac = device.mac.to_string();
+
+        let title = format!(" {name}  ·  {model}  ·  {ip}  ·  {mac} ");
+        let block = Block::default()
+            .title(title)
+            .title_style(theme::title_style())
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(theme::border_focused());
+
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+
+        // Sub-tab bar
+        let tabs_layout = Layout::vertical([
+            Constraint::Length(2), // tab bar
+            Constraint::Min(1),    // content
+            Constraint::Length(1), // hints
+        ])
+        .split(inner);
+
+        let tab_labels = &["Overview", "Performance", "Radios", "Clients", "Ports"];
+        let active_idx = match self.detail_tab {
+            DeviceDetailTab::Overview => 0,
+            DeviceDetailTab::Performance => 1,
+            DeviceDetailTab::Radios => 2,
+            DeviceDetailTab::Clients => 3,
+            DeviceDetailTab::Ports => 4,
+        };
+        let tab_line = sub_tabs::render_sub_tabs(tab_labels, active_idx);
+        frame.render_widget(
+            Paragraph::new(vec![Line::from(""), tab_line]),
+            tabs_layout[0],
+        );
+
+        // Tab content
+        match self.detail_tab {
+            DeviceDetailTab::Overview => self.render_overview_tab(frame, tabs_layout[1], device),
+            DeviceDetailTab::Performance => {
+                self.render_performance_tab(frame, tabs_layout[1], device);
+            }
+            DeviceDetailTab::Radios => self.render_radios_tab(frame, tabs_layout[1], device),
+            DeviceDetailTab::Clients => {
+                let text = format!("  Connected clients: {}", device.client_count.unwrap_or(0));
+                frame.render_widget(
+                    Paragraph::new(text).style(theme::table_row()),
+                    tabs_layout[1],
+                );
+            }
+            DeviceDetailTab::Ports => self.render_ports_tab(frame, tabs_layout[1], device),
+        }
+
+        // Key hints
+        let hints = Line::from(vec![
+            Span::styled("  h/l ", theme::key_hint_key()),
+            Span::styled("switch tabs  ", theme::key_hint()),
+            Span::styled("R ", theme::key_hint_key()),
+            Span::styled("restart  ", theme::key_hint()),
+            Span::styled("L ", theme::key_hint_key()),
+            Span::styled("locate  ", theme::key_hint()),
+            Span::styled("Esc ", theme::key_hint_key()),
+            Span::styled("back", theme::key_hint()),
+        ]);
+        frame.render_widget(Paragraph::new(hints), tabs_layout[2]);
+    }
+
+    #[allow(clippy::unused_self)]
+    fn render_overview_tab(&self, frame: &mut Frame, area: Rect, device: &Device) {
+        let state_span = status_indicator::status_span(device.state);
+        let state_label = format!("{:?}", device.state);
+        let firmware = device.firmware_version.as_deref().unwrap_or("─");
+        let fw_status = if device.firmware_updatable {
+            "update available"
+        } else {
+            "up to date"
+        };
+        let uptime = device
+            .stats
+            .uptime_secs
+            .map_or_else(|| "─".into(), bytes_fmt::fmt_uptime);
+        let adopted = device.adopted_at.map_or_else(
+            || "─".into(),
+            |dt| dt.format("%Y-%m-%d %H:%M UTC").to_string(),
+        );
+
+        let lines = vec![
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  State          ", Style::default().fg(theme::DIM_WHITE)),
+                state_span,
+                Span::styled(
+                    format!(" {state_label}"),
+                    Style::default().fg(theme::DIM_WHITE),
+                ),
+                Span::styled("       Adopted     ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(adopted, Style::default().fg(theme::NEON_CYAN)),
+            ]),
+            Line::from(vec![
+                Span::styled("  Firmware       ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(
+                    format!("{firmware} ({fw_status})"),
+                    Style::default().fg(theme::NEON_CYAN),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("  Uptime         ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(uptime, Style::default().fg(theme::NEON_CYAN)),
+            ]),
+            Line::from(vec![
+                Span::styled("  MAC            ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(device.mac.to_string(), Style::default().fg(theme::CORAL)),
+            ]),
+            Line::from(vec![
+                Span::styled("  Type           ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(
+                    format!("{:?}", device.device_type),
+                    Style::default().fg(theme::DIM_WHITE),
+                ),
+            ]),
+        ];
+
+        frame.render_widget(Paragraph::new(lines), area);
+    }
+
+    #[allow(clippy::unused_self)]
+    fn render_performance_tab(&self, frame: &mut Frame, area: Rect, device: &Device) {
+        let cpu = device
+            .stats
+            .cpu_utilization_pct
+            .map_or_else(|| "─".into(), |v| format!("{v:.1}%"));
+        let mem = device
+            .stats
+            .memory_utilization_pct
+            .map_or_else(|| "─".into(), |v| format!("{v:.1}%"));
+        let load = device
+            .stats
+            .load_average_1m
+            .map_or_else(|| "─".into(), |v| format!("{v:.2}"));
+
+        let cpu_color = device
+            .stats
+            .cpu_utilization_pct
+            .map_or(theme::DIM_WHITE, |v| {
+                if v < 50.0 {
+                    theme::SUCCESS_GREEN
+                } else if v < 75.0 {
+                    theme::NEON_CYAN
+                } else if v < 90.0 {
+                    theme::ELECTRIC_YELLOW
+                } else {
+                    theme::ERROR_RED
+                }
+            });
+
+        let mem_color = device
+            .stats
+            .memory_utilization_pct
+            .map_or(theme::DIM_WHITE, |v| {
+                if v < 50.0 {
+                    theme::SUCCESS_GREEN
+                } else if v < 75.0 {
+                    theme::NEON_CYAN
+                } else if v < 90.0 {
+                    theme::ELECTRIC_YELLOW
+                } else {
+                    theme::ERROR_RED
+                }
+            });
+
+        let lines = vec![
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  CPU     ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(cpu, Style::default().fg(cpu_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  Memory  ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(mem, Style::default().fg(mem_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  Load    ", Style::default().fg(theme::DIM_WHITE)),
+                Span::styled(load, Style::default().fg(theme::DIM_WHITE)),
+            ]),
+        ];
+
+        frame.render_widget(Paragraph::new(lines), area);
+    }
+
+    #[allow(clippy::unused_self)]
+    fn render_radios_tab(&self, frame: &mut Frame, area: Rect, device: &Device) {
+        let mut lines = vec![Line::from("")];
+
+        if device.radios.is_empty() {
+            lines.push(Line::from(Span::styled(
+                "  No radio data available",
+                Style::default().fg(theme::BORDER_GRAY),
+            )));
+        } else {
+            for radio in &device.radios {
+                let freq = format!("{:.1} GHz", radio.frequency_ghz);
+                let ch = radio
+                    .channel
+                    .map_or_else(|| "─".into(), |c| format!("ch {c}"));
+                let width = radio
+                    .channel_width_mhz
+                    .map_or_else(|| "─".into(), |w| format!("{w} MHz"));
+
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        format!("  {freq:<10}"),
+                        Style::default()
+                            .fg(theme::NEON_CYAN)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        format!("{ch:<8} {width}"),
+                        Style::default().fg(theme::DIM_WHITE),
+                    ),
+                ]));
+            }
+        }
+
+        frame.render_widget(Paragraph::new(lines), area);
+    }
+
+    #[allow(clippy::unused_self)]
+    fn render_ports_tab(&self, frame: &mut Frame, area: Rect, device: &Device) {
+        let mut lines = vec![Line::from("")];
+
+        if device.ports.is_empty() {
+            lines.push(Line::from(Span::styled(
+                "  No port data available",
+                Style::default().fg(theme::BORDER_GRAY),
+            )));
+        } else {
+            // Header
+            lines.push(Line::from(Span::styled(
+                "  Port  State   Speed      PoE",
+                theme::table_header(),
+            )));
+
+            for port in &device.ports {
+                let idx_str = port.index.to_string();
+                let name = port.name.as_deref().unwrap_or(&idx_str);
+                let state_color = match port.state {
+                    unifly_core::model::PortState::Up => theme::SUCCESS_GREEN,
+                    unifly_core::model::PortState::Down => theme::ERROR_RED,
+                    unifly_core::model::PortState::Unknown => theme::DIM_WHITE,
+                };
+                let state_str = format!("{:?}", port.state);
+                let speed = port.speed_mbps.map_or_else(
+                    || "─".into(),
+                    |s| {
+                        if s >= 1000 {
+                            format!("{}G", s / 1000)
+                        } else {
+                            format!("{s}M")
+                        }
+                    },
+                );
+                let poe = port
+                    .poe
+                    .as_ref()
+                    .map_or("─", |p| if p.enabled { "✓" } else { "✗" });
+
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        format!("  {name:<6}"),
+                        Style::default().fg(theme::NEON_CYAN),
+                    ),
+                    Span::styled(format!("{state_str:<8}"), Style::default().fg(state_color)),
+                    Span::styled(
+                        format!("{speed:<11}"),
+                        Style::default().fg(theme::DIM_WHITE),
+                    ),
+                    Span::styled(poe, Style::default().fg(theme::DIM_WHITE)),
+                ]));
+            }
+        }
+
+        frame.render_widget(Paragraph::new(lines), area);
+    }
+}
+
+impl Component for DevicesScreen {
+    fn init(&mut self, action_tx: UnboundedSender<Action>) -> Result<()> {
+        self.action_tx = Some(action_tx);
+        Ok(())
+    }
+
+    fn handle_key_event(&mut self, key: KeyEvent) -> Result<Option<Action>> {
+        if self.detail_open {
+            // Detail panel key handling
+            return match key.code {
+                KeyCode::Esc => {
+                    self.detail_open = false;
+                    Ok(Some(Action::CloseDetail))
+                }
+                KeyCode::Char('h') | KeyCode::Left => {
+                    self.detail_tab = match self.detail_tab {
+                        DeviceDetailTab::Overview => DeviceDetailTab::Ports,
+                        DeviceDetailTab::Performance => DeviceDetailTab::Overview,
+                        DeviceDetailTab::Radios => DeviceDetailTab::Performance,
+                        DeviceDetailTab::Clients => DeviceDetailTab::Radios,
+                        DeviceDetailTab::Ports => DeviceDetailTab::Clients,
+                    };
+                    Ok(None)
+                }
+                KeyCode::Char('l') | KeyCode::Right => {
+                    self.detail_tab = match self.detail_tab {
+                        DeviceDetailTab::Overview => DeviceDetailTab::Performance,
+                        DeviceDetailTab::Performance => DeviceDetailTab::Radios,
+                        DeviceDetailTab::Radios => DeviceDetailTab::Clients,
+                        DeviceDetailTab::Clients => DeviceDetailTab::Ports,
+                        DeviceDetailTab::Ports => DeviceDetailTab::Overview,
+                    };
+                    Ok(None)
+                }
+                KeyCode::Char('R') => {
+                    let id = self.selected_device().map(|d| d.id.clone());
+                    if let Some(id) = id {
+                        Ok(Some(Action::RequestRestart(id)))
+                    } else {
+                        Ok(None)
+                    }
+                }
+                KeyCode::Char('L') => {
+                    let id = self.selected_device().map(|d| d.id.clone());
+                    if let Some(id) = id {
+                        Ok(Some(Action::RequestLocate(id)))
+                    } else {
+                        Ok(None)
+                    }
+                }
+                _ => Ok(None),
+            };
+        }
+
+        // Table navigation
+        match key.code {
+            KeyCode::Char('j') | KeyCode::Down => {
+                self.move_selection(1);
+                Ok(None)
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.move_selection(-1);
+                Ok(None)
+            }
+            KeyCode::Char('g') => {
+                self.select(0);
+                Ok(Some(Action::ScrollToTop))
+            }
+            KeyCode::Char('G') => {
+                if !self.devices.is_empty() {
+                    self.select(self.devices.len() - 1);
+                }
+                Ok(Some(Action::ScrollToBottom))
+            }
+            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.move_selection(10);
+                Ok(Some(Action::PageDown))
+            }
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.move_selection(-10);
+                Ok(Some(Action::PageUp))
+            }
+            KeyCode::Enter => {
+                let id = self.selected_device().map(|d| d.id.clone());
+                if let Some(id) = id {
+                    self.detail_open = true;
+                    self.detail_tab = DeviceDetailTab::Overview;
+                    Ok(Some(Action::OpenDeviceDetail(id)))
+                } else {
+                    Ok(None)
+                }
+            }
+            KeyCode::Char('R') => {
+                let id = self.selected_device().map(|d| d.id.clone());
+                if let Some(id) = id {
+                    Ok(Some(Action::RequestRestart(id)))
+                } else {
+                    Ok(None)
+                }
+            }
+            KeyCode::Char('L') => {
+                let id = self.selected_device().map(|d| d.id.clone());
+                if let Some(id) = id {
+                    Ok(Some(Action::RequestLocate(id)))
+                } else {
+                    Ok(None)
+                }
+            }
+            _ => Ok(None),
+        }
+    }
+
+    fn update(&mut self, action: &Action) -> Result<Option<Action>> {
+        match action {
+            Action::DevicesUpdated(devices) => {
+                self.devices = Arc::clone(devices);
+                let len = self.filtered_devices().len();
+                if len > 0 && self.selected_index() >= len {
+                    self.select(len - 1);
+                }
+            }
+            Action::CloseDetail => {
+                self.detail_open = false;
+            }
+            Action::DeviceDetailTab(tab) => {
+                self.detail_tab = *tab;
+            }
+            Action::SearchInput(query) => {
+                self.search_query.clone_from(query);
+                self.table_state.select(Some(0));
+            }
+            Action::CloseSearch => {
+                self.search_query.clear();
+            }
+            _ => {}
+        }
+        Ok(None)
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn render(&self, frame: &mut Frame, area: Rect) {
+        let filtered = self.filtered_devices();
+        let total = self.devices.len();
+        let shown = filtered.len();
+        let title = if self.search_query.is_empty() {
+            format!(" Devices ({total}) ")
+        } else {
+            format!(" Devices ({shown}/{total}) ")
+        };
+        let block = Block::default()
+            .title(title)
+            .title_style(theme::title_style())
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(if self.focused {
+                theme::border_focused()
+            } else {
+                theme::border_default()
+            });
+
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+
+        // Split for table + optional detail panel
+        let (table_area, detail_area) = if self.detail_open {
+            let chunks = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .split(inner);
+            (chunks[0], Some(chunks[1]))
+        } else {
+            (inner, None)
+        };
+
+        // Filter/sort header line
+        let header_layout = Layout::vertical([
+            Constraint::Length(1), // filter line
+            Constraint::Min(1),    // table
+            Constraint::Length(1), // hints
+        ])
+        .split(table_area);
+
+        let filter_text = if self.search_query.is_empty() {
+            Span::styled("[all]", Style::default().fg(theme::NEON_CYAN))
+        } else {
+            Span::styled(
+                format!("[\"{}\" ]", self.search_query),
+                Style::default().fg(theme::ELECTRIC_YELLOW),
+            )
+        };
+        let filter_line = Line::from(vec![
+            Span::styled(" Filter: ", Style::default().fg(theme::DIM_WHITE)),
+            filter_text,
+            Span::styled("  Sort: ", Style::default().fg(theme::DIM_WHITE)),
+            Span::styled("[name ↑]", Style::default().fg(theme::NEON_CYAN)),
+            Span::styled(
+                format!("  {:>width$}", format!("{shown} devices"), width = 20),
+                Style::default().fg(theme::DIM_WHITE),
+            ),
+        ]);
+        frame.render_widget(Paragraph::new(filter_line), header_layout[0]);
+
+        // Table headers
+        let header = Row::new(vec![
+            Cell::from("Status").style(theme::table_header()),
+            Cell::from("Name").style(theme::table_header()),
+            Cell::from("Model").style(theme::table_header()),
+            Cell::from("IP").style(theme::table_header()),
+            Cell::from("CPU").style(theme::table_header()),
+            Cell::from("Mem").style(theme::table_header()),
+            Cell::from("TX/RX").style(theme::table_header()),
+            Cell::from("Uptime").style(theme::table_header()),
+        ]);
+
+        // Table rows
+        let rows: Vec<Row> = filtered
+            .iter()
+            .enumerate()
+            .map(|(i, dev)| {
+                let is_selected = i == self.selected_index();
+                let prefix = if is_selected { "▸" } else { " " };
+
+                let status = status_indicator::status_char(dev.state);
+                let name = dev.name.as_deref().unwrap_or("Unknown");
+                let model = dev.model.as_deref().unwrap_or("─");
+                let ip = dev.ip.map_or_else(|| "─".into(), |ip| ip.to_string());
+                let cpu = dev
+                    .stats
+                    .cpu_utilization_pct
+                    .map_or_else(|| "·····".into(), |v| format!("{v:.0}%"));
+                let mem = dev
+                    .stats
+                    .memory_utilization_pct
+                    .map_or_else(|| "·····".into(), |v| format!("{v:.0}%"));
+                let traffic = dev.stats.uplink_bandwidth.as_ref().map_or_else(
+                    || "···/···".into(),
+                    |bw| bytes_fmt::fmt_tx_rx(bw.tx_bytes_per_sec, bw.rx_bytes_per_sec),
+                );
+                let uptime = dev
+                    .stats
+                    .uptime_secs
+                    .map_or_else(|| "···".into(), bytes_fmt::fmt_uptime);
+
+                let status_color = match dev.state {
+                    DeviceState::Online => theme::SUCCESS_GREEN,
+                    DeviceState::Offline
+                    | DeviceState::ConnectionInterrupted
+                    | DeviceState::Isolated => theme::ERROR_RED,
+                    DeviceState::PendingAdoption => theme::ELECTRIC_PURPLE,
+                    _ => theme::ELECTRIC_YELLOW,
+                };
+
+                let row_style = if is_selected {
+                    theme::table_selected()
+                } else {
+                    theme::table_row()
+                };
+
+                Row::new(vec![
+                    Cell::from(format!("{prefix}{status}"))
+                        .style(Style::default().fg(status_color)),
+                    Cell::from(name.to_string()).style(
+                        Style::default()
+                            .fg(theme::NEON_CYAN)
+                            .add_modifier(if is_selected {
+                                Modifier::BOLD
+                            } else {
+                                Modifier::empty()
+                            }),
+                    ),
+                    Cell::from(model.to_string()),
+                    Cell::from(ip).style(Style::default().fg(theme::CORAL)),
+                    Cell::from(cpu),
+                    Cell::from(mem),
+                    Cell::from(traffic),
+                    Cell::from(uptime),
+                ])
+                .style(row_style)
+            })
+            .collect();
+
+        let widths = [
+            Constraint::Length(3),
+            Constraint::Min(14),
+            Constraint::Length(12),
+            Constraint::Length(15),
+            Constraint::Length(7),
+            Constraint::Length(7),
+            Constraint::Length(11),
+            Constraint::Length(8),
+        ];
+
+        let table = Table::new(rows, widths)
+            .header(header)
+            .row_highlight_style(theme::table_selected());
+
+        let mut state = self.table_state;
+        frame.render_stateful_widget(table, header_layout[1], &mut state);
+
+        // Key hints
+        let hints = Line::from(vec![
+            Span::styled("  j/k ", theme::key_hint_key()),
+            Span::styled("navigate  ", theme::key_hint()),
+            Span::styled("Enter ", theme::key_hint_key()),
+            Span::styled("detail  ", theme::key_hint()),
+            Span::styled("R ", theme::key_hint_key()),
+            Span::styled("restart  ", theme::key_hint()),
+            Span::styled("L ", theme::key_hint_key()),
+            Span::styled("locate", theme::key_hint()),
+        ]);
+        frame.render_widget(Paragraph::new(hints), header_layout[2]);
+
+        // Render detail panel if open
+        if let Some(detail_area) = detail_area {
+            if let Some(device) = self.selected_device() {
+                self.render_detail(frame, detail_area, device);
+            }
+        }
+    }
+
+    fn focused(&self) -> bool {
+        self.focused
+    }
+
+    fn set_focused(&mut self, focused: bool) {
+        self.focused = focused;
+    }
+
+    fn id(&self) -> &'static str {
+        "Devices"
+    }
+}

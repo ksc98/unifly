@@ -6,7 +6,7 @@
 
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use unifly_core::{ConnectionState, Controller};
 
@@ -14,34 +14,20 @@ use crate::action::Action;
 
 /// Spawn the data bridge connecting [`Controller`] reactive streams to the TUI.
 ///
-/// Connects to the controller, sends initial data snapshots, then loops
-/// forwarding every entity change and connection-state transition as an
-/// [`Action`]. Shuts down cleanly on cancellation.
+/// Subscribes to entity streams first, then spawns `connect()` in the
+/// background so poll data flows to the UI as soon as auth completes —
+/// no delay waiting for websocket handshake.
 pub async fn spawn_data_bridge(
     controller: Controller,
     action_tx: mpsc::UnboundedSender<Action>,
     cancel: CancellationToken,
 ) {
-    // Signal connecting state
+    info!("TRACE [bridge] data_bridge starting");
     let _ = action_tx.send(Action::Reconnecting);
 
-    if let Err(e) = controller.connect().await {
-        warn!(error = %e, "failed to connect to controller");
-        let _ = action_tx.send(Action::Disconnected(format!("{e}")));
-        return;
-    }
-
-    let _ = action_tx.send(Action::Connected);
-
-    // Surface any warnings from connect (e.g. Legacy auth failure)
-    for warning in controller.take_warnings().await {
-        let _ = action_tx.send(Action::Notify(crate::action::Notification {
-            message: warning,
-            level: crate::action::NotificationLevel::Warning,
-        }));
-    }
-
-    // Subscribe to entity streams
+    // Subscribe to entity streams BEFORE connect — watch channels exist
+    // from Controller::new(), so subscribing early is safe.
+    info!("TRACE [bridge] subscribing to entity streams");
     let mut devices = controller.devices();
     let mut clients = controller.clients();
     let mut networks = controller.networks();
@@ -54,36 +40,31 @@ pub async fn spawn_data_bridge(
     let mut site_health = controller.site_health();
     let mut monthly_wan = controller.monthly_wan_bytes();
     let mut daily_usage = controller.client_daily_usage();
+    info!("TRACE [bridge] all streams subscribed");
 
-    // Push initial snapshots so screens have data immediately
-    let _ = action_tx.send(Action::DevicesUpdated(devices.current().clone()));
-    // Only send initial clients if non-empty (client_poll_task populates async;
-    // sending empty snapshot would briefly blank the screen on reconnect).
-    let initial_clients = clients.current().clone();
-    if !initial_clients.is_empty() {
-        let _ = action_tx.send(Action::ClientsUpdated(initial_clients));
-    }
-    let _ = action_tx.send(Action::NetworksUpdated(networks.current().clone()));
-    let _ = action_tx.send(Action::FirewallPoliciesUpdated(
-        fw_policies.current().clone(),
-    ));
-    let _ = action_tx.send(Action::FirewallZonesUpdated(fw_zones.current().clone()));
-    let _ = action_tx.send(Action::AclRulesUpdated(acl_rules.current().clone()));
-    let _ = action_tx.send(Action::WifiBroadcastsUpdated(wifi.current().clone()));
+    // Spawn connect in background — polls start firing as soon as auth completes
+    let ctrl = controller.clone();
+    let tx = action_tx.clone();
+    info!("TRACE [bridge] spawning connect() background task");
+    tokio::spawn(async move {
+        info!("TRACE [bridge] connect() starting");
+        if let Err(e) = ctrl.connect().await {
+            warn!(error = %e, "failed to connect to controller");
+            let _ = tx.send(Action::Disconnected(format!("{e}")));
+            return;
+        }
+        info!("TRACE [bridge] connect() completed successfully");
+        let _ = tx.send(Action::Connected);
+        for warning in ctrl.take_warnings().await {
+            let _ = tx.send(Action::Notify(crate::action::Notification {
+                message: warning,
+                level: crate::action::NotificationLevel::Warning,
+            }));
+        }
+    });
 
-    // Push initial health snapshot
-    let health_snap = site_health.borrow_and_update().clone();
-    if !health_snap.is_empty() {
-        let _ = action_tx.send(Action::HealthUpdated(health_snap));
-    }
-
-    // Push initial events snapshot so Recent Events populates immediately
-    let events_snap = controller.events_snapshot();
-    for event in events_snap.iter() {
-        let _ = action_tx.send(Action::EventReceived(event.clone()));
-    }
-
-    // Stream loop — forward every change until cancelled
+    // Enter forwarding loop immediately — data flows as soon as polls fire
+    info!("TRACE [bridge] entering forwarding loop");
     loop {
         tokio::select! {
             biased;
@@ -91,46 +72,55 @@ pub async fn spawn_data_bridge(
             () = cancel.cancelled() => break,
 
             Some(d) = devices.changed() => {
-                tracing::debug!("Dispatching DevicesUpdated");
+                info!("TRACE [bridge] DevicesUpdated forwarded, {} items", d.len());
                 let _ = action_tx.send(Action::DevicesUpdated(d));
             }
             Some(c) = clients.changed() => {
-                tracing::debug!("Dispatching ClientsUpdated");
+                info!("TRACE [bridge] ClientsUpdated forwarded, {} items", c.len());
                 let _ = action_tx.send(Action::ClientsUpdated(c));
             }
             Some(n) = networks.changed() => {
+                info!("TRACE [bridge] NetworksUpdated forwarded, {} items", n.len());
                 let _ = action_tx.send(Action::NetworksUpdated(n));
             }
             Some(p) = fw_policies.changed() => {
+                info!("TRACE [bridge] FirewallPoliciesUpdated forwarded, {} items", p.len());
                 let _ = action_tx.send(Action::FirewallPoliciesUpdated(p));
             }
             Some(z) = fw_zones.changed() => {
+                info!("TRACE [bridge] FirewallZonesUpdated forwarded, {} items", z.len());
                 let _ = action_tx.send(Action::FirewallZonesUpdated(z));
             }
             Some(a) = acl_rules.changed() => {
+                info!("TRACE [bridge] AclRulesUpdated forwarded, {} items", a.len());
                 let _ = action_tx.send(Action::AclRulesUpdated(a));
             }
             Some(w) = wifi.changed() => {
+                info!("TRACE [bridge] WifiBroadcastsUpdated forwarded, {} items", w.len());
                 let _ = action_tx.send(Action::WifiBroadcastsUpdated(w));
             }
             Ok(event) = events.recv() => {
+                info!("TRACE [bridge] EventReceived forwarded");
                 let _ = action_tx.send(Action::EventReceived(event));
             }
             Ok(()) = site_health.changed() => {
-                tracing::debug!("Dispatching SiteHealthUpdated");
                 let h = site_health.borrow_and_update().clone();
+                info!("TRACE [bridge] HealthUpdated forwarded, {} entries", h.len());
                 let _ = action_tx.send(Action::HealthUpdated(h));
             }
             Ok(()) = monthly_wan.changed() => {
                 let (tx, rx) = *monthly_wan.borrow_and_update();
+                info!("TRACE [bridge] MonthlyWanUsage forwarded, tx={tx} rx={rx}");
                 let _ = action_tx.send(Action::MonthlyWanUsage(tx, rx));
             }
             Ok(()) = daily_usage.changed() => {
                 let usage = daily_usage.borrow_and_update().clone();
+                info!("TRACE [bridge] ClientDailyUsageUpdated forwarded, {} clients", usage.len());
                 let _ = action_tx.send(Action::ClientDailyUsageUpdated(usage));
             }
             Ok(()) = conn_state.changed() => {
                 let state = conn_state.borrow_and_update().clone();
+                info!("TRACE [bridge] ConnectionState changed: {:?}", state);
                 match state {
                     ConnectionState::Connected => {
                         let _ = action_tx.send(Action::Connected);

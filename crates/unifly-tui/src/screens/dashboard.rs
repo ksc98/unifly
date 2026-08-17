@@ -20,7 +20,7 @@ use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::symbols::Marker;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{
@@ -262,8 +262,24 @@ impl DashboardScreen {
         let current_tx = self.bandwidth_tx.last().map_or(0, |&(_, v)| v as u64);
         let current_rx = self.bandwidth_rx.last().map_or(0, |&(_, v)| v as u64);
 
+        // Pulsing live indicator: alternates brightness each sample to show data is flowing
+        let live_span = if self.sample_counter > 0.0 {
+            let pulse = (self.sample_counter as u64) % 2 == 0;
+            Span::styled(
+                "● ",
+                Style::default().fg(if pulse {
+                    theme::SUCCESS_GREEN
+                } else {
+                    Color::Rgb(40, 125, 62) // dim green
+                }),
+            )
+        } else {
+            Span::styled("○ ", Style::default().fg(theme::BORDER_GRAY))
+        };
+
         let title = Line::from(vec![
             Span::styled(" Throughput ", theme::title_style()),
+            live_span,
             Span::styled("── ", Style::default().fg(theme::BORDER_GRAY)),
             Span::styled(
                 format!("TX {} ↑", bytes_fmt::fmt_rate(current_tx)),
@@ -1076,7 +1092,7 @@ impl DashboardScreen {
             .or_else(|| wan_health.and_then(|h| h.wan_ip.clone()))
             .unwrap_or_else(|| "─".into());
         let uptime = gateway.and_then(|g| g.stats.uptime_secs);
-        let up_str = uptime.map_or_else(|| "─".into(), bytes_fmt::fmt_uptime);
+        let up_str = uptime.map_or_else(|| "─".into(), bytes_fmt::fmt_uptime_full);
         let isp = wan_health
             .and_then(|h| h.extra.get("isp_name").and_then(|v| v.as_str()))
             .or_else(|| wan_health.and_then(|h| h.extra.get("isp_organization").and_then(|v| v.as_str())));
@@ -2028,6 +2044,12 @@ impl Component for DashboardScreen {
     }
 
     fn render(&self, frame: &mut Frame, area: Rect) {
+        let wan_tx = self.bandwidth_tx.last().map_or(0.0, |&(_, v)| v);
+        let wan_rx = self.bandwidth_rx.last().map_or(0.0, |&(_, v)| v);
+        tracing::info!(
+            "TRACE [dashboard] render: wan_tx={:.0} wan_rx={:.0} devices={} clients={} health={} samples={}",
+            wan_tx, wan_rx, self.devices.len(), self.clients.len(), self.health.len(), self.bandwidth_tx.len()
+        );
         let refresh_str = self.refresh_age_str();
         let title_line = Line::from(vec![
             Span::styled(" UniFi Dashboard ", theme::title_style()),

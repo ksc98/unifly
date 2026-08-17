@@ -137,13 +137,17 @@ impl App {
 
     /// Run the main event loop. This is the heart of the TUI.
     pub async fn run(&mut self) -> Result<()> {
+        info!("TRACE [app] Tui::new() starting");
         let mut tui = Tui::new()?;
+        info!("TRACE [app] tui.enter() starting");
         tui.enter()?;
+        info!("TRACE [app] TUI initialized");
         self.terminal_size = tui.size().unwrap_or((80, 24));
         self.init_screens()?;
 
         // Spawn data bridge if we have a controller
         if let Some(controller) = self.controller.clone() {
+            info!("TRACE [app] spawning data bridge");
             let cancel = self.data_cancel.clone();
             let tx = self.action_tx.clone();
             tokio::spawn(async move {
@@ -156,7 +160,7 @@ impl App {
             Duration::from_millis(33),  // ~30 FPS render
         );
 
-        info!("TUI event loop started");
+        info!("TRACE [app] event loop starting");
 
         while self.running {
             // 1. Wait for the next event
@@ -391,7 +395,9 @@ impl App {
                 self.connection_status = ConnectionStatus::Reconnecting;
             }
 
-            Action::Render => {}
+            Action::Render => {
+                // Render at ~30 FPS — trace-level only to avoid log spam
+            }
 
             Action::Tick => {
                 // Auto-dismiss notifications after 3 seconds
@@ -422,18 +428,54 @@ impl App {
             }
 
             // Data updates go to ALL screens so they stay in sync
-            Action::DevicesUpdated(_)
-            | Action::ClientsUpdated(_)
-            | Action::NetworksUpdated(_)
+            Action::DevicesUpdated(d) => {
+                info!("TRACE [app] DevicesUpdated received, {} entries", d.len());
+                if !self.paused {
+                    for screen in self.screens.values_mut() {
+                        if let Some(follow_up) = screen.update(action)? {
+                            self.action_tx.send(follow_up)?;
+                        }
+                    }
+                }
+            }
+            Action::ClientsUpdated(c) => {
+                info!("TRACE [app] ClientsUpdated received, {} entries", c.len());
+                if !self.paused {
+                    for screen in self.screens.values_mut() {
+                        if let Some(follow_up) = screen.update(action)? {
+                            self.action_tx.send(follow_up)?;
+                        }
+                    }
+                }
+            }
+            Action::HealthUpdated(h) => {
+                info!("TRACE [app] HealthUpdated received, {} entries", h.len());
+                if !self.paused {
+                    for screen in self.screens.values_mut() {
+                        if let Some(follow_up) = screen.update(action)? {
+                            self.action_tx.send(follow_up)?;
+                        }
+                    }
+                }
+            }
+            Action::MonthlyWanUsage(tx, rx) => {
+                info!("TRACE [app] MonthlyWanUsage received, tx={tx} rx={rx}");
+                if !self.paused {
+                    for screen in self.screens.values_mut() {
+                        if let Some(follow_up) = screen.update(action)? {
+                            self.action_tx.send(follow_up)?;
+                        }
+                    }
+                }
+            }
+            Action::NetworksUpdated(_)
             | Action::FirewallPoliciesUpdated(_)
             | Action::FirewallZonesUpdated(_)
             | Action::AclRulesUpdated(_)
             | Action::WifiBroadcastsUpdated(_)
             | Action::EventReceived(_)
-            | Action::HealthUpdated(_)
             | Action::SiteUpdated(_)
             | Action::StatsUpdated(_)
-            | Action::MonthlyWanUsage(_, _)
             | Action::ClientDailyUsageUpdated(_)
             | Action::NetworkEditResult(_) => {
                 if !self.paused {

@@ -507,23 +507,21 @@ impl Component for ClientsScreen {
             Action::ClientsUpdated(clients) => {
                 // Ignore empty updates — prevents blanking during reconnect
                 if clients.is_empty() && !self.clients.is_empty() {
+                    tracing::info!("TRACE [clients] update: skipped empty ClientsUpdated (have {} existing)", self.clients.len());
                     return Ok(None);
                 }
                 self.clients = Arc::clone(clients);
                 self.update_count += 1;
-                // Debug: log bandwidth stats across all clients
-                let active: Vec<_> = clients.iter()
-                    .filter(|c| c.bandwidth.as_ref().map_or(false, |bw| bw.tx_bytes_per_sec + bw.rx_bytes_per_sec > 100))
-                    .map(|c| {
-                        let bw = c.bandwidth.as_ref().unwrap();
-                        format!("{}:{}↑{}↓",
-                            c.name.as_deref().or(c.hostname.as_deref()).unwrap_or("?"),
-                            bw.tx_bytes_per_sec, bw.rx_bytes_per_sec)
-                    })
-                    .collect();
-                tracing::info!(total=clients.len(), active_count=active.len(), ?active, "clients update");
+                tracing::info!(
+                    "TRACE [clients] update: ClientsUpdated #{}, {} clients, filter={:?}",
+                    self.update_count, clients.len(), self.filter
+                );
                 self.recompute_filtered();
                 let filtered_len = self.filtered_clients().len();
+                tracing::info!(
+                    "TRACE [clients] update: recomputed {} filtered from {} total",
+                    filtered_len, clients.len()
+                );
                 if filtered_len > 0 && self.selected_index() >= filtered_len {
                     self.select(filtered_len - 1);
                 }
@@ -571,6 +569,10 @@ impl Component for ClientsScreen {
         let filtered = self.filtered_clients().to_vec();
         let total = self.clients.len();
         let shown = filtered.len();
+        tracing::debug!(
+            "TRACE [clients] render: displaying {shown} filtered of {total} total, updates={}",
+            self.update_count
+        );
 
         let title = if self.search_query.is_empty() {
             format!(" Clients ({shown}/{total}) [updates: {}] ", self.update_count)
